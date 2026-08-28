@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../navigation/app_router.dart';
 import '../models/user_profile.dart';
 import '../services/session_coordinator.dart';
+import '../services/auth_state_controller.dart';
 import '../theme/app_spacing.dart';
 import 'welcome_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({required this.profile, this.sessionCoordinator, super.key});
+  const HomeScreen({
+    required this.profile,
+    this.sessionCoordinator,
+    this.authState,
+    super.key,
+  });
 
   final UserProfile profile;
   final SessionCoordinator? sessionCoordinator;
+  final AuthStateController? authState;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -32,14 +38,17 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoggingOut = true);
 
     try {
-      await _sessionCoordinator.logout();
+      if (widget.authState case final authState?) {
+        await authState.logout();
+      } else {
+        await _sessionCoordinator.logout();
+      }
     } catch (_) {
       // SessionCoordinator always removes local tokens in its finally block.
     }
 
     if (!mounted) return;
-    if (GoRouter.maybeOf(context) case final router?) {
-      router.go(AppRoutes.welcome);
+    if (GoRouter.maybeOf(context) != null && widget.authState != null) {
       return;
     }
     await Navigator.of(context).pushAndRemoveUntil<void>(

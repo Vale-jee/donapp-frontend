@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../models/user_profile.dart';
 import '../screens/home_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/register_screen.dart';
 import '../screens/session_gate.dart';
 import '../screens/welcome_screen.dart';
 import '../services/auth_service.dart';
-import '../services/session_coordinator.dart';
+import '../services/auth_state_controller.dart';
+import '../services/profile_service.dart';
+import '../services/token_storage.dart';
 
 abstract final class AppRoutes {
   static const root = '/';
@@ -27,17 +28,36 @@ abstract final class AppRoutes {
 }
 
 GoRouter createAppRouter({
-  SessionCoordinator? sessionCoordinator,
+  required AuthStateController authState,
   AuthService? authService,
+  ProfileService? profileService,
+  TokenStorage? tokenStorage,
   String initialLocation = AppRoutes.root,
 }) {
   return GoRouter(
     initialLocation: initialLocation,
+    refreshListenable: authState,
+    redirect: (context, state) {
+      final location = state.matchedLocation;
+      final isPublic = _publicLocations.contains(location);
+
+      return switch (authState.status) {
+        AuthStatus.restoring || AuthStatus.recoverableError =>
+          location == AppRoutes.root ? null : AppRoutes.root,
+        AuthStatus.unauthenticated =>
+          _isPrivateLocation(location)
+              ? AppRoutes.welcome
+              : location == AppRoutes.root
+              ? AppRoutes.welcome
+              : null,
+        AuthStatus.authenticated =>
+          isPublic || location == AppRoutes.root ? AppRoutes.home : null,
+      };
+    },
     routes: [
       GoRoute(
         path: AppRoutes.root,
-        builder: (context, state) =>
-            SessionGate(coordinator: sessionCoordinator),
+        builder: (context, state) => SessionGate(authState: authState),
       ),
       GoRoute(
         path: AppRoutes.welcome,
@@ -54,6 +74,9 @@ GoRouter createAppRouter({
         path: AppRoutes.login,
         builder: (context, state) => LoginScreen(
           authService: authService,
+          profileService: profileService,
+          tokenStorage: tokenStorage,
+          authState: authState,
           initialEmail: state.uri.queryParameters['email'],
         ),
       ),
@@ -63,11 +86,8 @@ GoRouter createAppRouter({
       ),
       GoRoute(
         path: AppRoutes.home,
-        builder: (context, state) {
-          final extra = state.extra;
-          if (extra is UserProfile) return HomeScreen(profile: extra);
-          return SessionGate(coordinator: sessionCoordinator);
-        },
+        builder: (context, state) =>
+            HomeScreen(profile: authState.profile!, authState: authState),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
@@ -82,4 +102,15 @@ GoRouter createAppRouter({
       ),
     ),
   );
+}
+
+const _publicLocations = {
+  AppRoutes.welcome,
+  AppRoutes.login,
+  AppRoutes.register,
+  AppRoutes.nestedRegister,
+};
+
+bool _isPrivateLocation(String location) {
+  return location == AppRoutes.home;
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:donapp_mobile/models/user_profile.dart';
 import 'package:donapp_mobile/models/auth_session.dart';
 import 'package:donapp_mobile/navigation/app_router.dart';
@@ -7,9 +9,13 @@ import 'package:donapp_mobile/screens/register_screen.dart';
 import 'package:donapp_mobile/screens/welcome_screen.dart';
 import 'package:donapp_mobile/services/session_coordinator.dart';
 import 'package:donapp_mobile/services/auth_service.dart';
+import 'package:donapp_mobile/services/auth_state_controller.dart';
+import 'package:donapp_mobile/services/profile_service.dart';
+import 'package:donapp_mobile/services/token_storage.dart';
 import 'package:donapp_mobile/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 void main() {
   testWidgets('/ reconstruye SessionGate sin datos previos', (tester) async {
@@ -77,6 +83,133 @@ void main() {
     expect(find.byType(HomeScreen), findsOneWidget);
   });
 
+  testWidgets('no autenticado intentando /inicio va a Bienvenida', (
+    tester,
+  ) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.home,
+      _NoSessionCoordinator(),
+    );
+
+    expect(harness.router.state.uri.path, AppRoutes.welcome);
+    expect(find.byType(WelcomeScreen), findsOneWidget);
+  });
+
+  for (final publicLocation in [
+    AppRoutes.login,
+    AppRoutes.register,
+    AppRoutes.welcome,
+    AppRoutes.nestedRegister,
+  ]) {
+    testWidgets('autenticado en $publicLocation va a /inicio', (tester) async {
+      final harness = await _pumpAuthenticatedRouter(
+        tester,
+        publicLocation,
+        _ValidSessionCoordinator(),
+      );
+
+      expect(harness.router.state.uri.path, AppRoutes.home);
+      expect(find.byType(HomeScreen), findsOneWidget);
+    });
+  }
+
+  testWidgets('restoring muestra carga sin flash de acceso', (tester) async {
+    final coordinator = _PendingSessionCoordinator();
+    final authState = AuthStateController(sessionCoordinator: coordinator);
+    final router = createAppRouter(
+      authState: authState,
+      initialLocation: AppRoutes.home,
+    );
+    addTearDown(router.dispose);
+    addTearDown(authState.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+    );
+    await tester.pump();
+
+    expect(router.state.uri.path, AppRoutes.root);
+    expect(find.byKey(const Key('sessionLoading')), findsOneWidget);
+    expect(find.byType(WelcomeScreen), findsNothing);
+    expect(find.byType(LoginScreen), findsNothing);
+    expect(find.byType(HomeScreen), findsNothing);
+
+    coordinator.complete(_profileResult());
+    await tester.pumpAndSettle();
+
+    expect(router.state.uri.path, AppRoutes.home);
+    expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
+  testWidgets('logout actualiza estado y sale de /inicio', (tester) async {
+    final coordinator = _ValidSessionCoordinator();
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.home,
+      coordinator,
+    );
+
+    await tester.tap(find.byKey(const Key('logoutButton')));
+    await tester.pumpAndSettle();
+
+    expect(coordinator.logoutCalls, 1);
+    expect(harness.authState.status, AuthStatus.unauthenticated);
+    expect(harness.router.state.uri.path, AppRoutes.welcome);
+    expect(find.byType(WelcomeScreen), findsOneWidget);
+  });
+
+  testWidgets('error recuperable permanece en / sin loop', (tester) async {
+    final coordinator = _RecoverableSessionCoordinator();
+    final authState = AuthStateController(sessionCoordinator: coordinator);
+    final router = createAppRouter(
+      authState: authState,
+      initialLocation: AppRoutes.home,
+    );
+    addTearDown(router.dispose);
+    addTearDown(authState.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump();
+
+    expect(authState.status, AuthStatus.recoverableError);
+    expect(router.state.uri.path, AppRoutes.root);
+    expect(find.byKey(const Key('sessionError')), findsOneWidget);
+    expect(coordinator.restoreCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('no inicia restauraciones simultáneas innecesarias', (
+    tester,
+  ) async {
+    final coordinator = _PendingSessionCoordinator();
+    final authState = AuthStateController(sessionCoordinator: coordinator);
+    final router = createAppRouter(
+      authState: authState,
+      initialLocation: AppRoutes.root,
+    );
+    addTearDown(router.dispose);
+    addTearDown(authState.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+    );
+    await tester.pump();
+    final duplicateRestore = authState.restore();
+    await tester.pump();
+
+    expect(coordinator.restoreCalls, 1);
+    coordinator.complete(const SessionRestoreResult.noSession());
+    await duplicateRestore;
+    await tester.pumpAndSettle();
+
+    expect(coordinator.restoreCalls, 1);
+    expect(router.state.uri.path, AppRoutes.welcome);
+  });
+
   testWidgets('reconoce la ruta anidada /bienvenida/registro', (tester) async {
     await _pumpRoute(tester, AppRoutes.nestedRegister);
 
@@ -95,11 +228,17 @@ void main() {
   testWidgets('Registro abre Login con el correo incluido en la URI', (
     tester,
   ) async {
+    final authState = AuthStateController(
+      sessionCoordinator: _NoSessionCoordinator(),
+    );
+    await authState.restore();
     final router = createAppRouter(
+      authState: authState,
       initialLocation: AppRoutes.welcome,
       authService: _SuccessfulRegisterService(),
     );
     addTearDown(router.dispose);
+    addTearDown(authState.dispose);
     await tester.pumpWidget(
       MaterialApp.router(theme: AppTheme.light, routerConfig: router),
     );
@@ -118,6 +257,39 @@ void main() {
     expect(uri.path, AppRoutes.login);
     expect(uri.queryParameters['email'], 'ana+prueba@example.com');
     expect(uri.toString(), contains('ana%2Bprueba%40example.com'));
+  });
+
+  testWidgets('login correcto actualiza autenticación y abre /inicio', (
+    tester,
+  ) async {
+    final authState = AuthStateController(
+      sessionCoordinator: _NoSessionCoordinator(),
+    );
+    await authState.restore();
+    final router = createAppRouter(
+      authState: authState,
+      initialLocation: AppRoutes.login,
+      authService: _SuccessfulLoginService(),
+      profileService: _SuccessfulProfileService(),
+      tokenStorage: _MemoryTokenStorage(),
+    );
+    addTearDown(router.dispose);
+    addTearDown(authState.dispose);
+    await tester.pumpWidget(
+      MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('emailField')),
+      'ana@example.com',
+    );
+    await tester.enterText(find.byKey(const Key('passwordField')), 'Clave1234');
+    await tester.tap(find.byKey(const Key('loginButton')));
+    await tester.pumpAndSettle();
+
+    expect(authState.status, AuthStatus.authenticated);
+    expect(router.state.uri.path, AppRoutes.home);
+    expect(find.byType(HomeScreen), findsOneWidget);
   });
 }
 
@@ -156,11 +328,16 @@ Future<void> _pumpRoute(
   String location, {
   SessionCoordinator? sessionCoordinator,
 }) async {
+  final authState = AuthStateController(
+    sessionCoordinator: sessionCoordinator ?? _NoSessionCoordinator(),
+  );
+  await authState.restore();
   final router = createAppRouter(
+    authState: authState,
     initialLocation: location,
-    sessionCoordinator: sessionCoordinator,
   );
   addTearDown(router.dispose);
+  addTearDown(authState.dispose);
 
   await tester.pumpWidget(
     MaterialApp.router(theme: AppTheme.light, routerConfig: router),
@@ -168,24 +345,38 @@ Future<void> _pumpRoute(
   await tester.pump();
 }
 
+Future<({AuthStateController authState, GoRouter router})>
+_pumpAuthenticatedRouter(
+  WidgetTester tester,
+  String location,
+  SessionCoordinator coordinator,
+) async {
+  final authState = AuthStateController(sessionCoordinator: coordinator);
+  await authState.restore();
+  final router = createAppRouter(
+    authState: authState,
+    initialLocation: location,
+  );
+  addTearDown(router.dispose);
+  addTearDown(authState.dispose);
+  await tester.pumpWidget(
+    MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+  );
+  await tester.pumpAndSettle();
+  return (authState: authState, router: router);
+}
+
 class _ValidSessionCoordinator extends SessionCoordinator {
+  int logoutCalls = 0;
+
   @override
   Future<SessionRestoreResult> restoreSession() async {
-    return SessionRestoreResult.valid(
-      UserProfile(
-        id: 1,
-        nombreCompleto: 'Ana Prueba',
-        nombreVisible: 'ana',
-        email: 'ana@example.com',
-        ciudad: 'Bogotá',
-        telefono: null,
-        fotoPerfil: null,
-        activo: true,
-        createdAt: DateTime.utc(2026, 8, 15),
-        updatedAt: DateTime.utc(2026, 8, 15),
-        rol: const ProfileRole(codigo: 'USUARIO', nombre: 'Usuario'),
-      ),
-    );
+    return _profileResult();
+  }
+
+  @override
+  Future<void> logout() async {
+    logoutCalls++;
   }
 }
 
@@ -194,6 +385,49 @@ class _NoSessionCoordinator extends SessionCoordinator {
   Future<SessionRestoreResult> restoreSession() async {
     return const SessionRestoreResult.noSession();
   }
+}
+
+class _RecoverableSessionCoordinator extends SessionCoordinator {
+  int restoreCalls = 0;
+
+  @override
+  Future<SessionRestoreResult> restoreSession() async {
+    restoreCalls++;
+    return const SessionRestoreResult.recoverableError(
+      'Verifica tu conexión e intenta nuevamente.',
+    );
+  }
+}
+
+class _PendingSessionCoordinator extends SessionCoordinator {
+  final _completer = Completer<SessionRestoreResult>();
+  int restoreCalls = 0;
+
+  @override
+  Future<SessionRestoreResult> restoreSession() {
+    restoreCalls++;
+    return _completer.future;
+  }
+
+  void complete(SessionRestoreResult result) => _completer.complete(result);
+}
+
+SessionRestoreResult _profileResult() {
+  return SessionRestoreResult.valid(
+    UserProfile(
+      id: 1,
+      nombreCompleto: 'Ana Prueba',
+      nombreVisible: 'ana',
+      email: 'ana@example.com',
+      ciudad: 'Bogotá',
+      telefono: null,
+      fotoPerfil: null,
+      activo: true,
+      createdAt: DateTime.utc(2026, 8, 15),
+      updatedAt: DateTime.utc(2026, 8, 15),
+      rol: const ProfileRole(codigo: 'USUARIO', nombre: 'Usuario'),
+    ),
+  );
 }
 
 class _SuccessfulRegisterService extends AuthService {
@@ -210,4 +444,37 @@ class _SuccessfulRegisterService extends AuthService {
   Future<AuthSession> login(String email, String password) {
     throw UnimplementedError();
   }
+}
+
+class _SuccessfulLoginService extends AuthService {
+  @override
+  Future<AuthSession> login(String email, String password) async {
+    return const AuthSession(
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      accessTokenExpiresIn: 900,
+      refreshTokenExpiresIn: 604800,
+      usuario: AuthUser(
+        id: 1,
+        nombreVisible: 'ana',
+        fotoPerfil: null,
+        rol: AuthRole(codigo: 'USUARIO', nombre: 'Usuario'),
+      ),
+    );
+  }
+}
+
+class _SuccessfulProfileService extends ProfileService {
+  @override
+  Future<UserProfile> getProfile(String accessToken) async {
+    return _profileResult().profile!;
+  }
+}
+
+class _MemoryTokenStorage extends TokenStorage {
+  @override
+  Future<void> saveTokens({
+    required String accessToken,
+    required String refreshToken,
+  }) async {}
 }

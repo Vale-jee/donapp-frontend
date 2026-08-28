@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../navigation/app_router.dart';
 import '../services/api_exception.dart';
 import '../services/auth_service.dart';
+import '../services/auth_state_controller.dart';
 import '../services/profile_service.dart';
 import '../services/token_storage.dart';
 import '../widgets/app_password_field.dart';
@@ -16,6 +17,7 @@ class LoginScreen extends StatefulWidget {
     this.authService,
     this.profileService,
     this.tokenStorage,
+    this.authState,
     this.initialEmail,
     super.key,
   });
@@ -23,6 +25,7 @@ class LoginScreen extends StatefulWidget {
   final AuthService? authService;
   final ProfileService? profileService;
   final TokenStorage? tokenStorage;
+  final AuthStateController? authState;
   final String? initialEmail;
 
   @override
@@ -91,8 +94,8 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       final profile = await _profileService.getProfile(session.accessToken);
       if (!mounted) return;
-      if (GoRouter.maybeOf(context) case final router?) {
-        router.go(AppRoutes.home, extra: profile);
+      if (GoRouter.maybeOf(context) != null && widget.authState != null) {
+        widget.authState!.authenticated(profile);
         return;
       }
       await Navigator.of(context).pushReplacement(
