@@ -12,6 +12,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('/ reconstruye SessionGate sin datos previos', (tester) async {
+    await _pumpRoute(
+      tester,
+      AppRoutes.root,
+      sessionCoordinator: _NoSessionCoordinator(),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(WelcomeScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('/bienvenida abre WelcomeScreen', (tester) async {
     await _pumpRoute(tester, AppRoutes.welcome);
 
@@ -52,7 +64,9 @@ void main() {
     expect(find.byType(RegisterScreen), findsOneWidget);
   });
 
-  testWidgets('/inicio abre HomeScreen con una sesión válida', (tester) async {
+  testWidgets('/inicio se reconstruye sin extra y restaura la sesión', (
+    tester,
+  ) async {
     await _pumpRoute(
       tester,
       AppRoutes.home,
@@ -172,6 +186,13 @@ class _ValidSessionCoordinator extends SessionCoordinator {
         rol: const ProfileRole(codigo: 'USUARIO', nombre: 'Usuario'),
       ),
     );
+  }
+}
+
+class _NoSessionCoordinator extends SessionCoordinator {
+  @override
+  Future<SessionRestoreResult> restoreSession() async {
+    return const SessionRestoreResult.noSession();
   }
 }
 
