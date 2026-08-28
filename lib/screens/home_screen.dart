@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/user_profile.dart';
+import '../navigation/app_router.dart';
 import '../services/auth_state_controller.dart';
 import '../services/session_coordinator.dart';
 import '../theme/app_colors.dart';
@@ -174,6 +175,7 @@ class _ActionGrid extends StatelessWidget {
         title: 'Explorar',
         description: 'Descubre donaciones disponibles cerca de ti.',
         accent: colors.accentBlue,
+        onTap: () => context.go(AppRoutes.explore),
       ),
       _HomeAction(
         key: const Key('homeMyDonationsAction'),
@@ -254,14 +256,16 @@ class _HomeAction extends StatelessWidget {
               color: colors.textSecondary,
             ),
           ),
-          SizedBox(height: spacing.medium),
-          Text(
-            'Próximamente',
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: theme.colorScheme.primary,
-              fontWeight: FontWeight.w600,
+          if (onTap == null) ...[
+            SizedBox(height: spacing.medium),
+            Text(
+              'Próximamente',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -269,7 +273,9 @@ class _HomeAction extends StatelessWidget {
     return Semantics(
       button: true,
       enabled: onTap != null,
-      label: '$title. $description. Próximamente.',
+      label: onTap == null
+          ? '$title. $description. Próximamente.'
+          : '$title. $description.',
       child: ExcludeSemantics(
         child: Card(
           elevation: 2,

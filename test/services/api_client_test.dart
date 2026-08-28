@@ -7,6 +7,25 @@ import 'package:http/testing.dart';
 
 void main() {
   group('ApiClient', () {
+    test('construye query parameters con Uri sin alterar el path', () async {
+      late Uri requestedUri;
+      final client = ApiClient(
+        client: MockClient((request) async {
+          requestedUri = request.url;
+          return http.Response('{"success":true,"data":{}}', 200);
+        }),
+        endpointBuilder: _endpoint,
+      );
+
+      await client.get(
+        '/test',
+        queryParameters: const {'page': '2', 'categoriaId': '4'},
+        successStatusCodes: const {200},
+      );
+
+      expect(requestedUri.path, '/test');
+      expect(requestedUri.queryParameters, {'page': '2', 'categoriaId': '4'});
+    });
     test('traduce timeout', () async {
       final client = ApiClient(
         client: MockClient((_) async {
@@ -78,6 +97,25 @@ void main() {
         );
       },
     );
+  });
+
+  group('ApiConfig.resolveImageReference', () {
+    test('resuelve una referencia relativa contra el servidor', () {
+      final uri = ApiConfig.resolveImageReference(
+        '/imagenes/donacion.jpg',
+        baseUri: Uri.parse('https://api.donapp.test/api/'),
+      );
+
+      expect(uri, Uri.parse('https://api.donapp.test/imagenes/donacion.jpg'));
+    });
+
+    test('acepta HTTP/HTTPS y rechaza esquemas no seguros', () {
+      expect(
+        ApiConfig.resolveImageReference('https://cdn.test/imagen.jpg'),
+        Uri.parse('https://cdn.test/imagen.jpg'),
+      );
+      expect(ApiConfig.resolveImageReference('file:///imagen.jpg'), isNull);
+    });
   });
 }
 

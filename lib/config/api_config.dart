@@ -26,6 +26,23 @@ class ApiConfig {
       fragment: null,
     );
   }
+
+  static Uri? resolveImageReference(String reference, {Uri? baseUri}) {
+    final parsed = Uri.tryParse(reference);
+    if (parsed == null) return null;
+    if (parsed.hasScheme) {
+      return (parsed.scheme == 'http' || parsed.scheme == 'https') &&
+              parsed.host.isNotEmpty
+          ? parsed
+          : null;
+    }
+    if (!reference.startsWith('/')) return null;
+    try {
+      return (baseUri ?? endpoint('/')).resolve(reference);
+    } on ApiConfigException {
+      return null;
+    }
+  }
 }
 
 class ApiConfigException implements Exception {

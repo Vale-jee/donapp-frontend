@@ -2,14 +2,19 @@ import 'dart:async';
 
 import 'package:donapp_mobile/models/user_profile.dart';
 import 'package:donapp_mobile/models/auth_session.dart';
+import 'package:donapp_mobile/models/category.dart';
+import 'package:donapp_mobile/models/donation.dart';
 import 'package:donapp_mobile/navigation/app_router.dart';
 import 'package:donapp_mobile/screens/home_screen.dart';
+import 'package:donapp_mobile/screens/explore_donations_screen.dart';
 import 'package:donapp_mobile/screens/login_screen.dart';
 import 'package:donapp_mobile/screens/register_screen.dart';
 import 'package:donapp_mobile/screens/welcome_screen.dart';
 import 'package:donapp_mobile/services/session_coordinator.dart';
 import 'package:donapp_mobile/services/auth_service.dart';
 import 'package:donapp_mobile/services/auth_state_controller.dart';
+import 'package:donapp_mobile/services/category_service.dart';
+import 'package:donapp_mobile/services/donation_service.dart';
 import 'package:donapp_mobile/services/profile_service.dart';
 import 'package:donapp_mobile/services/token_storage.dart';
 import 'package:donapp_mobile/theme/app_theme.dart';
@@ -98,6 +103,51 @@ void main() {
       AppRoutes.home,
     );
     expect(find.byType(WelcomeScreen), findsOneWidget);
+  });
+
+  testWidgets('no autenticado conserva /explorar como destino', (tester) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.explore,
+      _NoSessionCoordinator(),
+    );
+
+    expect(harness.router.state.uri.path, AppRoutes.welcome);
+    expect(
+      harness.router.state.uri.queryParameters['redirect'],
+      AppRoutes.explore,
+    );
+  });
+
+  testWidgets('autenticado puede entrar directamente en /explorar', (
+    tester,
+  ) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.explore,
+      _ValidSessionCoordinator(),
+      donationService: _EmptyDonationService(),
+      categoryService: _EmptyCategoryService(),
+    );
+
+    expect(harness.router.state.uri.path, AppRoutes.explore);
+    expect(find.byType(ExploreDonationsScreen), findsOneWidget);
+  });
+
+  testWidgets('Home navega a /explorar', (tester) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.home,
+      _ValidSessionCoordinator(),
+      donationService: _EmptyDonationService(),
+      categoryService: _EmptyCategoryService(),
+    );
+
+    await tester.tap(find.byKey(const Key('homeExploreAction')));
+    await tester.pumpAndSettle();
+
+    expect(harness.router.state.uri.path, AppRoutes.explore);
+    expect(find.byType(ExploreDonationsScreen), findsOneWidget);
   });
 
   testWidgets('Bienvenida conserva el destino al abrir Login', (tester) async {
@@ -294,6 +344,18 @@ void main() {
     expect(find.byType(HomeScreen), findsOneWidget);
   });
 
+  testWidgets('login regresa al destino pretendido /explorar', (tester) async {
+    final harness = await _pumpLogin(
+      tester,
+      AppRoutes.loginLocation(redirect: AppRoutes.explore),
+    );
+
+    await _submitLogin(tester);
+
+    expect(harness.router.state.uri.path, AppRoutes.explore);
+    expect(find.byType(ExploreDonationsScreen), findsOneWidget);
+  });
+
   for (final invalidRedirect in [
     'https://evil.example/inicio',
     AppRoutes.login,
@@ -373,6 +435,8 @@ Future<({AuthStateController authState, GoRouter router})> _pumpLogin(
     authService: _SuccessfulLoginService(),
     profileService: _SuccessfulProfileService(),
     tokenStorage: _MemoryTokenStorage(),
+    donationService: _EmptyDonationService(),
+    categoryService: _EmptyCategoryService(),
   );
 }
 
@@ -446,6 +510,8 @@ _pumpAuthenticatedRouter(
   AuthService? authService,
   ProfileService? profileService,
   TokenStorage? tokenStorage,
+  DonationService? donationService,
+  CategoryService? categoryService,
 }) async {
   final authState = AuthStateController(sessionCoordinator: coordinator);
   await authState.restore();
@@ -455,6 +521,8 @@ _pumpAuthenticatedRouter(
     authService: authService,
     profileService: profileService,
     tokenStorage: tokenStorage,
+    donationService: donationService,
+    categoryService: categoryService,
   );
   addTearDown(router.dispose);
   addTearDown(authState.dispose);
@@ -576,4 +644,28 @@ class _MemoryTokenStorage extends TokenStorage {
     required String accessToken,
     required String refreshToken,
   }) async {}
+}
+
+class _EmptyDonationService extends DonationService {
+  @override
+  Future<DonationPage> getAvailableDonations({
+    int page = 1,
+    int limit = 20,
+    int? categoryId,
+  }) async {
+    return DonationPage(
+      donations: const [],
+      pagination: DonationPagination(
+        page: page,
+        limit: limit,
+        total: 0,
+        totalPages: 0,
+      ),
+    );
+  }
+}
+
+class _EmptyCategoryService extends CategoryService {
+  @override
+  Future<List<Category>> getCategories() async => const [];
 }

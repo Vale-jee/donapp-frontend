@@ -11,17 +11,17 @@ class DonationCard extends StatelessWidget {
     required this.category,
     required this.location,
     required this.status,
-    required this.onTap,
+    this.onTap,
     this.subtitle,
     super.key,
   });
 
-  final ImageProvider<Object> image;
+  final ImageProvider<Object>? image;
   final String title;
   final String category;
   final String location;
   final String status;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final String? subtitle;
 
   @override
@@ -34,12 +34,13 @@ class DonationCard extends StatelessWidget {
 
     return Semantics(
       button: true,
+      enabled: onTap != null,
       label:
           '$title. Categoría: $category. Ubicación: $location. Estado: $status',
       child: ExcludeSemantics(
         child: Card(
           clipBehavior: Clip.antiAlias,
-          child: InkWell(
+          child: _OptionalInkWell(
             onTap: onTap,
             borderRadius: BorderRadius.circular(radius.card),
             child: Column(
@@ -47,11 +48,7 @@ class DonationCard extends StatelessWidget {
               children: [
                 AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: Image(
-                    image: image,
-                    fit: BoxFit.cover,
-                    excludeFromSemantics: true,
-                  ),
+                  child: _DonationImage(image: image),
                 ),
                 Padding(
                   padding: EdgeInsets.all(spacing.medium),
@@ -101,6 +98,61 @@ class DonationCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OptionalInkWell extends StatelessWidget {
+  const _OptionalInkWell({
+    required this.onTap,
+    required this.borderRadius,
+    required this.child,
+  });
+
+  final VoidCallback? onTap;
+  final BorderRadius borderRadius;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => onTap == null
+      ? child
+      : InkWell(onTap: onTap, borderRadius: borderRadius, child: child);
+}
+
+class _DonationImage extends StatelessWidget {
+  const _DonationImage({required this.image});
+
+  final ImageProvider<Object>? image;
+
+  @override
+  Widget build(BuildContext context) {
+    if (image == null) return const _ImagePlaceholder();
+    return Image(
+      image: image!,
+      fit: BoxFit.cover,
+      excludeFromSemantics: true,
+      errorBuilder: (context, error, stackTrace) => const _ImagePlaceholder(),
+    );
+  }
+}
+
+class _ImagePlaceholder extends StatelessWidget {
+  const _ImagePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors =
+        Theme.of(context).extension<AppColorTokens>() ??
+        const AppColorTokens.standard();
+    return ColoredBox(
+      key: const Key('donationImagePlaceholder'),
+      color: colors.background,
+      child: Center(
+        child: Icon(
+          Icons.image_not_supported_outlined,
+          color: colors.textSecondary,
         ),
       ),
     );

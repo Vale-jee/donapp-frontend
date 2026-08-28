@@ -32,7 +32,7 @@ void main() {
   testWidgets('los cuatro accesos permanecen no interactivos', (tester) async {
     await tester.pumpWidget(_app(HomeScreen(profile: _profile)));
 
-    for (final key in _actionKeys) {
+    for (final key in _disabledActionKeys) {
       final action = find.byKey(key);
       expect(action, findsOneWidget);
       expect(
@@ -41,6 +41,20 @@ void main() {
       );
     }
     expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
+  testWidgets('Explorar queda interactivo y sin Próximamente', (tester) async {
+    await tester.pumpWidget(_app(HomeScreen(profile: _profile)));
+
+    final explore = find.byKey(const Key('homeExploreAction'));
+    expect(
+      find.descendant(of: explore, matching: find.byType(InkWell)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: explore, matching: find.text('Próximamente')),
+      findsNothing,
+    );
   });
 
   testWidgets('no muestra estadísticas ficticias', (tester) async {
@@ -168,10 +182,9 @@ void main() {
   });
 }
 
-const _actionKeys = [
+const _disabledActionKeys = [
   Key('homeDonateAction'),
   Key('homeRequestAction'),
-  Key('homeExploreAction'),
   Key('homeMyDonationsAction'),
 ];
 

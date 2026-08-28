@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../screens/home_screen.dart';
+import '../screens/explore_donations_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/register_screen.dart';
 import '../screens/session_gate.dart';
 import '../screens/welcome_screen.dart';
 import '../services/auth_service.dart';
 import '../services/auth_state_controller.dart';
+import '../services/category_service.dart';
+import '../services/donation_service.dart';
 import '../services/profile_service.dart';
 import '../services/token_storage.dart';
 
@@ -18,6 +21,7 @@ abstract final class AppRoutes {
   static const register = '/registro';
   static const nestedRegister = '/bienvenida/registro';
   static const home = '/inicio';
+  static const explore = '/explorar';
 
   static String rootLocation({String? redirect}) =>
       _location(root, redirect: redirect);
@@ -28,10 +32,7 @@ abstract final class AppRoutes {
   static String loginLocation({String? email, String? redirect}) {
     return Uri(
       path: login,
-      queryParameters: {
-        'email': ?email,
-        'redirect': ?redirect,
-      },
+      queryParameters: {'email': ?email, 'redirect': ?redirect},
     ).toString();
   }
 
@@ -65,6 +66,8 @@ GoRouter createAppRouter({
   AuthService? authService,
   ProfileService? profileService,
   TokenStorage? tokenStorage,
+  DonationService? donationService,
+  CategoryService? categoryService,
   String initialLocation = AppRoutes.root,
 }) {
   return GoRouter(
@@ -156,6 +159,13 @@ GoRouter createAppRouter({
         builder: (context, state) =>
             HomeScreen(profile: authState.profile!, authState: authState),
       ),
+      GoRoute(
+        path: AppRoutes.explore,
+        builder: (context, state) => ExploreDonationsScreen(
+          donationService: donationService,
+          categoryService: categoryService,
+        ),
+      ),
     ],
     errorBuilder: (context, state) => Scaffold(
       body: SafeArea(
@@ -182,7 +192,7 @@ bool _isPrivateLocation(String location) {
   return _privateLocations.contains(location);
 }
 
-const _privateLocations = {AppRoutes.home};
+const _privateLocations = {AppRoutes.home, AppRoutes.explore};
 
 String _publicLocationWithoutRedirect(GoRouterState state) {
   return switch (state.matchedLocation) {

@@ -26,12 +26,14 @@ class ApiClient {
   Future<Map<String, dynamic>> get(
     String path, {
     Map<String, String>? headers,
+    Map<String, String>? queryParameters,
     required Set<int> successStatusCodes,
     ApiRequestContext context = ApiRequestContext.general,
     bool allowSafeBackendMessage = false,
   }) {
     return _request(
       path: path,
+      queryParameters: queryParameters,
       send: (uri) => _client.get(uri, headers: headers),
       successStatusCodes: successStatusCodes,
       context: context,
@@ -59,13 +61,18 @@ class ApiClient {
 
   Future<Map<String, dynamic>> _request({
     required String path,
+    Map<String, String>? queryParameters,
     required Future<http.Response> Function(Uri uri) send,
     required Set<int> successStatusCodes,
     required ApiRequestContext context,
     required bool allowSafeBackendMessage,
   }) async {
     try {
-      final response = await send(_endpointBuilder(path)).timeout(_timeout);
+      final endpoint = _endpointBuilder(path);
+      final uri = queryParameters == null || queryParameters.isEmpty
+          ? endpoint
+          : endpoint.replace(queryParameters: queryParameters);
+      final response = await send(uri).timeout(_timeout);
       final body = _decode(response.body);
 
       if (!successStatusCodes.contains(response.statusCode)) {

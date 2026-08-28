@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:donapp_mobile/theme/app_theme.dart';
 import 'package:donapp_mobile/widgets/app_bottom_navigation_bar.dart';
@@ -107,6 +108,29 @@ void main() {
     expect(find.text('Publicada'), findsOneWidget);
     await tester.tap(find.byType(DonationCard));
     expect(tapped, isTrue);
+  });
+
+  testWidgets('DonationCard usa placeholder cuando falla la imagen', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _themedApp(
+        SizedBox(
+          width: 360,
+          child: DonationCard(
+            image: MemoryImage(Uint8List.fromList(const [0, 1, 2, 3])),
+            title: 'Mesa',
+            category: 'Muebles',
+            location: 'Bogotá',
+            status: 'Publicada',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('donationImagePlaceholder')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
