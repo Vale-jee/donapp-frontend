@@ -76,7 +76,7 @@ void main() {
         of: find.byType(DonationCard),
         matching: find.byType(InkWell),
       ),
-      findsNothing,
+      findsOneWidget,
     );
     expect(find.byKey(const Key('donationImagePlaceholder')), findsOneWidget);
   });

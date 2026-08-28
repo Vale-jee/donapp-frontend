@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../config/api_config.dart';
 import '../models/category.dart';
 import '../models/donation.dart';
+import '../navigation/app_router.dart';
 import '../services/api_exception.dart';
 import '../services/category_service.dart';
 import '../services/donation_service.dart';
@@ -287,6 +289,11 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
                                       subtitle: donation.cantidadImagenes == 1
                                           ? '1 imagen'
                                           : '${donation.cantidadImagenes} imágenes',
+                                      onTap: () => context.push(
+                                        AppRoutes.donationDetailLocation(
+                                          donation.id,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),

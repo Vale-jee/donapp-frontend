@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../screens/home_screen.dart';
 import '../screens/explore_donations_screen.dart';
+import '../screens/donation_detail_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/register_screen.dart';
 import '../screens/session_gate.dart';
@@ -22,6 +23,9 @@ abstract final class AppRoutes {
   static const nestedRegister = '/bienvenida/registro';
   static const home = '/inicio';
   static const explore = '/explorar';
+  static const donationDetailPattern = '/donaciones/:id';
+
+  static String donationDetailLocation(int id) => '/donaciones/$id';
 
   static String rootLocation({String? redirect}) =>
       _location(root, redirect: redirect);
@@ -49,7 +53,7 @@ abstract final class AppRoutes {
         uri.scheme.isNotEmpty ||
         uri.hasAuthority ||
         uri.fragment.isNotEmpty ||
-        !_privateLocations.contains(uri.path)) {
+        !_isPrivateUri(uri)) {
       return null;
     }
     return uri.toString();
@@ -78,7 +82,7 @@ GoRouter createAppRouter({
       final isPublic = _publicLocations.contains(location);
       final requestedRedirect = state.uri.queryParameters['redirect'];
       final validRedirect = AppRoutes.validPrivateRedirect(requestedRedirect);
-      final requestedPrivateLocation = _isPrivateLocation(location)
+      final requestedPrivateLocation = _isPrivateUri(state.uri)
           ? state.uri.toString()
           : null;
 
@@ -90,7 +94,7 @@ GoRouter createAppRouter({
                   redirect: requestedPrivateLocation ?? validRedirect,
                 ),
         AuthStatus.unauthenticated =>
-          _isPrivateLocation(location)
+          _isPrivateUri(state.uri)
               ? authState.consumeExplicitLogout()
                     ? AppRoutes.welcome
                     : AppRoutes.welcomeLocation(
@@ -166,6 +170,17 @@ GoRouter createAppRouter({
           categoryService: categoryService,
         ),
       ),
+      GoRoute(
+        path: AppRoutes.donationDetailPattern,
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '');
+          if (id == null || id <= 0) return const _InvalidDonationRoute();
+          return DonationDetailScreen(
+            donationId: id,
+            donationService: donationService,
+          );
+        },
+      ),
     ],
     errorBuilder: (context, state) => Scaffold(
       body: SafeArea(
@@ -188,11 +203,33 @@ const _publicLocations = {
   AppRoutes.nestedRegister,
 };
 
-bool _isPrivateLocation(String location) {
-  return _privateLocations.contains(location);
+bool _isPrivateUri(Uri uri) {
+  if (_privateLocations.contains(uri.path)) return true;
+  final segments = uri.pathSegments;
+  final id = segments.length == 2 && segments.first == 'donaciones'
+      ? int.tryParse(segments.last)
+      : null;
+  return id != null && id > 0;
 }
 
 const _privateLocations = {AppRoutes.home, AppRoutes.explore};
+
+class _InvalidDonationRoute extends StatelessWidget {
+  const _InvalidDonationRoute();
+
+  @override
+  Widget build(BuildContext context) => const Scaffold(
+    body: SafeArea(
+      child: Center(
+        child: Text(
+          'La donación solicitada no es válida.',
+          key: Key('invalidDonationId'),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    ),
+  );
+}
 
 String _publicLocationWithoutRedirect(GoRouterState state) {
   return switch (state.matchedLocation) {

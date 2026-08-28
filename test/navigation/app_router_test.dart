@@ -7,6 +7,7 @@ import 'package:donapp_mobile/models/donation.dart';
 import 'package:donapp_mobile/navigation/app_router.dart';
 import 'package:donapp_mobile/screens/home_screen.dart';
 import 'package:donapp_mobile/screens/explore_donations_screen.dart';
+import 'package:donapp_mobile/screens/donation_detail_screen.dart';
 import 'package:donapp_mobile/screens/login_screen.dart';
 import 'package:donapp_mobile/screens/register_screen.dart';
 import 'package:donapp_mobile/screens/welcome_screen.dart';
@@ -134,6 +135,63 @@ void main() {
     expect(find.byType(ExploreDonationsScreen), findsOneWidget);
   });
 
+  testWidgets('/donaciones/4 reconstruye el detalle solo desde el id', (
+    tester,
+  ) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      '/donaciones/4',
+      _ValidSessionCoordinator(),
+      donationService: _EmptyDonationService(),
+    );
+    expect(harness.router.state.uri.path, '/donaciones/4');
+    expect(find.byType(DonationDetailScreen), findsOneWidget);
+    expect(find.text('Detalle de prueba'), findsOneWidget);
+  });
+
+  testWidgets('id de donación inválido muestra error controlado', (
+    tester,
+  ) async {
+    await _pumpAuthenticatedRouter(
+      tester,
+      '/donaciones/no-valido',
+      _ValidSessionCoordinator(),
+    );
+    expect(find.byKey(const Key('invalidDonationId')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('no autenticado conserva el detalle como destino', (
+    tester,
+  ) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      '/donaciones/4',
+      _NoSessionCoordinator(),
+    );
+    expect(harness.router.state.uri.path, AppRoutes.welcome);
+    expect(
+      harness.router.state.uri.queryParameters['redirect'],
+      '/donaciones/4',
+    );
+  });
+
+  testWidgets('login regresa al detalle privado pretendido', (tester) async {
+    final harness = await _pumpLogin(
+      tester,
+      AppRoutes.loginLocation(redirect: '/donaciones/4'),
+    );
+    await _submitLogin(tester);
+    expect(harness.router.state.uri.path, '/donaciones/4');
+    expect(find.byType(DonationDetailScreen), findsOneWidget);
+  });
+
+  test('validador acepta id positivo y rechaza ids inválidos', () {
+    expect(AppRoutes.validPrivateRedirect('/donaciones/4'), '/donaciones/4');
+    expect(AppRoutes.validPrivateRedirect('/donaciones/0'), isNull);
+    expect(AppRoutes.validPrivateRedirect('/donaciones/x'), isNull);
+  });
+
   testWidgets('Home navega a /explorar', (tester) async {
     final harness = await _pumpAuthenticatedRouter(
       tester,
@@ -148,6 +206,24 @@ void main() {
 
     expect(harness.router.state.uri.path, AppRoutes.explore);
     expect(find.byType(ExploreDonationsScreen), findsOneWidget);
+  });
+
+  testWidgets('Explore navega al detalle por id sin transportar objetos', (
+    tester,
+  ) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.explore,
+      _ValidSessionCoordinator(),
+      donationService: _SingleDonationService(),
+      categoryService: _EmptyCategoryService(),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('donationCard-4')));
+    await tester.pumpAndSettle();
+
+    expect(harness.router.state.uri.path, '/donaciones/4');
+    expect(find.byType(DonationDetailScreen), findsOneWidget);
   });
 
   testWidgets('Bienvenida conserva el destino al abrir Login', (tester) async {
@@ -663,6 +739,50 @@ class _EmptyDonationService extends DonationService {
       ),
     );
   }
+
+  @override
+  Future<DonationDetail> getDonationById(int id) async => DonationDetail(
+    id: id,
+    titulo: 'Detalle de prueba',
+    descripcion: 'Descripción real de prueba',
+    ciudad: 'Bogotá',
+    estado: DonationStatus.publicada,
+    createdAt: DateTime.utc(2026, 8, 20),
+    updatedAt: DateTime.utc(2026, 8, 21),
+    categoriaId: 4,
+    categoriaNombre: 'Muebles',
+    imagenes: const [],
+  );
+}
+
+class _SingleDonationService extends _EmptyDonationService {
+  @override
+  Future<DonationPage> getAvailableDonations({
+    int page = 1,
+    int limit = 20,
+    int? categoryId,
+  }) async => DonationPage(
+    donations: [
+      DonationListItem(
+        id: 4,
+        titulo: 'Detalle de prueba',
+        ciudad: 'Bogotá',
+        estado: DonationStatus.publicada,
+        createdAt: DateTime.utc(2026, 8, 20),
+        updatedAt: DateTime.utc(2026, 8, 21),
+        categoriaId: 4,
+        categoriaNombre: 'Muebles',
+        imagenPrincipal: null,
+        cantidadImagenes: 0,
+      ),
+    ],
+    pagination: DonationPagination(
+      page: page,
+      limit: limit,
+      total: 1,
+      totalPages: 1,
+    ),
+  );
 }
 
 class _EmptyCategoryService extends CategoryService {

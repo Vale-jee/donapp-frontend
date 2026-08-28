@@ -12,27 +12,44 @@ class DonationService {
   final ApiClient _apiClient;
   final TokenStorage _tokenStorage;
 
+  Future<DonationDetail> getDonationById(int id) async {
+    if (id <= 0) {
+      throw const ApiException(
+        ApiErrorType.validation,
+        'La donación solicitada no es válida.',
+      );
+    }
+    final accessToken = await _accessToken();
+    try {
+      final body = await _apiClient.get(
+        '/api/donaciones/$id',
+        headers: _headers(accessToken),
+        successStatusCodes: const {200},
+        context: ApiRequestContext.protectedSession,
+      );
+      final data = body['data'];
+      final donation = data is Map<String, dynamic> ? data['donacion'] : null;
+      if (donation is! Map<String, dynamic>) {
+        throw ApiErrorMapper.unexpectedResponse;
+      }
+      return DonationDetail.fromJson(donation);
+    } on ApiException {
+      rethrow;
+    } on FormatException {
+      throw ApiErrorMapper.unexpectedResponse;
+    }
+  }
+
   Future<DonationPage> getAvailableDonations({
     int page = 1,
     int limit = 20,
     int? categoryId,
   }) async {
-    final accessToken = await _tokenStorage.readAccessToken();
-    if (accessToken == null || accessToken.isEmpty) {
-      throw const ApiException(
-        ApiErrorType.authentication,
-        'Tu sesión ya no es válida. Inicia sesión nuevamente.',
-        statusCode: 401,
-      );
-    }
-
+    final accessToken = await _accessToken();
     try {
       final body = await _apiClient.get(
         '/api/donaciones',
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $accessToken',
-        },
+        headers: _headers(accessToken),
         queryParameters: {
           'page': '$page',
           'limit': '$limit',
@@ -52,4 +69,21 @@ class DonationService {
       throw ApiErrorMapper.unexpectedResponse;
     }
   }
+
+  Future<String> _accessToken() async {
+    final accessToken = await _tokenStorage.readAccessToken();
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const ApiException(
+        ApiErrorType.authentication,
+        'Tu sesión ya no es válida. Inicia sesión nuevamente.',
+        statusCode: 401,
+      );
+    }
+    return accessToken;
+  }
+
+  Map<String, String> _headers(String accessToken) => {
+    'Accept': 'application/json',
+    'Authorization': 'Bearer $accessToken',
+  };
 }

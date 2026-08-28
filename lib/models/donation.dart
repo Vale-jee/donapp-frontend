@@ -37,6 +37,64 @@ class DonationImage {
   );
 }
 
+class DonationDetail {
+  DonationDetail({
+    required this.id,
+    required this.titulo,
+    required this.descripcion,
+    required this.ciudad,
+    required this.estado,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.categoriaId,
+    required this.categoriaNombre,
+    required List<DonationImage> imagenes,
+  }) : imagenes = List.unmodifiable(
+         [...imagenes]
+           ..sort((first, second) => first.orden.compareTo(second.orden)),
+       );
+
+  final int id;
+  final String titulo;
+  final String descripcion;
+  final String ciudad;
+  final DonationStatus estado;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int categoriaId;
+  final String categoriaNombre;
+  final List<DonationImage> imagenes;
+
+  factory DonationDetail.fromJson(Map<String, dynamic> json) {
+    final category = json['categoria'];
+    final images = json['imagenes'];
+    if (category is! Map<String, dynamic> || images is! List) {
+      throw const FormatException('Detalle de donación con formato inválido.');
+    }
+    return DonationDetail(
+      id: _int(json, 'id'),
+      titulo: _string(json, 'titulo'),
+      descripcion: _string(json, 'descripcion'),
+      ciudad: _string(json, 'ciudad'),
+      estado: DonationStatusJson.fromJson(json['estado']),
+      createdAt: _date(json, 'createdAt'),
+      updatedAt: _date(json, 'updatedAt'),
+      categoriaId: _int(category, 'id'),
+      categoriaNombre: _string(category, 'nombre'),
+      imagenes: images
+          .map((image) {
+            if (image is! Map<String, dynamic>) {
+              throw const FormatException(
+                'Imagen de donación con formato inválido.',
+              );
+            }
+            return DonationImage.fromJson(image);
+          })
+          .toList(growable: false),
+    );
+  }
+}
+
 class DonationListItem {
   const DonationListItem({
     required this.id,

@@ -68,6 +68,66 @@ void main() {
       ),
     );
   });
+
+  test(
+    'consulta detalle por id con bearer token y parsea la respuesta',
+    () async {
+      late http.Request captured;
+      final service = DonationService(
+        tokenStorage: _TokenStorage('access-real'),
+        apiClient: ApiClient(
+          endpointBuilder: (path) => Uri.parse('https://api.donapp.test$path'),
+          client: MockClient((request) async {
+            captured = request;
+            return http.Response(jsonEncode(_detailBody), 200);
+          }),
+        ),
+      );
+
+      final detail = await service.getDonationById(4);
+
+      expect(captured.method, 'GET');
+      expect(captured.url.path, '/api/donaciones/4');
+      expect(captured.headers['Authorization'], 'Bearer access-real');
+      expect(detail.id, 4);
+    },
+  );
+
+  test('rechaza id no positivo sin consultar la API', () async {
+    final service = DonationService(tokenStorage: _TokenStorage('access-real'));
+    await expectLater(
+      service.getDonationById(0),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.type,
+          'type',
+          ApiErrorType.validation,
+        ),
+      ),
+    );
+  });
+
+  test('mapea 404 del detalle', () async {
+    final service = DonationService(
+      tokenStorage: _TokenStorage('access-real'),
+      apiClient: ApiClient(
+        endpointBuilder: (path) => Uri.parse('https://api.donapp.test$path'),
+        client: MockClient(
+          (_) async => http.Response(jsonEncode({'success': false}), 404),
+        ),
+      ),
+    );
+    await expectLater(
+      service.getDonationById(4),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.type,
+          'type',
+          ApiErrorType.notFound,
+        ),
+      ),
+    );
+  });
 }
 
 class _TokenStorage extends TokenStorage {
@@ -96,5 +156,22 @@ const _successBody = {
       },
     ],
     'pagination': {'page': 2, 'limit': 10, 'total': 11, 'totalPages': 2},
+  },
+};
+
+const _detailBody = {
+  'success': true,
+  'data': {
+    'donacion': {
+      'id': 4,
+      'titulo': 'Mesa auxiliar',
+      'descripcion': 'En buen estado.',
+      'ciudad': 'Bogotá',
+      'estado': 'PUBLICADA',
+      'createdAt': '2026-08-20T12:00:00.000Z',
+      'updatedAt': '2026-08-21T12:00:00.000Z',
+      'categoria': {'id': 4, 'nombre': 'Muebles'},
+      'imagenes': <Map<String, Object>>[],
+    },
   },
 };

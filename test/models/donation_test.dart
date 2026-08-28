@@ -2,6 +2,16 @@ import 'package:donapp_mobile/models/donation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('parsea el detalle, estado, fechas e imágenes ordenadas', () {
+    final detail = DonationDetail.fromJson(_detailJson);
+
+    expect(detail.id, 4);
+    expect(detail.descripcion, 'En buen estado.');
+    expect(detail.estado, DonationStatus.publicada);
+    expect(detail.createdAt, DateTime.parse('2026-08-20T12:00:00.000Z'));
+    expect(detail.updatedAt, DateTime.parse('2026-08-21T12:00:00.000Z'));
+    expect(detail.imagenes.map((image) => image.orden), [1, 2]);
+  });
   test('parsea un listado real con paginación', () {
     final page = DonationPage.fromJson(_pageJson(image: _imageJson));
 
@@ -26,6 +36,21 @@ void main() {
     expect(page.donations.single.imagenPrincipal, isNull);
   });
 }
+
+const _detailJson = {
+  'id': 4,
+  'titulo': 'Mesa auxiliar',
+  'descripcion': 'En buen estado.',
+  'ciudad': 'Bogotá',
+  'estado': 'PUBLICADA',
+  'createdAt': '2026-08-20T12:00:00.000Z',
+  'updatedAt': '2026-08-21T12:00:00.000Z',
+  'categoria': {'id': 4, 'nombre': 'Muebles'},
+  'imagenes': [
+    {'id': 2, 'referencia': '/segunda.jpg', 'orden': 2},
+    {'id': 1, 'referencia': '/primera.jpg', 'orden': 1},
+  ],
+};
 
 Map<String, dynamic> _pageJson({required Object? image}) => {
   'donaciones': [
