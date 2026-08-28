@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/token_storage.dart';
 import '../widgets/app_password_field.dart';
+import '../widgets/app_primary_button.dart';
 import 'home_screen.dart';
 import 'register_screen.dart';
 
@@ -13,12 +14,14 @@ class LoginScreen extends StatefulWidget {
     this.authService,
     this.profileService,
     this.tokenStorage,
+    this.initialEmail,
     super.key,
   });
 
   final AuthService? authService;
   final ProfileService? profileService;
   final TokenStorage? tokenStorage;
+  final String? initialEmail;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -41,6 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _authService = widget.authService ?? AuthService();
     _profileService = widget.profileService ?? ProfileService();
     _tokenStorage = widget.tokenStorage ?? TokenStorage();
+    _emailController.text = widget.initialEmail?.trim().toLowerCase() ?? '';
   }
 
   @override
@@ -199,17 +203,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ],
                       const SizedBox(height: 24),
-                      FilledButton(
+                      AppPrimaryButton(
                         key: const Key('loginButton'),
-                        onPressed: _isLoading ? null : _submit,
-                        child: _isLoading
-                            ? const SizedBox.square(
-                                dimension: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Iniciar sesión'),
+                        text: 'Iniciar sesión',
+                        onPressed: _submit,
+                        isLoading: _isLoading,
                       ),
                       const SizedBox(height: 8),
                       TextButton(

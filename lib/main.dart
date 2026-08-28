@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
 
-import 'screens/login_screen.dart';
+import 'screens/session_gate.dart';
+import 'services/session_coordinator.dart';
+import 'theme/app_theme.dart';
 
 void main() => runApp(const DonApp());
 
 class DonApp extends StatelessWidget {
-  const DonApp({super.key});
+  const DonApp({this.sessionCoordinator, super.key});
+
+  final SessionCoordinator? sessionCoordinator;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'DonApp',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
-        useMaterial3: true,
-      ),
-      home: const LoginScreen(),
+      theme: AppTheme.light,
+      home: SessionGate(coordinator: sessionCoordinator),
     );
   }
 }

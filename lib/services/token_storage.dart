@@ -1,5 +1,12 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+class StoredTokens {
+  const StoredTokens({required this.accessToken, required this.refreshToken});
+
+  final String accessToken;
+  final String refreshToken;
+}
+
 class TokenStorage {
   TokenStorage({FlutterSecureStorage? storage})
     : _storage = storage ?? const FlutterSecureStorage();
@@ -18,6 +25,14 @@ class TokenStorage {
 
   Future<String?> readAccessToken() => _storage.read(key: _accessTokenKey);
   Future<String?> readRefreshToken() => _storage.read(key: _refreshTokenKey);
+
+  Future<StoredTokens?> readTokens() async {
+    final values = await Future.wait([readAccessToken(), readRefreshToken()]);
+    final accessToken = values[0];
+    final refreshToken = values[1];
+    if (accessToken == null || refreshToken == null) return null;
+    return StoredTokens(accessToken: accessToken, refreshToken: refreshToken);
+  }
 
   Future<void> clearTokens() async {
     await _storage.delete(key: _accessTokenKey);

@@ -1,26 +1,88 @@
 import 'package:flutter/material.dart';
 
 import '../models/user_profile.dart';
+import '../services/session_coordinator.dart';
+import '../theme/app_spacing.dart';
+import 'welcome_screen.dart';
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({required this.profile, super.key});
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({required this.profile, this.sessionCoordinator, super.key});
 
   final UserProfile profile;
+  final SessionCoordinator? sessionCoordinator;
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  late final SessionCoordinator _sessionCoordinator;
+  bool _isLoggingOut = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _sessionCoordinator = widget.sessionCoordinator ?? SessionCoordinator();
+  }
+
+  Future<void> _logout() async {
+    if (_isLoggingOut) return;
+    setState(() => _isLoggingOut = true);
+
+    try {
+      await _sessionCoordinator.logout();
+    } catch (_) {
+      // SessionCoordinator always removes local tokens in its finally block.
+    }
+
+    if (!mounted) return;
+    await Navigator.of(context).pushAndRemoveUntil<void>(
+      MaterialPageRoute<void>(builder: (_) => const WelcomeScreen()),
+      (_) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final spacing =
+        Theme.of(context).extension<AppSpacing>() ?? const AppSpacing();
+
     return Scaffold(
-      appBar: AppBar(title: const Text('DonApp')),
+      appBar: AppBar(
+        title: const Text('DonApp'),
+        actions: [
+          Semantics(
+            button: true,
+            enabled: !_isLoggingOut,
+            label: _isLoggingOut
+                ? 'Cerrar sesión. Cargando'
+                : 'Cerrar sesión',
+            child: ExcludeSemantics(
+              child: IconButton(
+                key: const Key('logoutButton'),
+                tooltip: 'Cerrar sesión',
+                onPressed: _isLoggingOut ? null : _logout,
+                icon: _isLoggingOut
+                    ? SizedBox.square(
+                        dimension: spacing.large,
+                        child: const CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.logout),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
             Text(
-              'Hola, ${profile.nombreVisible}',
+              'Hola, ${widget.profile.nombreVisible}',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
-            Text('${profile.nombreCompleto} · ${profile.ciudad}'),
+            Text('${widget.profile.nombreCompleto} · ${widget.profile.ciudad}'),
             const SizedBox(height: 8),
             Text(
               'Tu perfil está conectado. Muy pronto podrás compartir y encontrar artículos dentro de tu comunidad.',

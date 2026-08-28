@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/api_exception.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_password_field.dart';
+import '../widgets/app_primary_button.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({this.authService, super.key});
@@ -240,17 +241,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ],
                       const SizedBox(height: 24),
-                      FilledButton(
+                      AppPrimaryButton(
                         key: const Key('registerButton'),
-                        onPressed: _isLoading ? null : _submit,
-                        child: _isLoading
-                            ? const SizedBox.square(
-                                dimension: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Crear cuenta'),
+                        text: 'Crear cuenta',
+                        onPressed: _submit,
+                        isLoading: _isLoading,
                       ),
                     ],
                   ),
