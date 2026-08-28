@@ -13,6 +13,74 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('muestra el perfil real y la estructura principal', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app(HomeScreen(profile: _profile)));
+
+    expect(find.text('¡Hola, ana! 👋'), findsOneWidget);
+    expect(find.text('Gracias por ser parte del cambio.'), findsOneWidget);
+    expect(find.text('¿Qué quieres hacer hoy?'), findsOneWidget);
+    expect(find.text('Donar'), findsOneWidget);
+    expect(find.text('Solicitar'), findsOneWidget);
+    expect(find.text('Explorar'), findsOneWidget);
+    expect(find.text('Mis donaciones'), findsOneWidget);
+    expect(find.text('Pequeñas acciones, grandes cambios'), findsOneWidget);
+    expect(find.text('Gracias por ayudar a tu comunidad.'), findsOneWidget);
+  });
+
+  testWidgets('los cuatro accesos permanecen no interactivos', (tester) async {
+    await tester.pumpWidget(_app(HomeScreen(profile: _profile)));
+
+    for (final key in _actionKeys) {
+      final action = find.byKey(key);
+      expect(action, findsOneWidget);
+      expect(
+        find.descendant(of: action, matching: find.byType(InkWell)),
+        findsNothing,
+      );
+    }
+    expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
+  testWidgets('no muestra estadísticas ficticias', (tester) async {
+    await tester.pumpWidget(_app(HomeScreen(profile: _profile)));
+
+    expect(find.textContaining('128'), findsNothing);
+    expect(find.textContaining('impacto total'), findsNothing);
+    expect(find.textContaining('personas ayudadas'), findsNothing);
+  });
+
+  for (final textScale in [1.0, 2.0]) {
+    testWidgets('no produce overflow a 240 px con escala de texto $textScale', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(240, 640);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        _app(
+          MediaQuery(
+            data: MediaQueryData(
+              size: const Size(240, 640),
+              textScaler: TextScaler.linear(textScale),
+            ),
+            child: HomeScreen(profile: _profile),
+          ),
+        ),
+      );
+      await tester.scrollUntilVisible(
+        find.text('Gracias por ayudar a tu comunidad.'),
+        300,
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Gracias por ayudar a tu comunidad.'), findsOneWidget);
+    });
+  }
+
   testWidgets('muestra la acción accesible Cerrar sesión', (tester) async {
     final semantics = tester.ensureSemantics();
     await tester.pumpWidget(_app(HomeScreen(profile: _profile)));
@@ -99,6 +167,13 @@ void main() {
     expect(find.byType(WelcomeScreen), findsOneWidget);
   });
 }
+
+const _actionKeys = [
+  Key('homeDonateAction'),
+  Key('homeRequestAction'),
+  Key('homeExploreAction'),
+  Key('homeMyDonationsAction'),
+];
 
 Widget _app(Widget home) => MaterialApp(theme: AppTheme.light, home: home);
 

@@ -1,5 +1,6 @@
 import 'package:donapp_mobile/models/auth_session.dart';
 import 'package:donapp_mobile/models/user_profile.dart';
+import 'package:donapp_mobile/screens/home_screen.dart';
 import 'package:donapp_mobile/screens/login_screen.dart';
 import 'package:donapp_mobile/services/auth_service.dart';
 import 'package:donapp_mobile/services/profile_service.dart';
@@ -60,8 +61,8 @@ void main() {
     await tester.tap(find.byKey(const Key('loginButton')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Hola, ana'), findsOneWidget);
-    expect(find.text('Publicar una donación'), findsOneWidget);
+    expect(find.text('¡Hola, ana! 👋'), findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
   });
 }
 

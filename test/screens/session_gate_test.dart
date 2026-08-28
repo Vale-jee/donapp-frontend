@@ -32,7 +32,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(HomeScreen), findsOneWidget);
-    expect(find.text('Hola, ana'), findsOneWidget);
+    expect(find.text('¡Hola, ana! 👋'), findsOneWidget);
   });
 
   testWidgets('sin sesión muestra el acceso transitorio', (tester) async {
