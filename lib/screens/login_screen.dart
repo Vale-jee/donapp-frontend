@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../navigation/app_router.dart';
 import '../services/api_exception.dart';
 import '../services/auth_service.dart';
 import '../services/profile_service.dart';
@@ -89,6 +91,10 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       final profile = await _profileService.getProfile(session.accessToken);
       if (!mounted) return;
+      if (GoRouter.maybeOf(context) case final router?) {
+        router.go(AppRoutes.home, extra: profile);
+        return;
+      }
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(builder: (_) => HomeScreen(profile: profile)),
       );
@@ -110,11 +116,14 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _openRegister() async {
-    final email = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
-        builder: (_) => RegisterScreen(authService: _authService),
-      ),
-    );
+    final router = GoRouter.maybeOf(context);
+    final email = router != null
+        ? await router.push<String>(AppRoutes.register)
+        : await Navigator.of(context).push<String>(
+            MaterialPageRoute<String>(
+              builder: (_) => RegisterScreen(authService: _authService),
+            ),
+          );
     if (!mounted || email == null) return;
     _emailController.text = email;
     _passwordController.clear();

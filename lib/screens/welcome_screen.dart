@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../navigation/app_router.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_radius.dart';
@@ -14,6 +16,9 @@ class WelcomeScreen extends StatelessWidget {
   final AuthService? authService;
 
   Future<void> _openLogin(BuildContext context, {String? initialEmail}) {
+    if (GoRouter.maybeOf(context) case final router?) {
+      return router.push<void>(AppRoutes.login, extra: initialEmail);
+    }
     return Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) =>
@@ -23,11 +28,14 @@ class WelcomeScreen extends StatelessWidget {
   }
 
   Future<void> _openRegister(BuildContext context) async {
-    final email = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
-        builder: (_) => RegisterScreen(authService: authService),
-      ),
-    );
+    final router = GoRouter.maybeOf(context);
+    final email = router != null
+        ? await router.push<String>(AppRoutes.nestedRegister)
+        : await Navigator.of(context).push<String>(
+            MaterialPageRoute<String>(
+              builder: (_) => RegisterScreen(authService: authService),
+            ),
+          );
     if (!context.mounted || email == null) return;
     await _openLogin(context, initialEmail: email);
   }

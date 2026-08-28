@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../navigation/app_router.dart';
 import '../models/user_profile.dart';
 import '../services/session_coordinator.dart';
 import '../theme/app_spacing.dart';
@@ -36,6 +38,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (!mounted) return;
+    if (GoRouter.maybeOf(context) case final router?) {
+      router.go(AppRoutes.welcome);
+      return;
+    }
     await Navigator.of(context).pushAndRemoveUntil<void>(
       MaterialPageRoute<void>(builder: (_) => const WelcomeScreen()),
       (_) => false,
@@ -54,9 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Semantics(
             button: true,
             enabled: !_isLoggingOut,
-            label: _isLoggingOut
-                ? 'Cerrar sesión. Cargando'
-                : 'Cerrar sesión',
+            label: _isLoggingOut ? 'Cerrar sesión. Cargando' : 'Cerrar sesión',
             child: ExcludeSemantics(
               child: IconButton(
                 key: const Key('logoutButton'),

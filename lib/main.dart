@@ -1,23 +1,38 @@
 import 'package:flutter/material.dart';
 
-import 'screens/session_gate.dart';
+import 'navigation/app_router.dart';
 import 'services/session_coordinator.dart';
 import 'theme/app_theme.dart';
 
 void main() => runApp(const DonApp());
 
-class DonApp extends StatelessWidget {
+class DonApp extends StatefulWidget {
   const DonApp({this.sessionCoordinator, super.key});
 
   final SessionCoordinator? sessionCoordinator;
 
   @override
+  State<DonApp> createState() => _DonAppState();
+}
+
+class _DonAppState extends State<DonApp> {
+  late final _router = createAppRouter(
+    sessionCoordinator: widget.sessionCoordinator,
+  );
+
+  @override
+  void dispose() {
+    _router.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'DonApp',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      home: SessionGate(coordinator: sessionCoordinator),
+      routerConfig: _router,
     );
   }
 }

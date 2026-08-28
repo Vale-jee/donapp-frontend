@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../services/api_exception.dart';
 import '../services/auth_service.dart';
@@ -125,7 +126,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ciudad: _ciudadController.text,
       );
       if (!mounted) return;
-      Navigator.of(context).pop(_emailController.text.trim().toLowerCase());
+      final email = _emailController.text.trim().toLowerCase();
+      if (GoRouter.maybeOf(context) case final router?) {
+        router.pop(email);
+      } else {
+        Navigator.of(context).pop(email);
+      }
     } on ApiException catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
     } catch (_) {
