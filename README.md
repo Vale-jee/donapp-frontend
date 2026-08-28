@@ -286,6 +286,8 @@ lib/
 - `widgets/`: contiene componentes reutilizables del formulario.
 - `main.dart`: inicializa Material 3 y abre el Login.
 
+El propósito y la interfaz pública de los componentes reutilizables están en el [catálogo de componentes](docs/component_catalog.md).
+
 ## Base de datos
 
 No es necesario abrir una herramienta de base de datos para registrar usuarios. El flujo normal es:
@@ -304,6 +306,19 @@ yarn prisma studio
 ```
 
 Prisma Studio no forma parte del procedimiento necesario para registrar, iniciar sesión o consultar el perfil.
+
+## Uso de inteligencia artificial
+
+Durante el desarrollo del frontend se utilizó **Codex** como apoyo para revisar, implementar, probar y documentar cambios. Las instrucciones solicitaron examinar primero el código real y trabajar con alcances pequeños y verificables, sin aceptar resultados automáticamente.
+
+| Área | Uso de Codex | Resultado utilizado | Revisión y verificación |
+|---|---|---|---|
+| Análisis y arquitectura | Revisión del código existente y análisis de arquitectura antes de modificar. | Mejoras de arquitectura aplicadas de forma incremental. | Cada resultado se revisó antes de avanzar y se corrigió cuando fue necesario. |
+| Interfaz y componentes | Implementación del sistema de diseño; creación y revisión de componentes reutilizables; pantalla de Bienvenida e integración del branding. | Cambios implementados y componentes incorporados al frontend. | Las decisiones de diseño fueron aprobadas manualmente. Se verificaron accesibilidad, TalkBack y tamaños táctiles. |
+| Sesión y errores | Revisión del manejo común de errores de API, restauración y renovación de sesión, y `SessionGate`. | Flujos y mejoras de arquitectura utilizados en la aplicación. | Se comprobaron navegación y sesión, incluidas pruebas en un dispositivo Android físico. |
+| Calidad y documentación | Apoyo para pruebas, comportamiento responsive, fuente ampliada y documentación técnica. | Pruebas añadidas y documentación generada. | Se ejecutaron `flutter analyze --no-pub` y `flutter test --no-pub`, además de comprobaciones con ancho reducido y texto ampliado. |
+
+La revisión humana incluyó las decisiones de diseño, la validación de los cambios y las pruebas antes de continuar. Ningún cambio se aceptó sin revisión.
 
 ## Comandos rápidos
 
