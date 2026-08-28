@@ -11,13 +11,19 @@ import 'login_screen.dart';
 import 'register_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({this.authService, super.key});
+  const WelcomeScreen({this.authService, this.redirectLocation, super.key});
 
   final AuthService? authService;
+  final String? redirectLocation;
 
   Future<void> _openLogin(BuildContext context, {String? initialEmail}) {
     if (GoRouter.maybeOf(context) case final router?) {
-      return router.push<void>(AppRoutes.loginLocation(email: initialEmail));
+      return router.push<void>(
+        AppRoutes.loginLocation(
+          email: initialEmail,
+          redirect: redirectLocation,
+        ),
+      );
     }
     return Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -30,7 +36,9 @@ class WelcomeScreen extends StatelessWidget {
   Future<void> _openRegister(BuildContext context) async {
     final router = GoRouter.maybeOf(context);
     final email = router != null
-        ? await router.push<String>(AppRoutes.nestedRegister)
+        ? await router.push<String>(
+            AppRoutes.nestedRegisterLocation(redirect: redirectLocation),
+          )
         : await Navigator.of(context).push<String>(
             MaterialPageRoute<String>(
               builder: (_) => RegisterScreen(authService: authService),

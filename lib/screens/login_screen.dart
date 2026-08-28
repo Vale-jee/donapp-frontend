@@ -19,6 +19,7 @@ class LoginScreen extends StatefulWidget {
     this.tokenStorage,
     this.authState,
     this.initialEmail,
+    this.redirectLocation,
     super.key,
   });
 
@@ -27,6 +28,7 @@ class LoginScreen extends StatefulWidget {
   final TokenStorage? tokenStorage;
   final AuthStateController? authState;
   final String? initialEmail;
+  final String? redirectLocation;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -121,7 +123,9 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _openRegister() async {
     final router = GoRouter.maybeOf(context);
     final email = router != null
-        ? await router.push<String>(AppRoutes.register)
+        ? await router.push<String>(
+            AppRoutes.registerLocation(redirect: widget.redirectLocation),
+          )
         : await Navigator.of(context).push<String>(
             MaterialPageRoute<String>(
               builder: (_) => RegisterScreen(authService: _authService),

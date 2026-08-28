@@ -14,6 +14,7 @@ class AuthStateController extends ChangeNotifier {
   UserProfile? _profile;
   String? _message;
   Future<void>? _restoreInProgress;
+  bool _explicitLogoutPending = false;
 
   AuthStatus get status => _status;
   UserProfile? get profile => _profile;
@@ -61,8 +62,15 @@ class AuthStateController extends ChangeNotifier {
     try {
       await _sessionCoordinator.logout();
     } finally {
+      _explicitLogoutPending = true;
       _setState(AuthStatus.unauthenticated);
     }
+  }
+
+  bool consumeExplicitLogout() {
+    final wasExplicitLogout = _explicitLogoutPending;
+    _explicitLogoutPending = false;
+    return wasExplicitLogout;
   }
 
   void _setState(AuthStatus status, {UserProfile? profile, String? message}) {

@@ -19,12 +19,45 @@ abstract final class AppRoutes {
   static const nestedRegister = '/bienvenida/registro';
   static const home = '/inicio';
 
-  static String loginLocation({String? email}) {
+  static String rootLocation({String? redirect}) =>
+      _location(root, redirect: redirect);
+
+  static String welcomeLocation({String? redirect}) =>
+      _location(welcome, redirect: redirect);
+
+  static String loginLocation({String? email, String? redirect}) {
     return Uri(
       path: login,
-      queryParameters: email == null ? null : {'email': email},
+      queryParameters: {
+        'email': ?email,
+        'redirect': ?redirect,
+      },
     ).toString();
   }
+
+  static String registerLocation({String? redirect}) =>
+      _location(register, redirect: redirect);
+
+  static String nestedRegisterLocation({String? redirect}) =>
+      _location(nestedRegister, redirect: redirect);
+
+  static String? validPrivateRedirect(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final uri = Uri.tryParse(value);
+    if (uri == null ||
+        uri.scheme.isNotEmpty ||
+        uri.hasAuthority ||
+        uri.fragment.isNotEmpty ||
+        !_privateLocations.contains(uri.path)) {
+      return null;
+    }
+    return uri.toString();
+  }
+
+  static String _location(String path, {String? redirect}) => Uri(
+    path: path,
+    queryParameters: redirect == null ? null : {'redirect': redirect},
+  ).toString();
 }
 
 GoRouter createAppRouter({
@@ -40,18 +73,35 @@ GoRouter createAppRouter({
     redirect: (context, state) {
       final location = state.matchedLocation;
       final isPublic = _publicLocations.contains(location);
+      final requestedRedirect = state.uri.queryParameters['redirect'];
+      final validRedirect = AppRoutes.validPrivateRedirect(requestedRedirect);
+      final requestedPrivateLocation = _isPrivateLocation(location)
+          ? state.uri.toString()
+          : null;
 
       return switch (authState.status) {
         AuthStatus.restoring || AuthStatus.recoverableError =>
-          location == AppRoutes.root ? null : AppRoutes.root,
+          location == AppRoutes.root
+              ? null
+              : AppRoutes.rootLocation(
+                  redirect: requestedPrivateLocation ?? validRedirect,
+                ),
         AuthStatus.unauthenticated =>
           _isPrivateLocation(location)
-              ? AppRoutes.welcome
+              ? authState.consumeExplicitLogout()
+                    ? AppRoutes.welcome
+                    : AppRoutes.welcomeLocation(
+                        redirect: requestedPrivateLocation,
+                      )
               : location == AppRoutes.root
-              ? AppRoutes.welcome
+              ? AppRoutes.welcomeLocation(redirect: validRedirect)
+              : requestedRedirect != null && validRedirect == null
+              ? _publicLocationWithoutRedirect(state)
               : null,
         AuthStatus.authenticated =>
-          isPublic || location == AppRoutes.root ? AppRoutes.home : null,
+          isPublic || location == AppRoutes.root
+              ? validRedirect ?? AppRoutes.home
+              : null,
       };
     },
     routes: [
@@ -61,12 +111,21 @@ GoRouter createAppRouter({
       ),
       GoRoute(
         path: AppRoutes.welcome,
-        builder: (context, state) => WelcomeScreen(authService: authService),
+        builder: (context, state) => WelcomeScreen(
+          authService: authService,
+          redirectLocation: AppRoutes.validPrivateRedirect(
+            state.uri.queryParameters['redirect'],
+          ),
+        ),
         routes: [
           GoRoute(
             path: 'registro',
-            builder: (context, state) =>
-                RegisterScreen(authService: authService),
+            builder: (context, state) => RegisterScreen(
+              authService: authService,
+              redirectLocation: AppRoutes.validPrivateRedirect(
+                state.uri.queryParameters['redirect'],
+              ),
+            ),
           ),
         ],
       ),
@@ -78,11 +137,19 @@ GoRouter createAppRouter({
           tokenStorage: tokenStorage,
           authState: authState,
           initialEmail: state.uri.queryParameters['email'],
+          redirectLocation: AppRoutes.validPrivateRedirect(
+            state.uri.queryParameters['redirect'],
+          ),
         ),
       ),
       GoRoute(
         path: AppRoutes.register,
-        builder: (context, state) => RegisterScreen(authService: authService),
+        builder: (context, state) => RegisterScreen(
+          authService: authService,
+          redirectLocation: AppRoutes.validPrivateRedirect(
+            state.uri.queryParameters['redirect'],
+          ),
+        ),
       ),
       GoRoute(
         path: AppRoutes.home,
@@ -112,5 +179,18 @@ const _publicLocations = {
 };
 
 bool _isPrivateLocation(String location) {
-  return location == AppRoutes.home;
+  return _privateLocations.contains(location);
+}
+
+const _privateLocations = {AppRoutes.home};
+
+String _publicLocationWithoutRedirect(GoRouterState state) {
+  return switch (state.matchedLocation) {
+    AppRoutes.login => AppRoutes.loginLocation(
+      email: state.uri.queryParameters['email'],
+    ),
+    AppRoutes.register => AppRoutes.register,
+    AppRoutes.nestedRegister => AppRoutes.nestedRegister,
+    _ => AppRoutes.welcome,
+  };
 }

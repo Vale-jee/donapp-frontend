@@ -3,15 +3,17 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../navigation/app_router.dart';
 import '../services/api_exception.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_password_field.dart';
 import '../widgets/app_primary_button.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({this.authService, super.key});
+  const RegisterScreen({this.authService, this.redirectLocation, super.key});
 
   final AuthService? authService;
+  final String? redirectLocation;
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -128,7 +130,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
       final email = _emailController.text.trim().toLowerCase();
       if (GoRouter.maybeOf(context) case final router?) {
-        router.pop(email);
+        if (router.canPop()) {
+          router.pop(email);
+        } else {
+          router.go(
+            AppRoutes.loginLocation(
+              email: email,
+              redirect: widget.redirectLocation,
+            ),
+          );
+        }
       } else {
         Navigator.of(context).pop(email);
       }

@@ -93,7 +93,28 @@ void main() {
     );
 
     expect(harness.router.state.uri.path, AppRoutes.welcome);
+    expect(
+      harness.router.state.uri.queryParameters['redirect'],
+      AppRoutes.home,
+    );
     expect(find.byType(WelcomeScreen), findsOneWidget);
+  });
+
+  testWidgets('Bienvenida conserva el destino al abrir Login', (tester) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.home,
+      _NoSessionCoordinator(),
+    );
+
+    await tester.tap(find.byKey(const Key('welcomeLoginButton')));
+    await tester.pumpAndSettle();
+
+    expect(harness.router.state.uri.path, AppRoutes.login);
+    expect(
+      harness.router.state.uri.queryParameters['redirect'],
+      AppRoutes.home,
+    );
   });
 
   for (final publicLocation in [
@@ -156,6 +177,7 @@ void main() {
     expect(coordinator.logoutCalls, 1);
     expect(harness.authState.status, AuthStatus.unauthenticated);
     expect(harness.router.state.uri.path, AppRoutes.welcome);
+    expect(harness.router.state.uri.queryParameters['redirect'], isNull);
     expect(find.byType(WelcomeScreen), findsOneWidget);
   });
 
@@ -234,7 +256,7 @@ void main() {
     await authState.restore();
     final router = createAppRouter(
       authState: authState,
-      initialLocation: AppRoutes.welcome,
+      initialLocation: AppRoutes.welcomeLocation(redirect: AppRoutes.home),
       authService: _SuccessfulRegisterService(),
     );
     addTearDown(router.dispose);
@@ -256,7 +278,54 @@ void main() {
     final uri = router.state.uri;
     expect(uri.path, AppRoutes.login);
     expect(uri.queryParameters['email'], 'ana+prueba@example.com');
+    expect(uri.queryParameters['redirect'], AppRoutes.home);
     expect(uri.toString(), contains('ana%2Bprueba%40example.com'));
+  });
+
+  testWidgets('login correcto usa un redirect privado vÃ¡lido', (tester) async {
+    final harness = await _pumpLogin(
+      tester,
+      AppRoutes.loginLocation(redirect: '/inicio?seccion=recientes'),
+    );
+
+    await _submitLogin(tester);
+
+    expect(harness.router.state.uri.toString(), '/inicio?seccion=recientes');
+    expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
+  for (final invalidRedirect in [
+    'https://evil.example/inicio',
+    AppRoutes.login,
+    '/ruta-inexistente',
+  ]) {
+    testWidgets('rechaza redirect no permitido: $invalidRedirect', (
+      tester,
+    ) async {
+      final harness = await _pumpLogin(
+        tester,
+        AppRoutes.loginLocation(redirect: invalidRedirect),
+      );
+
+      expect(harness.router.state.uri.queryParameters['redirect'], isNull);
+      await _submitLogin(tester);
+
+      expect(harness.router.state.uri.path, AppRoutes.home);
+    });
+  }
+
+  testWidgets('conserva query parameters de una URI privada', (tester) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      '/inicio?filtro=disponibles&orden=reciente',
+      _NoSessionCoordinator(),
+    );
+
+    expect(harness.router.state.uri.path, AppRoutes.welcome);
+    expect(
+      harness.router.state.uri.queryParameters['redirect'],
+      '/inicio?filtro=disponibles&orden=reciente',
+    );
   });
 
   testWidgets('login correcto actualiza autenticación y abre /inicio', (
@@ -291,6 +360,30 @@ void main() {
     expect(router.state.uri.path, AppRoutes.home);
     expect(find.byType(HomeScreen), findsOneWidget);
   });
+}
+
+Future<({AuthStateController authState, GoRouter router})> _pumpLogin(
+  WidgetTester tester,
+  String initialLocation,
+) async {
+  return _pumpAuthenticatedRouter(
+    tester,
+    initialLocation,
+    _NoSessionCoordinator(),
+    authService: _SuccessfulLoginService(),
+    profileService: _SuccessfulProfileService(),
+    tokenStorage: _MemoryTokenStorage(),
+  );
+}
+
+Future<void> _submitLogin(WidgetTester tester) async {
+  await tester.enterText(
+    find.byKey(const Key('emailField')),
+    'ana@example.com',
+  );
+  await tester.enterText(find.byKey(const Key('passwordField')), 'Clave1234');
+  await tester.tap(find.byKey(const Key('loginButton')));
+  await tester.pumpAndSettle();
 }
 
 TextEditingController _emailController(WidgetTester tester) {
@@ -349,13 +442,19 @@ Future<({AuthStateController authState, GoRouter router})>
 _pumpAuthenticatedRouter(
   WidgetTester tester,
   String location,
-  SessionCoordinator coordinator,
-) async {
+  SessionCoordinator coordinator, {
+  AuthService? authService,
+  ProfileService? profileService,
+  TokenStorage? tokenStorage,
+}) async {
   final authState = AuthStateController(sessionCoordinator: coordinator);
   await authState.restore();
   final router = createAppRouter(
     authState: authState,
     initialLocation: location,
+    authService: authService,
+    profileService: profileService,
+    tokenStorage: tokenStorage,
   );
   addTearDown(router.dispose);
   addTearDown(authState.dispose);
