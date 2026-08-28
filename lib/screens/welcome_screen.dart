@@ -17,7 +17,7 @@ class WelcomeScreen extends StatelessWidget {
 
   Future<void> _openLogin(BuildContext context, {String? initialEmail}) {
     if (GoRouter.maybeOf(context) case final router?) {
-      return router.push<void>(AppRoutes.login, extra: initialEmail);
+      return router.push<void>(AppRoutes.loginLocation(email: initialEmail));
     }
     return Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
