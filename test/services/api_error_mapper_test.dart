@@ -67,12 +67,15 @@ void main() {
     test('diferencia cuenta inactiva y falta de permisos', () {
       final inactive = ApiErrorMapper.fromHttp(
         statusCode: 403,
-        body: const {},
+        body: const {'message': 'La cuenta se encuentra inactiva.'},
         context: ApiRequestContext.protectedSession,
       );
       final forbidden = ApiErrorMapper.fromHttp(
         statusCode: 403,
-        body: const {},
+        body: const {
+          'message': 'No tiene permisos para realizar esta operación.',
+        },
+        context: ApiRequestContext.protectedSession,
       );
 
       expect(inactive.type, ApiErrorType.inactiveAccount);
@@ -83,6 +86,20 @@ void main() {
       expect(forbidden.type, ApiErrorType.forbidden);
       expect(forbidden.message, 'No tienes permiso para realizar esta acción.');
     });
+
+    test(
+      'un 403 protegido sin causa de inactividad es permiso insuficiente',
+      () {
+        final error = ApiErrorMapper.fromHttp(
+          statusCode: 403,
+          body: const {},
+          context: ApiRequestContext.protectedSession,
+        );
+
+        expect(error.type, ApiErrorType.forbidden);
+        expect(error.message, 'No tienes permiso para realizar esta acción.');
+      },
+    );
 
     test('trata 422 defensivamente como validación', () {
       final error = ApiErrorMapper.fromHttp(statusCode: 422, body: const {});

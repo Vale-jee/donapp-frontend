@@ -1,5 +1,6 @@
 import 'package:donapp_mobile/config/api_config.dart';
 import 'package:donapp_mobile/services/api_client.dart';
+import 'package:donapp_mobile/services/api_error_mapper.dart';
 import 'package:donapp_mobile/services/api_exception.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -7,6 +8,149 @@ import 'package:http/testing.dart';
 
 void main() {
   group('ApiClient', () {
+    test(
+      '401 protegido renueva y repite una sola vez con token nuevo',
+      () async {
+        final recovery = _FakeSessionRecovery();
+        final authorizationHeaders = <String?>[];
+        final client = ApiClient(
+          client: MockClient((request) async {
+            authorizationHeaders.add(request.headers['Authorization']);
+            if (authorizationHeaders.length == 1) {
+              return http.Response(
+                '{"success":false,"message":"Access token inválido."}',
+                401,
+              );
+            }
+            return http.Response('{"success":true,"data":{"ok":true}}', 200);
+          }),
+          endpointBuilder: _endpoint,
+          sessionRecovery: recovery,
+        );
+
+        final result = await client.get(
+          '/protegido',
+          headers: const {'Authorization': 'Bearer old-access'},
+          successStatusCodes: const {200},
+          context: ApiRequestContext.protectedSession,
+        );
+
+        expect(result['data'], {'ok': true});
+        expect(recovery.calls, ['old-access']);
+        expect(authorizationHeaders, [
+          'Bearer old-access',
+          'Bearer new-access',
+        ]);
+      },
+    );
+
+    test('un segundo 401 no crea un loop de refresh', () async {
+      final recovery = _FakeSessionRecovery();
+      var requestCount = 0;
+      final client = ApiClient(
+        client: MockClient((_) async {
+          requestCount++;
+          return http.Response(
+            '{"success":false,"message":"Access token inválido."}',
+            401,
+          );
+        }),
+        endpointBuilder: _endpoint,
+        sessionRecovery: recovery,
+      );
+
+      await _expectType(
+        client.get(
+          '/protegido',
+          headers: const {'Authorization': 'Bearer old-access'},
+          successStatusCodes: const {200},
+          context: ApiRequestContext.protectedSession,
+        ),
+        ApiErrorType.authentication,
+      );
+
+      expect(requestCount, 2);
+      expect(recovery.calls, hasLength(1));
+    });
+
+    test('401 de Login no intenta recuperar sesión', () async {
+      final recovery = _FakeSessionRecovery();
+      final client = ApiClient(
+        client: MockClient(
+          (_) async => http.Response(
+            '{"success":false,"message":"Credenciales inválidas."}',
+            401,
+          ),
+        ),
+        endpointBuilder: _endpoint,
+        sessionRecovery: recovery,
+      );
+
+      await _expectType(
+        client.post(
+          '/api/auth/login',
+          headers: const {'Content-Type': 'application/json'},
+          body: const {'email': 'ana@example.com', 'password': 'incorrecta'},
+          successStatusCodes: const {200},
+          context: ApiRequestContext.login,
+        ),
+        ApiErrorType.invalidCredentials,
+      );
+      expect(recovery.calls, isEmpty);
+    });
+
+    test('403 de permisos no invalida la sesión', () async {
+      final recovery = _FakeSessionRecovery();
+      final client = ApiClient(
+        client: MockClient(
+          (_) async => http.Response(
+            '{"success":false,"message":"No tiene permisos para realizar esta operación."}',
+            403,
+          ),
+        ),
+        endpointBuilder: _endpoint,
+        sessionRecovery: recovery,
+      );
+
+      await _expectType(
+        client.get(
+          '/protegido',
+          headers: const {'Authorization': 'Bearer access'},
+          successStatusCodes: const {200},
+          context: ApiRequestContext.protectedSession,
+        ),
+        ApiErrorType.forbidden,
+      );
+      expect(recovery.inactiveInvalidations, 0);
+      expect(recovery.calls, isEmpty);
+    });
+
+    test('403 de cuenta inactiva invalida el acceso protegido', () async {
+      final recovery = _FakeSessionRecovery();
+      final client = ApiClient(
+        client: MockClient(
+          (_) async => http.Response(
+            '{"success":false,"message":"La cuenta se encuentra inactiva."}',
+            403,
+          ),
+        ),
+        endpointBuilder: _endpoint,
+        sessionRecovery: recovery,
+      );
+
+      await _expectType(
+        client.get(
+          '/protegido',
+          headers: const {'Authorization': 'Bearer access'},
+          successStatusCodes: const {200},
+          context: ApiRequestContext.protectedSession,
+        ),
+        ApiErrorType.inactiveAccount,
+      );
+      expect(recovery.inactiveInvalidations, 1);
+      expect(recovery.calls, isEmpty);
+    });
+
     test('construye query parameters con Uri sin alterar el path', () async {
       late Uri requestedUri;
       final client = ApiClient(
@@ -117,6 +261,23 @@ void main() {
       expect(ApiConfig.resolveImageReference('file:///imagen.jpg'), isNull);
     });
   });
+}
+
+class _FakeSessionRecovery implements SessionRecovery {
+  final calls = <String>[];
+  int inactiveInvalidations = 0;
+
+  @override
+  Future<String> recoverAfterUnauthorized(String failedAccessToken) async {
+    calls.add(failedAccessToken);
+    return 'new-access';
+  }
+
+  @override
+  Future<Never> invalidateInactiveAccount(ApiException cause) async {
+    inactiveInvalidations++;
+    throw cause;
+  }
 }
 
 Uri _endpoint(String path) => Uri.parse('https://example.test$path');

@@ -5,6 +5,7 @@ import 'package:donapp_mobile/models/auth_session.dart';
 import 'package:donapp_mobile/models/category.dart';
 import 'package:donapp_mobile/models/donation.dart';
 import 'package:donapp_mobile/models/request.dart';
+import 'package:donapp_mobile/models/refreshed_tokens.dart';
 import 'package:donapp_mobile/navigation/app_router.dart';
 import 'package:donapp_mobile/screens/home_screen.dart';
 import 'package:donapp_mobile/screens/my_donations_screen.dart';
@@ -17,6 +18,7 @@ import 'package:donapp_mobile/screens/request_detail_screen.dart';
 import 'package:donapp_mobile/screens/requests_screen.dart';
 import 'package:donapp_mobile/screens/welcome_screen.dart';
 import 'package:donapp_mobile/services/session_coordinator.dart';
+import 'package:donapp_mobile/services/api_exception.dart';
 import 'package:donapp_mobile/services/auth_service.dart';
 import 'package:donapp_mobile/services/auth_state_controller.dart';
 import 'package:donapp_mobile/services/category_service.dart';
@@ -580,6 +582,52 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('401 definitivo sale de ruta privada y conserva redirect', (
+    tester,
+  ) async {
+    final storage = _ExpiringTokenStorage();
+    final coordinator = SessionCoordinator(
+      tokenStorage: storage,
+      authService: _RejectingRefreshAuthService(),
+      profileService: _SuccessfulProfileService(),
+    );
+    final authState = AuthStateController(sessionCoordinator: coordinator);
+    await authState.restore();
+    final router = createAppRouter(
+      authState: authState,
+      initialLocation: '/donaciones/4',
+      authService: _SuccessfulLoginService(),
+      profileService: _SuccessfulProfileService(),
+      tokenStorage: storage,
+      donationService: _EmptyDonationService(),
+      requestService: _EmptyRequestService(),
+    );
+    addTearDown(router.dispose);
+    addTearDown(authState.dispose);
+    await tester.pumpWidget(
+      MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+    );
+    await tester.pumpAndSettle();
+    expect(router.state.uri.path, '/donaciones/4');
+
+    await expectLater(
+      coordinator.recoverAfterUnauthorized('old-access'),
+      throwsA(isA<ApiException>()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(authState.status, AuthStatus.unauthenticated);
+    expect(router.state.uri.path, AppRoutes.welcome);
+    expect(router.state.uri.queryParameters['redirect'], '/donaciones/4');
+
+    await tester.tap(find.byKey(const Key('welcomeLoginButton')));
+    await tester.pumpAndSettle();
+    expect(router.state.uri.path, AppRoutes.login);
+    expect(router.state.uri.queryParameters['redirect'], '/donaciones/4');
+    await _submitLogin(tester);
+    expect(router.state.uri.path, '/donaciones/4');
+  });
+
   testWidgets('error recuperable permanece en / sin loop', (tester) async {
     final coordinator = _RecoverableSessionCoordinator();
     final authState = AuthStateController(sessionCoordinator: coordinator);
@@ -1024,6 +1072,43 @@ class _MemoryTokenStorage extends TokenStorage {
     required String accessToken,
     required String refreshToken,
   }) async {}
+}
+
+class _ExpiringTokenStorage extends TokenStorage {
+  String? accessToken = 'old-access';
+  String? refreshToken = 'old-refresh';
+
+  @override
+  Future<String?> readAccessToken() async => accessToken;
+
+  @override
+  Future<String?> readRefreshToken() async => refreshToken;
+
+  @override
+  Future<void> saveTokens({
+    required String accessToken,
+    required String refreshToken,
+  }) async {
+    this.accessToken = accessToken;
+    this.refreshToken = refreshToken;
+  }
+
+  @override
+  Future<void> clearTokens() async {
+    accessToken = null;
+    refreshToken = null;
+  }
+}
+
+class _RejectingRefreshAuthService extends AuthService {
+  @override
+  Future<RefreshedTokens> refresh(String refreshToken) {
+    throw const ApiException(
+      ApiErrorType.authentication,
+      'Sesión inválida.',
+      statusCode: 401,
+    );
+  }
 }
 
 class _EmptyDonationService extends DonationService {

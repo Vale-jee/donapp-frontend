@@ -1,4 +1,5 @@
 import '../models/user_profile.dart';
+import 'api_client.dart';
 import 'api_exception.dart';
 import 'auth_service.dart';
 import 'profile_service.dart';
@@ -25,7 +26,7 @@ class SessionRestoreResult {
   final String? message;
 }
 
-class SessionCoordinator {
+class SessionCoordinator implements SessionRecovery {
   SessionCoordinator({
     AuthService? authService,
     ProfileService? profileService,
@@ -38,6 +39,78 @@ class SessionCoordinator {
   final ProfileService _profileService;
   final TokenStorage _tokenStorage;
   Future<SessionRestoreResult>? _restoreInProgress;
+  Future<String>? _refreshInProgress;
+  final List<void Function()> _sessionInvalidatedListeners = [];
+
+  TokenStorage get tokenStorage => _tokenStorage;
+
+  void addSessionInvalidatedListener(void Function() listener) {
+    _sessionInvalidatedListeners.add(listener);
+  }
+
+  void removeSessionInvalidatedListener(void Function() listener) {
+    _sessionInvalidatedListeners.remove(listener);
+  }
+
+  @override
+  Future<String> recoverAfterUnauthorized(String failedAccessToken) async {
+    final currentAccessToken = await _tokenStorage.readAccessToken();
+    if (currentAccessToken != null &&
+        currentAccessToken.isNotEmpty &&
+        currentAccessToken != failedAccessToken) {
+      return currentAccessToken;
+    }
+
+    final inProgress = _refreshInProgress;
+    if (inProgress != null) return inProgress;
+
+    final refresh = _refreshAccessToken();
+    _refreshInProgress = refresh;
+    return refresh.whenComplete(() {
+      if (identical(_refreshInProgress, refresh)) _refreshInProgress = null;
+    });
+  }
+
+  @override
+  Future<Never> invalidateInactiveAccount(ApiException cause) async {
+    await _invalidateSession(cause);
+    throw cause;
+  }
+
+  Future<String> _refreshAccessToken() async {
+    final refreshToken = await _tokenStorage.readRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) {
+      return _invalidateSession();
+    }
+
+    try {
+      final refreshed = await _authService.refresh(refreshToken);
+      await _tokenStorage.saveTokens(
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken,
+      );
+      return refreshed.accessToken;
+    } on ApiException catch (error) {
+      if (_isRecoverable(error)) rethrow;
+      return _invalidateSession(error);
+    } on Object {
+      return _invalidateSession();
+    }
+  }
+
+  Future<String> _invalidateSession([ApiException? cause]) async {
+    await _tokenStorage.clearTokens();
+    for (final listener in List.of(_sessionInvalidatedListeners)) {
+      listener();
+    }
+    throw cause?.type == ApiErrorType.inactiveAccount
+        ? cause!
+        : const ApiException(
+            ApiErrorType.authentication,
+            'Tu sesión ya no es válida. Inicia sesión nuevamente.',
+            statusCode: 401,
+          );
+  }
 
   Future<SessionRestoreResult> restoreSession() {
     final inProgress = _restoreInProgress;

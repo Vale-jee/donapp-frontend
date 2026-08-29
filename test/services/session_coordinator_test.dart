@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:donapp_mobile/models/refreshed_tokens.dart';
 import 'package:donapp_mobile/models/user_profile.dart';
 import 'package:donapp_mobile/services/api_exception.dart';
+import 'package:donapp_mobile/services/auth_state_controller.dart';
 import 'package:donapp_mobile/services/auth_service.dart';
 import 'package:donapp_mobile/services/profile_service.dart';
 import 'package:donapp_mobile/services/session_coordinator.dart';
@@ -10,6 +11,130 @@ import 'package:donapp_mobile/services/token_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('SessionCoordinator.recoverAfterUnauthorized', () {
+    test('rota y guarda ambos tokens', () async {
+      final storage = _completeStorage();
+      final auth = _FakeAuthService();
+      final coordinator = _coordinator(storage: storage, authService: auth);
+
+      final accessToken = await coordinator.recoverAfterUnauthorized(
+        'old-access',
+      );
+
+      expect(accessToken, 'new-access');
+      expect(auth.refreshCount, 1);
+      expect(storage.savedPairs, [('new-access', 'new-refresh')]);
+    });
+
+    test('dos 401 simultáneos comparten una sola rotación', () async {
+      final storage = _completeStorage();
+      final pending = Completer<RefreshedTokens>();
+      final auth = _FakeAuthService(refreshResult: pending.future);
+      final coordinator = _coordinator(storage: storage, authService: auth);
+
+      final first = coordinator.recoverAfterUnauthorized('old-access');
+      final second = coordinator.recoverAfterUnauthorized('old-access');
+      await Future<void>.delayed(Duration.zero);
+      expect(auth.refreshCount, 1);
+
+      pending.complete(_refreshed);
+      expect(await Future.wait([first, second]), ['new-access', 'new-access']);
+      expect(auth.refreshCount, 1);
+    });
+
+    test('un 401 tardío reutiliza el token ya rotado', () async {
+      final storage = _completeStorage();
+      final auth = _FakeAuthService();
+      final coordinator = _coordinator(storage: storage, authService: auth);
+
+      await coordinator.recoverAfterUnauthorized('old-access');
+      final token = await coordinator.recoverAfterUnauthorized('old-access');
+
+      expect(token, 'new-access');
+      expect(auth.refreshCount, 1);
+    });
+
+    test('refresh 401 limpia tokens y notifica invalidación', () async {
+      final storage = _completeStorage();
+      final coordinator = _coordinator(
+        storage: storage,
+        authService: _FakeAuthService(refreshError: _authentication),
+      );
+      var invalidations = 0;
+      coordinator.addSessionInvalidatedListener(() => invalidations++);
+
+      await expectLater(
+        coordinator.recoverAfterUnauthorized('old-access'),
+        throwsA(
+          isA<ApiException>().having(
+            (error) => error.type,
+            'type',
+            ApiErrorType.authentication,
+          ),
+        ),
+      );
+      expect(storage.accessToken, isNull);
+      expect(storage.refreshToken, isNull);
+      expect(storage.clearCount, 1);
+      expect(invalidations, 1);
+    });
+
+    test('refresh definitivo actualiza AuthStateController', () async {
+      final storage = _completeStorage();
+      final coordinator = _coordinator(
+        storage: storage,
+        authService: _FakeAuthService(refreshError: _authentication),
+      );
+      final authState = AuthStateController(sessionCoordinator: coordinator);
+      addTearDown(authState.dispose);
+      await authState.restore();
+      expect(authState.status, AuthStatus.authenticated);
+
+      await expectLater(
+        coordinator.recoverAfterUnauthorized('old-access'),
+        throwsA(isA<ApiException>()),
+      );
+
+      expect(authState.status, AuthStatus.unauthenticated);
+      expect(authState.profile, isNull);
+    });
+
+    test('fallo recuperable conserva tokens y no invalida sesión', () async {
+      final storage = _completeStorage();
+      final coordinator = _coordinator(
+        storage: storage,
+        authService: _FakeAuthService(refreshError: _network),
+      );
+      var invalidations = 0;
+      coordinator.addSessionInvalidatedListener(() => invalidations++);
+
+      await expectLater(
+        coordinator.recoverAfterUnauthorized('old-access'),
+        throwsA(same(_network)),
+      );
+      expect(storage.accessToken, 'old-access');
+      expect(storage.refreshToken, 'old-refresh');
+      expect(storage.clearCount, 0);
+      expect(invalidations, 0);
+    });
+
+    test('cuenta inactiva limpia tokens e invalida sesión', () async {
+      final storage = _completeStorage();
+      final coordinator = _coordinator(storage: storage);
+      var invalidations = 0;
+      coordinator.addSessionInvalidatedListener(() => invalidations++);
+
+      await expectLater(
+        coordinator.invalidateInactiveAccount(_inactive),
+        throwsA(same(_inactive)),
+      );
+
+      expect(storage.accessToken, isNull);
+      expect(storage.refreshToken, isNull);
+      expect(invalidations, 1);
+    });
+  });
+
   group('SessionCoordinator.restoreSession', () {
     test('distingue cuando no hay tokens', () async {
       final storage = _FakeTokenStorage();

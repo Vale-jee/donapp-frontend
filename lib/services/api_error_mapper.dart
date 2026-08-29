@@ -69,7 +69,7 @@ abstract final class ApiErrorMapper {
     }
 
     if (statusCode == 403) {
-      final inactiveAccount = context != ApiRequestContext.general;
+      final inactiveAccount = _isInactiveAccount(body);
       return ApiException(
         inactiveAccount ? ApiErrorType.inactiveAccount : ApiErrorType.forbidden,
         inactiveAccount ? _inactiveAccountMessage : _forbiddenMessage,
@@ -168,5 +168,12 @@ abstract final class ApiErrorMapper {
     return normalized.isNotEmpty &&
         normalized.length <= 240 &&
         !_technicalTerms.hasMatch(normalized);
+  }
+
+  static bool _isInactiveAccount(Map<String, dynamic>? body) {
+    final message = body?['message'];
+    if (message is! String) return false;
+    final normalized = message.trim().toLowerCase();
+    return normalized.contains('cuenta') && normalized.contains('inactiva');
   }
 }

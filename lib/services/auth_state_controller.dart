@@ -7,7 +7,9 @@ enum AuthStatus { restoring, authenticated, unauthenticated, recoverableError }
 
 class AuthStateController extends ChangeNotifier {
   AuthStateController({SessionCoordinator? sessionCoordinator})
-    : _sessionCoordinator = sessionCoordinator ?? SessionCoordinator();
+    : _sessionCoordinator = sessionCoordinator ?? SessionCoordinator() {
+    _sessionCoordinator.addSessionInvalidatedListener(_sessionInvalidated);
+  }
 
   final SessionCoordinator _sessionCoordinator;
   AuthStatus _status = AuthStatus.restoring;
@@ -19,6 +21,7 @@ class AuthStateController extends ChangeNotifier {
   AuthStatus get status => _status;
   UserProfile? get profile => _profile;
   String? get message => _message;
+  SessionCoordinator get sessionCoordinator => _sessionCoordinator;
 
   Future<void> restore() {
     final inProgress = _restoreInProgress;
@@ -56,6 +59,14 @@ class AuthStateController extends ChangeNotifier {
 
   void authenticated(UserProfile profile) {
     _setState(AuthStatus.authenticated, profile: profile);
+  }
+
+  void _sessionInvalidated() => _setState(AuthStatus.unauthenticated);
+
+  @override
+  void dispose() {
+    _sessionCoordinator.removeSessionInvalidatedListener(_sessionInvalidated);
+    super.dispose();
   }
 
   Future<void> logout() async {
