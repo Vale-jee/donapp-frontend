@@ -70,6 +70,21 @@ void main() {
     );
   });
 
+  testWidgets('Mis donaciones queda interactivo y sin Próximamente', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app(HomeScreen(profile: _profile)));
+    final action = find.byKey(const Key('homeMyDonationsAction'));
+    expect(
+      find.descendant(of: action, matching: find.byType(InkWell)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: action, matching: find.text('Próximamente')),
+      findsNothing,
+    );
+  });
+
   testWidgets('no muestra estadísticas ficticias', (tester) async {
     await tester.pumpWidget(_app(HomeScreen(profile: _profile)));
 
@@ -195,10 +210,7 @@ void main() {
   });
 }
 
-const _disabledActionKeys = [
-  Key('homeRequestAction'),
-  Key('homeMyDonationsAction'),
-];
+const _disabledActionKeys = [Key('homeRequestAction')];
 
 Widget _app(Widget home) => MaterialApp(theme: AppTheme.light, home: home);
 

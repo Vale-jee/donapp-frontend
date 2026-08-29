@@ -183,6 +183,7 @@ class _ActionGrid extends StatelessWidget {
         title: 'Mis donaciones',
         description: 'Consulta lo que has compartido.',
         accent: Theme.of(context).colorScheme.primary,
+        onTap: () => context.push(AppRoutes.myDonations),
       ),
     ];
 

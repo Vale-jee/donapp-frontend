@@ -4,11 +4,60 @@ import 'package:donapp_mobile/services/api_client.dart';
 import 'package:donapp_mobile/services/api_exception.dart';
 import 'package:donapp_mobile/services/donation_service.dart';
 import 'package:donapp_mobile/services/token_storage.dart';
+import 'package:donapp_mobile/models/donation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test(
+    'consulta donaciones propias con token, paginación y estado real',
+    () async {
+      late http.Request captured;
+      final service = DonationService(
+        tokenStorage: _TokenStorage('access-real'),
+        apiClient: ApiClient(
+          endpointBuilder: (path) => Uri.parse('https://api.donapp.test$path'),
+          client: MockClient((request) async {
+            captured = request;
+            return http.Response(jsonEncode(_successBody), 200);
+          }),
+        ),
+      );
+
+      final page = await service.getOwnDonations(
+        page: 2,
+        limit: 10,
+        status: DonationStatus.reservada,
+      );
+
+      expect(captured.method, 'GET');
+      expect(captured.url.path, '/api/donaciones/mias');
+      expect(captured.url.queryParameters, {
+        'page': '2',
+        'limit': '10',
+        'estado': 'RESERVADA',
+      });
+      expect(captured.headers['Authorization'], 'Bearer access-real');
+      expect(page.pagination.hasNextPage, isFalse);
+    },
+  );
+
+  test('consulta todas las donaciones propias sin inventar filtro', () async {
+    late http.Request captured;
+    final service = DonationService(
+      tokenStorage: _TokenStorage('access-real'),
+      apiClient: ApiClient(
+        endpointBuilder: (path) => Uri.parse('https://api.donapp.test$path'),
+        client: MockClient((request) async {
+          captured = request;
+          return http.Response(jsonEncode(_successBody), 200);
+        }),
+      ),
+    );
+    await service.getOwnDonations();
+    expect(captured.url.queryParameters, {'page': '1', 'limit': '20'});
+  });
   test('crea donación enviando referencias HTTPS en orden', () async {
     late http.Request captured;
     final service = DonationService(

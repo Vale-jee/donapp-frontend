@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../screens/home_screen.dart';
+import '../screens/my_donations_screen.dart';
 import '../screens/explore_donations_screen.dart';
 import '../screens/donation_detail_screen.dart';
 import '../screens/create_donation_screen.dart';
@@ -26,6 +27,7 @@ abstract final class AppRoutes {
   static const home = '/inicio';
   static const explore = '/explorar';
   static const createDonation = '/donaciones/nueva';
+  static const myDonations = '/donaciones/mias';
   static const donationDetailPattern = '/donaciones/:id';
 
   static String donationDetailLocation(int id) => '/donaciones/$id';
@@ -185,6 +187,11 @@ GoRouter createAppRouter({
         ),
       ),
       GoRoute(
+        path: AppRoutes.myDonations,
+        builder: (context, state) =>
+            MyDonationsScreen(donationService: donationService),
+      ),
+      GoRoute(
         path: AppRoutes.donationDetailPattern,
         builder: (context, state) {
           final id = int.tryParse(state.pathParameters['id'] ?? '');
@@ -230,6 +237,7 @@ const _privateLocations = {
   AppRoutes.home,
   AppRoutes.explore,
   AppRoutes.createDonation,
+  AppRoutes.myDonations,
 };
 
 class _InvalidDonationRoute extends StatelessWidget {

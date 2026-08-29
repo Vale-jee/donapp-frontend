@@ -6,6 +6,7 @@ import 'package:donapp_mobile/models/category.dart';
 import 'package:donapp_mobile/models/donation.dart';
 import 'package:donapp_mobile/navigation/app_router.dart';
 import 'package:donapp_mobile/screens/home_screen.dart';
+import 'package:donapp_mobile/screens/my_donations_screen.dart';
 import 'package:donapp_mobile/screens/explore_donations_screen.dart';
 import 'package:donapp_mobile/screens/donation_detail_screen.dart';
 import 'package:donapp_mobile/screens/create_donation_screen.dart';
@@ -138,6 +139,31 @@ void main() {
     expect(find.byType(ExploreDonationsScreen), findsOneWidget);
   });
 
+  testWidgets('/donaciones/mias es privada y se reconstruye desde su URI', (
+    tester,
+  ) async {
+    final unauthenticated = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.myDonations,
+      _NoSessionCoordinator(),
+    );
+    expect(unauthenticated.router.state.uri.path, AppRoutes.welcome);
+    expect(
+      unauthenticated.router.state.uri.queryParameters['redirect'],
+      AppRoutes.myDonations,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    final authenticated = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.myDonations,
+      _ValidSessionCoordinator(),
+      donationService: _EmptyDonationService(),
+    );
+    expect(authenticated.router.state.uri.path, AppRoutes.myDonations);
+    expect(find.byType(MyDonationsScreen), findsOneWidget);
+  });
+
   testWidgets('/donaciones/4 reconstruye el detalle solo desde el id', (
     tester,
   ) async {
@@ -229,6 +255,26 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
+    expect(harness.router.state.uri.path, AppRoutes.home);
+    expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
+  testWidgets('Home -> Mis donaciones usa push y Back vuelve a Home', (
+    tester,
+  ) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.home,
+      _ValidSessionCoordinator(),
+      donationService: _EmptyDonationService(),
+    );
+    await tester.tap(find.byKey(const Key('homeMyDonationsAction')));
+    await tester.pumpAndSettle();
+    expect(harness.router.state.uri.path, AppRoutes.myDonations);
+    expect(find.byType(BackButton), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
     expect(harness.router.state.uri.path, AppRoutes.home);
     expect(find.byType(HomeScreen), findsOneWidget);
   });
@@ -589,6 +635,18 @@ void main() {
     expect(find.byType(ExploreDonationsScreen), findsOneWidget);
   });
 
+  testWidgets('login regresa al destino pretendido /donaciones/mias', (
+    tester,
+  ) async {
+    final harness = await _pumpLogin(
+      tester,
+      AppRoutes.loginLocation(redirect: AppRoutes.myDonations),
+    );
+    await _submitLogin(tester);
+    expect(harness.router.state.uri.path, AppRoutes.myDonations);
+    expect(find.byType(MyDonationsScreen), findsOneWidget);
+  });
+
   for (final invalidRedirect in [
     'https://evil.example/inicio',
     AppRoutes.login,
@@ -884,6 +942,21 @@ class _MemoryTokenStorage extends TokenStorage {
 }
 
 class _EmptyDonationService extends DonationService {
+  @override
+  Future<DonationPage> getOwnDonations({
+    int page = 1,
+    int limit = 20,
+    DonationStatus? status,
+  }) async => DonationPage(
+    donations: const [],
+    pagination: DonationPagination(
+      page: page,
+      limit: limit,
+      total: 0,
+      totalPages: 0,
+    ),
+  );
+
   @override
   Future<DonationPage> getAvailableDonations({
     int page = 1,

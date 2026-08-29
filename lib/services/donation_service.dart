@@ -104,6 +104,36 @@ class DonationService {
     }
   }
 
+  Future<DonationPage> getOwnDonations({
+    int page = 1,
+    int limit = 20,
+    DonationStatus? status,
+  }) async {
+    final accessToken = await _accessToken();
+    try {
+      final body = await _apiClient.get(
+        '/api/donaciones/mias',
+        headers: _headers(accessToken),
+        queryParameters: {
+          'page': '$page',
+          'limit': '$limit',
+          if (status != null) 'estado': status.apiValue,
+        },
+        successStatusCodes: const {200},
+        context: ApiRequestContext.protectedSession,
+      );
+      final data = body['data'];
+      if (data is! Map<String, dynamic>) {
+        throw ApiErrorMapper.unexpectedResponse;
+      }
+      return DonationPage.fromJson(data);
+    } on ApiException {
+      rethrow;
+    } on FormatException {
+      throw ApiErrorMapper.unexpectedResponse;
+    }
+  }
+
   Future<String> _accessToken() async {
     final accessToken = await _tokenStorage.readAccessToken();
     if (accessToken == null || accessToken.isEmpty) {

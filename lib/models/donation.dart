@@ -17,6 +17,13 @@ extension DonationStatusJson on DonationStatus {
     DonationStatus.entregada => 'Entregada',
     DonationStatus.retirada => 'Retirada',
   };
+
+  String get apiValue => switch (this) {
+    DonationStatus.publicada => 'PUBLICADA',
+    DonationStatus.reservada => 'RESERVADA',
+    DonationStatus.entregada => 'ENTREGADA',
+    DonationStatus.retirada => 'RETIRADA',
+  };
 }
 
 class DonationImage {
