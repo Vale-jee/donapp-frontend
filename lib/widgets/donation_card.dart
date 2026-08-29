@@ -11,6 +11,7 @@ class DonationCard extends StatelessWidget {
     required this.category,
     required this.location,
     required this.status,
+    this.imageFit = BoxFit.cover,
     this.onTap,
     this.subtitle,
     super.key,
@@ -21,6 +22,7 @@ class DonationCard extends StatelessWidget {
   final String category;
   final String location;
   final String status;
+  final BoxFit imageFit;
   final VoidCallback? onTap;
   final String? subtitle;
 
@@ -48,7 +50,7 @@ class DonationCard extends StatelessWidget {
               children: [
                 AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: _DonationImage(image: image),
+                  child: _DonationImage(image: image, fit: imageFit),
                 ),
                 Padding(
                   padding: EdgeInsets.all(spacing.medium),
@@ -122,18 +124,27 @@ class _OptionalInkWell extends StatelessWidget {
 }
 
 class _DonationImage extends StatelessWidget {
-  const _DonationImage({required this.image});
+  const _DonationImage({required this.image, required this.fit});
 
   final ImageProvider<Object>? image;
+  final BoxFit fit;
 
   @override
   Widget build(BuildContext context) {
     if (image == null) return const _ImagePlaceholder();
-    return Image(
-      image: image!,
-      fit: BoxFit.cover,
-      excludeFromSemantics: true,
-      errorBuilder: (context, error, stackTrace) => const _ImagePlaceholder(),
+    final colors =
+        Theme.of(context).extension<AppColorTokens>() ??
+        const AppColorTokens.standard();
+    return ColoredBox(
+      key: const Key('donationCardImageViewport'),
+      color: colors.background,
+      child: Image(
+        key: const Key('donationCardImage'),
+        image: image!,
+        fit: fit,
+        excludeFromSemantics: true,
+        errorBuilder: (context, error, stackTrace) => const _ImagePlaceholder(),
+      ),
     );
   }
 }

@@ -81,6 +81,31 @@ void main() {
     expect(find.byKey(const Key('donationImagePlaceholder')), findsOneWidget);
   });
 
+  testWidgets('mantiene el ajuste visual predeterminado de DonationCard', (
+    tester,
+  ) async {
+    const image = DonationImage(
+      id: 1,
+      referencia: 'https://images.test/explore.jpg',
+      orden: 1,
+    );
+    await tester.pumpWidget(
+      _app(
+        donationService: _DonationService(
+          (_) async => _page(items: [_donationWith(image: image)]),
+        ),
+        categoryService: _CategoryService(),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      tester.widget<Image>(find.byKey(const Key('donationCardImage'))).fit,
+      BoxFit.cover,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('filtra usando el identificador real de categoría', (
     tester,
   ) async {
@@ -270,19 +295,22 @@ DonationPage _page({
   ),
 );
 
-DonationListItem _donationWith({required int id, required String title}) =>
-    DonationListItem(
-      id: id,
-      titulo: title,
-      ciudad: _donation.ciudad,
-      estado: _donation.estado,
-      createdAt: _donation.createdAt,
-      updatedAt: _donation.updatedAt,
-      categoriaId: _donation.categoriaId,
-      categoriaNombre: _donation.categoriaNombre,
-      imagenPrincipal: null,
-      cantidadImagenes: 0,
-    );
+DonationListItem _donationWith({
+  int id = 8,
+  String title = 'Mesa auxiliar',
+  DonationImage? image,
+}) => DonationListItem(
+  id: id,
+  titulo: title,
+  ciudad: _donation.ciudad,
+  estado: _donation.estado,
+  createdAt: _donation.createdAt,
+  updatedAt: _donation.updatedAt,
+  categoriaId: _donation.categoriaId,
+  categoriaNombre: _donation.categoriaNombre,
+  imagenPrincipal: image,
+  cantidadImagenes: image == null ? 0 : 1,
+);
 
 final _donation = DonationListItem(
   id: 8,

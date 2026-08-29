@@ -133,6 +133,44 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final orientation in ['horizontal', 'vertical', 'cuadrada']) {
+    testWidgets(
+      'DonationCard muestra imagen $orientation completa con contain',
+      (tester) async {
+        final image = MemoryImage(
+          base64Decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+          ),
+        );
+        await tester.pumpWidget(
+          _themedApp(
+            SizedBox(
+              width: 360,
+              child: DonationCard(
+                image: image,
+                imageFit: BoxFit.contain,
+                title: 'Imagen $orientation',
+                category: 'Categoría',
+                location: 'Bogotá',
+                status: 'Publicada',
+              ),
+            ),
+          ),
+        );
+
+        final renderedImage = tester.widget<Image>(
+          find.byKey(const Key('donationCardImage')),
+        );
+        expect(renderedImage.fit, BoxFit.contain);
+        expect(
+          find.byKey(const Key('donationCardImageViewport')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'AppBottomNavigationBar conserva cinco destinos y delega índice',
     (tester) async {

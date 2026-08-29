@@ -263,6 +263,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
                                         'myDonationCard-${donation.id}',
                                       ),
                                       image: _imageFor(donation),
+                                      imageFit: BoxFit.contain,
                                       title: donation.titulo,
                                       category: donation.categoriaNombre,
                                       location: donation.ciudad,

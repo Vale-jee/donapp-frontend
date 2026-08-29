@@ -32,6 +32,32 @@ void main() {
     expect(find.byKey(const Key('myDonationsEmpty')), findsOneWidget);
   });
 
+  testWidgets('configura la imagen completa sin deformarla', (tester) async {
+    await tester.pumpWidget(
+      _app(
+        _FakeService(
+          (_, _, _) async => _page([
+            _item(
+              image: const DonationImage(
+                id: 1,
+                referencia: 'https://images.test/vertical.jpg',
+                orden: 1,
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      tester.widget<Image>(find.byKey(const Key('donationCardImage'))).fit,
+      BoxFit.contain,
+    );
+    expect(find.byKey(const Key('donationCardImageViewport')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('muestra error y permite reintentar', (tester) async {
     var calls = 0;
     final service = _FakeService((_, _, _) async {
@@ -165,7 +191,7 @@ DonationPage _page(List<DonationListItem> items) => DonationPage(
     totalPages: 1,
   ),
 );
-DonationListItem _item() => DonationListItem(
+DonationListItem _item({DonationImage? image}) => DonationListItem(
   id: 7,
   titulo: 'Mesa auxiliar',
   ciudad: 'Bogotá',
@@ -174,6 +200,6 @@ DonationListItem _item() => DonationListItem(
   updatedAt: DateTime.utc(2026, 8, 20),
   categoriaId: 4,
   categoriaNombre: 'Muebles',
-  imagenPrincipal: null,
-  cantidadImagenes: 0,
+  imagenPrincipal: image,
+  cantidadImagenes: image == null ? 0 : 1,
 );
