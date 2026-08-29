@@ -56,6 +56,42 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final caseData in const [
+    (name: 'vertical', reference: 'https://images.test/vertical.jpg'),
+    (name: 'horizontal', reference: 'https://images.test/horizontal.jpg'),
+    (name: 'cuadrada', reference: 'https://images.test/square.jpg'),
+  ]) {
+    testWidgets('imagen ${caseData.name} se muestra completa sin deformarse', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(
+          _DetailService(
+            (_) async => _detail(
+              images: [
+                DonationImage(id: 1, referencia: caseData.reference, orden: 1),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final imageFinder = find.byKey(const ValueKey('donationDetailImage-0'));
+      expect(imageFinder, findsOneWidget);
+      expect(tester.widget<Image>(imageFinder).fit, BoxFit.contain);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('donationImageViewport')),
+          matching: find.byType(AspectRatio),
+        ),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('muestra 404 como no disponible y permite reintentar', (
     tester,
   ) async {

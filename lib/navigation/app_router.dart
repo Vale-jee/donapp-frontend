@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../screens/home_screen.dart';
 import '../screens/explore_donations_screen.dart';
 import '../screens/donation_detail_screen.dart';
+import '../screens/create_donation_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/register_screen.dart';
 import '../screens/session_gate.dart';
@@ -12,6 +13,7 @@ import '../services/auth_service.dart';
 import '../services/auth_state_controller.dart';
 import '../services/category_service.dart';
 import '../services/donation_service.dart';
+import '../services/image_upload_service.dart';
 import '../services/profile_service.dart';
 import '../services/token_storage.dart';
 
@@ -23,6 +25,7 @@ abstract final class AppRoutes {
   static const nestedRegister = '/bienvenida/registro';
   static const home = '/inicio';
   static const explore = '/explorar';
+  static const createDonation = '/donaciones/nueva';
   static const donationDetailPattern = '/donaciones/:id';
 
   static String donationDetailLocation(int id) => '/donaciones/$id';
@@ -72,6 +75,8 @@ GoRouter createAppRouter({
   TokenStorage? tokenStorage,
   DonationService? donationService,
   CategoryService? categoryService,
+  ImageUploadService? imageUploadService,
+  DonationGalleryPicker? galleryPicker,
   String initialLocation = AppRoutes.root,
 }) {
   return GoRouter(
@@ -171,6 +176,15 @@ GoRouter createAppRouter({
         ),
       ),
       GoRoute(
+        path: AppRoutes.createDonation,
+        builder: (context, state) => CreateDonationScreen(
+          donationService: donationService,
+          categoryService: categoryService,
+          imageUploadService: imageUploadService,
+          galleryPicker: galleryPicker,
+        ),
+      ),
+      GoRoute(
         path: AppRoutes.donationDetailPattern,
         builder: (context, state) {
           final id = int.tryParse(state.pathParameters['id'] ?? '');
@@ -212,7 +226,11 @@ bool _isPrivateUri(Uri uri) {
   return id != null && id > 0;
 }
 
-const _privateLocations = {AppRoutes.home, AppRoutes.explore};
+const _privateLocations = {
+  AppRoutes.home,
+  AppRoutes.explore,
+  AppRoutes.createDonation,
+};
 
 class _InvalidDonationRoute extends StatelessWidget {
   const _InvalidDonationRoute();

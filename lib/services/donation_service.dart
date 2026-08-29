@@ -12,6 +12,40 @@ class DonationService {
   final ApiClient _apiClient;
   final TokenStorage _tokenStorage;
 
+  Future<DonationDetail> createDonation({
+    required String title,
+    required String description,
+    required int categoryId,
+    required List<String> imageReferences,
+  }) async {
+    final accessToken = await _accessToken();
+    try {
+      final body = await _apiClient.post(
+        '/api/donaciones',
+        headers: {..._headers(accessToken), 'Content-Type': 'application/json'},
+        body: {
+          'titulo': title,
+          'descripcion': description,
+          'categoriaId': categoryId,
+          'imagenes': imageReferences,
+        },
+        successStatusCodes: const {201},
+        context: ApiRequestContext.protectedSession,
+        allowSafeBackendMessage: true,
+      );
+      final data = body['data'];
+      final donation = data is Map<String, dynamic> ? data['donacion'] : null;
+      if (donation is! Map<String, dynamic>) {
+        throw ApiErrorMapper.unexpectedResponse;
+      }
+      return DonationDetail.fromJson(donation);
+    } on ApiException {
+      rethrow;
+    } on FormatException {
+      throw ApiErrorMapper.unexpectedResponse;
+    }
+  }
+
   Future<DonationDetail> getDonationById(int id) async {
     if (id <= 0) {
       throw const ApiException(

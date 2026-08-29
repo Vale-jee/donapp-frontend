@@ -8,6 +8,7 @@ import 'package:donapp_mobile/navigation/app_router.dart';
 import 'package:donapp_mobile/screens/home_screen.dart';
 import 'package:donapp_mobile/screens/explore_donations_screen.dart';
 import 'package:donapp_mobile/screens/donation_detail_screen.dart';
+import 'package:donapp_mobile/screens/create_donation_screen.dart';
 import 'package:donapp_mobile/screens/login_screen.dart';
 import 'package:donapp_mobile/screens/register_screen.dart';
 import 'package:donapp_mobile/screens/welcome_screen.dart';
@@ -16,12 +17,14 @@ import 'package:donapp_mobile/services/auth_service.dart';
 import 'package:donapp_mobile/services/auth_state_controller.dart';
 import 'package:donapp_mobile/services/category_service.dart';
 import 'package:donapp_mobile/services/donation_service.dart';
+import 'package:donapp_mobile/services/image_upload_service.dart';
 import 'package:donapp_mobile/services/profile_service.dart';
 import 'package:donapp_mobile/services/token_storage.dart';
 import 'package:donapp_mobile/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 void main() {
   testWidgets('/ reconstruye SessionGate sin datos previos', (tester) async {
@@ -206,6 +209,46 @@ void main() {
 
     expect(harness.router.state.uri.path, AppRoutes.explore);
     expect(find.byType(ExploreDonationsScreen), findsOneWidget);
+  });
+
+  testWidgets('/donaciones/nueva es privada y reconstruye Crear', (
+    tester,
+  ) async {
+    final unauthenticated = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.createDonation,
+      _NoSessionCoordinator(),
+    );
+    expect(unauthenticated.router.state.uri.path, AppRoutes.welcome);
+    expect(
+      unauthenticated.router.state.uri.queryParameters['redirect'],
+      AppRoutes.createDonation,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    final authenticated = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.createDonation,
+      _ValidSessionCoordinator(),
+      categoryService: _EmptyCategoryService(),
+      galleryPicker: _EmptyGalleryPicker(),
+    );
+    expect(authenticated.router.state.uri.path, AppRoutes.createDonation);
+    expect(find.byType(CreateDonationScreen), findsOneWidget);
+  });
+
+  testWidgets('Home abre Crear donación', (tester) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.home,
+      _ValidSessionCoordinator(),
+      categoryService: _EmptyCategoryService(),
+      galleryPicker: _EmptyGalleryPicker(),
+    );
+    await tester.tap(find.byKey(const Key('homeDonateAction')));
+    await tester.pumpAndSettle();
+    expect(harness.router.state.uri.path, AppRoutes.createDonation);
+    expect(find.byType(CreateDonationScreen), findsOneWidget);
   });
 
   testWidgets('Explore navega al detalle por id sin transportar objetos', (
@@ -588,6 +631,8 @@ _pumpAuthenticatedRouter(
   TokenStorage? tokenStorage,
   DonationService? donationService,
   CategoryService? categoryService,
+  ImageUploadService? imageUploadService,
+  DonationGalleryPicker? galleryPicker,
 }) async {
   final authState = AuthStateController(sessionCoordinator: coordinator);
   await authState.restore();
@@ -599,6 +644,8 @@ _pumpAuthenticatedRouter(
     tokenStorage: tokenStorage,
     donationService: donationService,
     categoryService: categoryService,
+    imageUploadService: imageUploadService,
+    galleryPicker: galleryPicker,
   );
   addTearDown(router.dispose);
   addTearDown(authState.dispose);
@@ -788,4 +835,11 @@ class _SingleDonationService extends _EmptyDonationService {
 class _EmptyCategoryService extends CategoryService {
   @override
   Future<List<Category>> getCategories() async => const [];
+}
+
+class _EmptyGalleryPicker implements DonationGalleryPicker {
+  @override
+  Future<List<XFile>> pickImages() async => const [];
+  @override
+  Future<List<XFile>> retrieveLostImages() async => const [];
 }

@@ -158,8 +158,14 @@ class _ImageGalleryState extends State<_ImageGallery> {
 
   @override
   Widget build(BuildContext context) {
-    final radius =
-        Theme.of(context).extension<AppRadius>() ?? const AppRadius();
+    final theme = Theme.of(context);
+    final radius = theme.extension<AppRadius>() ?? const AppRadius();
+    final colors =
+        theme.extension<AppColorTokens>() ?? const AppColorTokens.standard();
+    final galleryHeight = (MediaQuery.sizeOf(context).height * 0.55).clamp(
+      280.0,
+      560.0,
+    );
     return Semantics(
       container: true,
       label: widget.images.isEmpty
@@ -167,29 +173,34 @@ class _ImageGalleryState extends State<_ImageGallery> {
           : 'Imágenes de ${widget.title}. Imagen ${_index + 1} de ${widget.images.length}',
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius.featuredCard),
-        child: AspectRatio(
-          aspectRatio: 16 / 9,
-          child: widget.images.isEmpty
-              ? const _DetailImagePlaceholder()
-              : PageView.builder(
-                  key: const Key('donationImageGallery'),
-                  itemCount: widget.images.length,
-                  onPageChanged: (index) => setState(() => _index = index),
-                  itemBuilder: (context, index) {
-                    final uri = ApiConfig.resolveImageReference(
-                      widget.images[index].referencia,
-                    );
-                    if (uri == null) return const _DetailImagePlaceholder();
-                    return Image.network(
-                      uri.toString(),
-                      key: ValueKey('donationDetailImage-$index'),
-                      fit: BoxFit.cover,
-                      excludeFromSemantics: true,
-                      errorBuilder: (_, _, _) =>
-                          const _DetailImagePlaceholder(),
-                    );
-                  },
-                ),
+        child: ColoredBox(
+          key: const Key('donationImageViewport'),
+          color: colors.background,
+          child: SizedBox(
+            height: galleryHeight,
+            width: double.infinity,
+            child: widget.images.isEmpty
+                ? const _DetailImagePlaceholder()
+                : PageView.builder(
+                    key: const Key('donationImageGallery'),
+                    itemCount: widget.images.length,
+                    onPageChanged: (index) => setState(() => _index = index),
+                    itemBuilder: (context, index) {
+                      final uri = ApiConfig.resolveImageReference(
+                        widget.images[index].referencia,
+                      );
+                      if (uri == null) return const _DetailImagePlaceholder();
+                      return Image.network(
+                        uri.toString(),
+                        key: ValueKey('donationDetailImage-$index'),
+                        fit: BoxFit.contain,
+                        excludeFromSemantics: true,
+                        errorBuilder: (_, _, _) =>
+                            const _DetailImagePlaceholder(),
+                      );
+                    },
+                  ),
+          ),
         ),
       ),
     );

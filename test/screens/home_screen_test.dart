@@ -29,7 +29,7 @@ void main() {
     expect(find.text('Gracias por ayudar a tu comunidad.'), findsOneWidget);
   });
 
-  testWidgets('los cuatro accesos permanecen no interactivos', (tester) async {
+  testWidgets('los accesos futuros permanecen no interactivos', (tester) async {
     await tester.pumpWidget(_app(HomeScreen(profile: _profile)));
 
     for (final key in _disabledActionKeys) {
@@ -41,6 +41,19 @@ void main() {
       );
     }
     expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
+  testWidgets('Donar queda interactivo y sin Próximamente', (tester) async {
+    await tester.pumpWidget(_app(HomeScreen(profile: _profile)));
+    final donate = find.byKey(const Key('homeDonateAction'));
+    expect(
+      find.descendant(of: donate, matching: find.byType(InkWell)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: donate, matching: find.text('Próximamente')),
+      findsNothing,
+    );
   });
 
   testWidgets('Explorar queda interactivo y sin Próximamente', (tester) async {
@@ -183,7 +196,6 @@ void main() {
 }
 
 const _disabledActionKeys = [
-  Key('homeDonateAction'),
   Key('homeRequestAction'),
   Key('homeMyDonationsAction'),
 ];

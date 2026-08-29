@@ -160,7 +160,7 @@ class _ActionGrid extends StatelessWidget {
         title: 'Donar',
         description: 'Comparte algo que ya no necesitas.',
         accent: colors.accentCoral,
-        onTap: null,
+        onTap: () => context.go(AppRoutes.createDonation),
       ),
       _HomeAction(
         key: const Key('homeRequestAction'),
