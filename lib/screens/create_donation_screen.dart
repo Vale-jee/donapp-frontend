@@ -159,7 +159,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
       if (!mounted) return;
       widget.onCreated?.call(donation);
       if (widget.onCreated == null && GoRouter.maybeOf(context) != null) {
-        context.go(AppRoutes.donationDetailLocation(donation.id));
+        context.replace(AppRoutes.donationDetailLocation(donation.id));
       }
     } on ApiException catch (error) {
       if (mounted) setState(() => _submitError = error.message);

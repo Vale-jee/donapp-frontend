@@ -160,7 +160,7 @@ class _ActionGrid extends StatelessWidget {
         title: 'Donar',
         description: 'Comparte algo que ya no necesitas.',
         accent: colors.accentCoral,
-        onTap: () => context.go(AppRoutes.createDonation),
+        onTap: () => context.push(AppRoutes.createDonation),
       ),
       _HomeAction(
         key: const Key('homeRequestAction'),
@@ -175,7 +175,7 @@ class _ActionGrid extends StatelessWidget {
         title: 'Explorar',
         description: 'Descubre donaciones disponibles cerca de ti.',
         accent: colors.accentBlue,
-        onTap: () => context.go(AppRoutes.explore),
+        onTap: () => context.push(AppRoutes.explore),
       ),
       _HomeAction(
         key: const Key('homeMyDonationsAction'),

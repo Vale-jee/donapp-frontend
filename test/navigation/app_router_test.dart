@@ -211,6 +211,28 @@ void main() {
     expect(find.byType(ExploreDonationsScreen), findsOneWidget);
   });
 
+  testWidgets('Home -> Explorar conserva Home para Back y muestra flecha', (
+    tester,
+  ) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.home,
+      _ValidSessionCoordinator(),
+      donationService: _EmptyDonationService(),
+      categoryService: _EmptyCategoryService(),
+    );
+
+    await tester.tap(find.byKey(const Key('homeExploreAction')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BackButton), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(harness.router.state.uri.path, AppRoutes.home);
+    expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
   testWidgets('/donaciones/nueva es privada y reconstruye Crear', (
     tester,
   ) async {
@@ -251,6 +273,28 @@ void main() {
     expect(find.byType(CreateDonationScreen), findsOneWidget);
   });
 
+  testWidgets('Home -> Publicar conserva Home para Back y muestra flecha', (
+    tester,
+  ) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.home,
+      _ValidSessionCoordinator(),
+      categoryService: _EmptyCategoryService(),
+      galleryPicker: _EmptyGalleryPicker(),
+    );
+
+    await tester.tap(find.byKey(const Key('homeDonateAction')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BackButton), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    expect(harness.router.state.uri.path, AppRoutes.home);
+    expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
   testWidgets('Explore navega al detalle por id sin transportar objetos', (
     tester,
   ) async {
@@ -268,6 +312,54 @@ void main() {
     expect(harness.router.state.uri.path, '/donaciones/4');
     expect(find.byType(DonationDetailScreen), findsOneWidget);
   });
+
+  testWidgets('Home -> Explorar -> Detalle vuelve primero a Explorar', (
+    tester,
+  ) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.home,
+      _ValidSessionCoordinator(),
+      donationService: _SingleDonationService(),
+      categoryService: _EmptyCategoryService(),
+    );
+
+    await tester.tap(find.byKey(const Key('homeExploreAction')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('donationCard-4')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DonationDetailScreen), findsOneWidget);
+    expect(find.byType(BackButton), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(harness.router.state.uri.path, AppRoutes.explore);
+    expect(find.byType(ExploreDonationsScreen), findsOneWidget);
+    expect(find.byType(BackButton), findsOneWidget);
+  });
+
+  for (final directLocation in [
+    AppRoutes.explore,
+    AppRoutes.createDonation,
+    '/donaciones/4',
+  ]) {
+    testWidgets('$directLocation directo no muestra una flecha falsa', (
+      tester,
+    ) async {
+      await _pumpAuthenticatedRouter(
+        tester,
+        directLocation,
+        _ValidSessionCoordinator(),
+        donationService: _EmptyDonationService(),
+        categoryService: _EmptyCategoryService(),
+        galleryPicker: _EmptyGalleryPicker(),
+      );
+
+      expect(find.byType(BackButton), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('Bienvenida conserva el destino al abrir Login', (tester) async {
     final harness = await _pumpAuthenticatedRouter(
@@ -303,6 +395,22 @@ void main() {
       expect(find.byType(HomeScreen), findsOneWidget);
     });
   }
+
+  testWidgets('autenticado no puede volver a Login con Back', (tester) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.login,
+      _ValidSessionCoordinator(),
+    );
+
+    expect(harness.router.state.uri.path, AppRoutes.home);
+    expect(find.byType(LoginScreen), findsNothing);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LoginScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('restoring muestra carga sin flash de acceso', (tester) async {
     final coordinator = _PendingSessionCoordinator();
@@ -348,6 +456,12 @@ void main() {
     expect(harness.router.state.uri.path, AppRoutes.welcome);
     expect(harness.router.state.uri.queryParameters['redirect'], isNull);
     expect(find.byType(WelcomeScreen), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(HomeScreen), findsNothing);
+    expect(find.byType(WelcomeScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('error recuperable permanece en / sin loop', (tester) async {
