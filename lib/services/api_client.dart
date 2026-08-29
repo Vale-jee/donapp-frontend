@@ -59,6 +59,24 @@ class ApiClient {
     );
   }
 
+  Future<Map<String, dynamic>> patch(
+    String path, {
+    Map<String, String>? headers,
+    Object? body,
+    required Set<int> successStatusCodes,
+    ApiRequestContext context = ApiRequestContext.general,
+    bool allowSafeBackendMessage = false,
+  }) {
+    return _request(
+      path: path,
+      send: (uri) =>
+          _client.patch(uri, headers: headers, body: jsonEncode(body)),
+      successStatusCodes: successStatusCodes,
+      context: context,
+      allowSafeBackendMessage: allowSafeBackendMessage,
+    );
+  }
+
   Future<Map<String, dynamic>> _request({
     required String path,
     Map<String, String>? queryParameters,

@@ -8,6 +8,8 @@ import '../screens/donation_detail_screen.dart';
 import '../screens/create_donation_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/register_screen.dart';
+import '../screens/request_detail_screen.dart';
+import '../screens/requests_screen.dart';
 import '../screens/session_gate.dart';
 import '../screens/welcome_screen.dart';
 import '../services/auth_service.dart';
@@ -16,6 +18,7 @@ import '../services/category_service.dart';
 import '../services/donation_service.dart';
 import '../services/image_upload_service.dart';
 import '../services/profile_service.dart';
+import '../services/request_service.dart';
 import '../services/token_storage.dart';
 
 abstract final class AppRoutes {
@@ -29,8 +32,12 @@ abstract final class AppRoutes {
   static const createDonation = '/donaciones/nueva';
   static const myDonations = '/donaciones/mias';
   static const donationDetailPattern = '/donaciones/:id';
+  static const sentRequests = '/solicitudes/enviadas';
+  static const receivedRequests = '/solicitudes/recibidas';
+  static const requestDetailPattern = '/solicitudes/:id';
 
   static String donationDetailLocation(int id) => '/donaciones/$id';
+  static String requestDetailLocation(int id) => '/solicitudes/$id';
 
   static String rootLocation({String? redirect}) =>
       _location(root, redirect: redirect);
@@ -76,6 +83,7 @@ GoRouter createAppRouter({
   ProfileService? profileService,
   TokenStorage? tokenStorage,
   DonationService? donationService,
+  RequestService? requestService,
   CategoryService? categoryService,
   ImageUploadService? imageUploadService,
   DonationGalleryPicker? galleryPicker,
@@ -192,6 +200,27 @@ GoRouter createAppRouter({
             MyDonationsScreen(donationService: donationService),
       ),
       GoRoute(
+        path: AppRoutes.sentRequests,
+        builder: (context, state) =>
+            SentRequestsScreen(requestService: requestService),
+      ),
+      GoRoute(
+        path: AppRoutes.receivedRequests,
+        builder: (context, state) =>
+            ReceivedRequestsScreen(requestService: requestService),
+      ),
+      GoRoute(
+        path: AppRoutes.requestDetailPattern,
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '');
+          if (id == null || id <= 0) return const _InvalidRequestRoute();
+          return RequestDetailScreen(
+            requestId: id,
+            requestService: requestService,
+          );
+        },
+      ),
+      GoRoute(
         path: AppRoutes.donationDetailPattern,
         builder: (context, state) {
           final id = int.tryParse(state.pathParameters['id'] ?? '');
@@ -199,6 +228,7 @@ GoRouter createAppRouter({
           return DonationDetailScreen(
             donationId: id,
             donationService: donationService,
+            requestService: requestService,
           );
         },
       ),
@@ -230,7 +260,10 @@ bool _isPrivateUri(Uri uri) {
   final id = segments.length == 2 && segments.first == 'donaciones'
       ? int.tryParse(segments.last)
       : null;
-  return id != null && id > 0;
+  final requestId = segments.length == 2 && segments.first == 'solicitudes'
+      ? int.tryParse(segments.last)
+      : null;
+  return (id != null && id > 0) || (requestId != null && requestId > 0);
 }
 
 const _privateLocations = {
@@ -238,7 +271,26 @@ const _privateLocations = {
   AppRoutes.explore,
   AppRoutes.createDonation,
   AppRoutes.myDonations,
+  AppRoutes.sentRequests,
+  AppRoutes.receivedRequests,
 };
+
+class _InvalidRequestRoute extends StatelessWidget {
+  const _InvalidRequestRoute();
+
+  @override
+  Widget build(BuildContext context) => const Scaffold(
+    body: SafeArea(
+      child: Center(
+        child: Text(
+          'La solicitud no es válida.',
+          key: Key('invalidRequestId'),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    ),
+  );
+}
 
 class _InvalidDonationRoute extends StatelessWidget {
   const _InvalidDonationRoute();

@@ -7,10 +7,16 @@ void main() {
 
     expect(detail.id, 4);
     expect(detail.descripcion, 'En buen estado.');
+    expect(detail.puedeSolicitar, isTrue);
     expect(detail.estado, DonationStatus.publicada);
     expect(detail.createdAt, DateTime.parse('2026-08-20T12:00:00.000Z'));
     expect(detail.updatedAt, DateTime.parse('2026-08-21T12:00:00.000Z'));
     expect(detail.imagenes.map((image) => image.orden), [1, 2]);
+  });
+  test('exige puedeSolicitar booleano en el detalle GET', () {
+    final invalid = Map<String, dynamic>.from(_detailJson)
+      ..remove('puedeSolicitar');
+    expect(() => DonationDetail.fromJson(invalid), throwsFormatException);
   });
   test('parsea un listado real con paginación', () {
     final page = DonationPage.fromJson(_pageJson(image: _imageJson));
@@ -41,6 +47,7 @@ const _detailJson = {
   'id': 4,
   'titulo': 'Mesa auxiliar',
   'descripcion': 'En buen estado.',
+  'puedeSolicitar': true,
   'ciudad': 'Bogotá',
   'estado': 'PUBLICADA',
   'createdAt': '2026-08-20T12:00:00.000Z',

@@ -165,9 +165,10 @@ class _ActionGrid extends StatelessWidget {
       _HomeAction(
         key: const Key('homeRequestAction'),
         icon: Icons.handshake_outlined,
-        title: 'Solicitar',
-        description: 'Encuentra apoyo dentro de tu comunidad.',
+        title: 'Solicitudes',
+        description: 'Revisa las solicitudes que enviaste o recibiste.',
         accent: colors.accentYellow,
+        onTap: () => context.push(AppRoutes.sentRequests),
       ),
       _HomeAction(
         key: const Key('homeExploreAction'),

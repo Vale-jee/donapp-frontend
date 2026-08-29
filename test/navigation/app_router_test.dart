@@ -4,6 +4,7 @@ import 'package:donapp_mobile/models/user_profile.dart';
 import 'package:donapp_mobile/models/auth_session.dart';
 import 'package:donapp_mobile/models/category.dart';
 import 'package:donapp_mobile/models/donation.dart';
+import 'package:donapp_mobile/models/request.dart';
 import 'package:donapp_mobile/navigation/app_router.dart';
 import 'package:donapp_mobile/screens/home_screen.dart';
 import 'package:donapp_mobile/screens/my_donations_screen.dart';
@@ -12,6 +13,8 @@ import 'package:donapp_mobile/screens/donation_detail_screen.dart';
 import 'package:donapp_mobile/screens/create_donation_screen.dart';
 import 'package:donapp_mobile/screens/login_screen.dart';
 import 'package:donapp_mobile/screens/register_screen.dart';
+import 'package:donapp_mobile/screens/request_detail_screen.dart';
+import 'package:donapp_mobile/screens/requests_screen.dart';
 import 'package:donapp_mobile/screens/welcome_screen.dart';
 import 'package:donapp_mobile/services/session_coordinator.dart';
 import 'package:donapp_mobile/services/auth_service.dart';
@@ -20,6 +23,7 @@ import 'package:donapp_mobile/services/category_service.dart';
 import 'package:donapp_mobile/services/donation_service.dart';
 import 'package:donapp_mobile/services/image_upload_service.dart';
 import 'package:donapp_mobile/services/profile_service.dart';
+import 'package:donapp_mobile/services/request_service.dart';
 import 'package:donapp_mobile/services/token_storage.dart';
 import 'package:donapp_mobile/theme/app_theme.dart';
 import 'package:flutter/material.dart';
@@ -164,6 +168,56 @@ void main() {
     expect(find.byType(MyDonationsScreen), findsOneWidget);
   });
 
+  testWidgets('rutas de solicitudes son privadas y reconstruibles', (
+    tester,
+  ) async {
+    final unauthenticated = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.sentRequests,
+      _NoSessionCoordinator(),
+    );
+    expect(unauthenticated.router.state.uri.path, AppRoutes.welcome);
+    expect(
+      unauthenticated.router.state.uri.queryParameters['redirect'],
+      AppRoutes.sentRequests,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    final authenticated = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.receivedRequests,
+      _ValidSessionCoordinator(),
+      requestService: _EmptyRequestService(),
+    );
+    expect(authenticated.router.state.uri.path, AppRoutes.receivedRequests);
+    expect(find.byType(ReceivedRequestsScreen), findsOneWidget);
+  });
+
+  testWidgets('/solicitudes/7 reconstruye detalle solo desde id', (
+    tester,
+  ) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      '/solicitudes/7',
+      _ValidSessionCoordinator(),
+      requestService: _EmptyRequestService(),
+    );
+    expect(harness.router.state.uri.path, '/solicitudes/7');
+    expect(find.byType(RequestDetailScreen), findsOneWidget);
+    expect(find.text('Solicitud de prueba'), findsOneWidget);
+  });
+
+  testWidgets('id de solicitud inválido muestra error sin servicio', (
+    tester,
+  ) async {
+    await _pumpAuthenticatedRouter(
+      tester,
+      '/solicitudes/invalida',
+      _ValidSessionCoordinator(),
+    );
+    expect(find.byKey(const Key('invalidRequestId')), findsOneWidget);
+  });
+
   testWidgets('/donaciones/4 reconstruye el detalle solo desde el id', (
     tester,
   ) async {
@@ -277,6 +331,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(harness.router.state.uri.path, AppRoutes.home);
     expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
+  testWidgets('Home -> Solicitudes y Back vuelve a Home', (tester) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.home,
+      _ValidSessionCoordinator(),
+      requestService: _EmptyRequestService(),
+    );
+    await tester.tap(find.byKey(const Key('homeRequestAction')));
+    await tester.pumpAndSettle();
+    expect(harness.router.state.uri.path, AppRoutes.sentRequests);
+    expect(find.byType(SentRequestsScreen), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(harness.router.state.uri.path, AppRoutes.home);
   });
 
   testWidgets('/donaciones/nueva es privada y reconstruye Crear', (
@@ -647,6 +717,18 @@ void main() {
     expect(find.byType(MyDonationsScreen), findsOneWidget);
   });
 
+  testWidgets('login regresa al detalle de solicitud pretendido', (
+    tester,
+  ) async {
+    final harness = await _pumpLogin(
+      tester,
+      AppRoutes.loginLocation(redirect: '/solicitudes/7'),
+    );
+    await _submitLogin(tester);
+    expect(harness.router.state.uri.path, '/solicitudes/7');
+    expect(find.byType(RequestDetailScreen), findsOneWidget);
+  });
+
   for (final invalidRedirect in [
     'https://evil.example/inicio',
     AppRoutes.login,
@@ -727,6 +809,7 @@ Future<({AuthStateController authState, GoRouter router})> _pumpLogin(
     profileService: _SuccessfulProfileService(),
     tokenStorage: _MemoryTokenStorage(),
     donationService: _EmptyDonationService(),
+    requestService: _EmptyRequestService(),
     categoryService: _EmptyCategoryService(),
   );
 }
@@ -802,6 +885,7 @@ _pumpAuthenticatedRouter(
   ProfileService? profileService,
   TokenStorage? tokenStorage,
   DonationService? donationService,
+  RequestService? requestService,
   CategoryService? categoryService,
   ImageUploadService? imageUploadService,
   DonationGalleryPicker? galleryPicker,
@@ -815,6 +899,7 @@ _pumpAuthenticatedRouter(
     profileService: profileService,
     tokenStorage: tokenStorage,
     donationService: donationService,
+    requestService: requestService,
     categoryService: categoryService,
     imageUploadService: imageUploadService,
     galleryPicker: galleryPicker,
@@ -986,6 +1071,63 @@ class _EmptyDonationService extends DonationService {
     categoriaId: 4,
     categoriaNombre: 'Muebles',
     imagenes: const [],
+  );
+}
+
+class _EmptyRequestService extends RequestService {
+  @override
+  Future<RequestPage<SentRequestListItem>> getSentRequests({
+    int page = 1,
+    int limit = 20,
+    RequestStatus? status,
+  }) async => RequestPage(
+    requests: const [],
+    pagination: RequestPagination(
+      page: page,
+      limit: limit,
+      total: 0,
+      totalPages: 0,
+    ),
+  );
+
+  @override
+  Future<RequestPage<ReceivedRequestListItem>> getReceivedRequests({
+    int page = 1,
+    int limit = 20,
+    RequestStatus? status,
+  }) async => RequestPage(
+    requests: const [],
+    pagination: RequestPagination(
+      page: page,
+      limit: limit,
+      total: 0,
+      totalPages: 0,
+    ),
+  );
+
+  @override
+  Future<RequestDetail> getRequestById(int id) async => RequestDetail(
+    id: id,
+    status: RequestStatus.pendiente,
+    cancellationCause: null,
+    acceptedAt: null,
+    rejectedAt: null,
+    cancelledAt: null,
+    createdAt: DateTime.utc(2026, 8, 20),
+    updatedAt: DateTime.utc(2026, 8, 20),
+    donation: const RequestDonationSummary(
+      id: 4,
+      title: 'Solicitud de prueba',
+      status: RequestDonationStatus.publicada,
+      mainImage: null,
+    ),
+    actor: RequestActor.applicant,
+    otherUser: const RequestUserSummary(
+      id: 2,
+      visibleName: 'ana',
+      profilePhoto: null,
+      city: 'Bogotá',
+    ),
   );
 }
 

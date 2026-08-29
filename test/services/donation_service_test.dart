@@ -245,6 +245,7 @@ const _detailBody = {
       'id': 4,
       'titulo': 'Mesa auxiliar',
       'descripcion': 'En buen estado.',
+      'puedeSolicitar': true,
       'ciudad': 'Bogotá',
       'estado': 'PUBLICADA',
       'createdAt': '2026-08-20T12:00:00.000Z',

@@ -56,6 +56,7 @@ class DonationDetail {
     required this.categoriaId,
     required this.categoriaNombre,
     required List<DonationImage> imagenes,
+    this.puedeSolicitar = false,
   }) : imagenes = List.unmodifiable(
          [...imagenes]
            ..sort((first, second) => first.orden.compareTo(second.orden)),
@@ -71,8 +72,18 @@ class DonationDetail {
   final int categoriaId;
   final String categoriaNombre;
   final List<DonationImage> imagenes;
+  final bool puedeSolicitar;
 
-  factory DonationDetail.fromJson(Map<String, dynamic> json) {
+  factory DonationDetail.fromJson(Map<String, dynamic> json) =>
+      DonationDetail._fromJson(json, requireRequestPermission: true);
+
+  factory DonationDetail.fromMutationJson(Map<String, dynamic> json) =>
+      DonationDetail._fromJson(json, requireRequestPermission: false);
+
+  factory DonationDetail._fromJson(
+    Map<String, dynamic> json, {
+    required bool requireRequestPermission,
+  }) {
     final category = json['categoria'];
     final images = json['imagenes'];
     if (category is! Map<String, dynamic> || images is! List) {
@@ -88,6 +99,9 @@ class DonationDetail {
       updatedAt: _date(json, 'updatedAt'),
       categoriaId: _int(category, 'id'),
       categoriaNombre: _string(category, 'nombre'),
+      puedeSolicitar: requireRequestPermission
+          ? _bool(json, 'puedeSolicitar')
+          : false,
       imagenes: images
           .map((image) {
             if (image is! Map<String, dynamic>) {
@@ -100,6 +114,12 @@ class DonationDetail {
           .toList(growable: false),
     );
   }
+}
+
+bool _bool(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is! bool) throw FormatException('$key inválido.');
+  return value;
 }
 
 class DonationListItem {

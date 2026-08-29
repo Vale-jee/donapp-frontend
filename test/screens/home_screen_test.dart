@@ -22,7 +22,7 @@ void main() {
     expect(find.text('Gracias por ser parte del cambio.'), findsOneWidget);
     expect(find.text('¿Qué quieres hacer hoy?'), findsOneWidget);
     expect(find.text('Donar'), findsOneWidget);
-    expect(find.text('Solicitar'), findsOneWidget);
+    expect(find.text('Solicitudes'), findsOneWidget);
     expect(find.text('Explorar'), findsOneWidget);
     expect(find.text('Mis donaciones'), findsOneWidget);
     expect(find.text('Pequeñas acciones, grandes cambios'), findsOneWidget);
@@ -75,6 +75,21 @@ void main() {
   ) async {
     await tester.pumpWidget(_app(HomeScreen(profile: _profile)));
     final action = find.byKey(const Key('homeMyDonationsAction'));
+    expect(
+      find.descendant(of: action, matching: find.byType(InkWell)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: action, matching: find.text('Próximamente')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('Solicitudes queda interactivo y sin Próximamente', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app(HomeScreen(profile: _profile)));
+    final action = find.byKey(const Key('homeRequestAction'));
     expect(
       find.descendant(of: action, matching: find.byType(InkWell)),
       findsOneWidget,
@@ -210,7 +225,7 @@ void main() {
   });
 }
 
-const _disabledActionKeys = [Key('homeRequestAction')];
+const _disabledActionKeys = <Key>[];
 
 Widget _app(Widget home) => MaterialApp(theme: AppTheme.light, home: home);
 

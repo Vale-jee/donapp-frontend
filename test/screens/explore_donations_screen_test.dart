@@ -81,7 +81,7 @@ void main() {
     expect(find.byKey(const Key('donationImagePlaceholder')), findsOneWidget);
   });
 
-  testWidgets('mantiene el ajuste visual predeterminado de DonationCard', (
+  testWidgets('muestra la imagen completa con contain y nunca cover', (
     tester,
   ) async {
     const image = DonationImage(
@@ -101,7 +101,11 @@ void main() {
 
     expect(
       tester.widget<Image>(find.byKey(const Key('donationCardImage'))).fit,
-      BoxFit.cover,
+      BoxFit.contain,
+    );
+    expect(
+      tester.widget<Image>(find.byKey(const Key('donationCardImage'))).fit,
+      isNot(BoxFit.cover),
     );
     expect(tester.takeException(), isNull);
   });

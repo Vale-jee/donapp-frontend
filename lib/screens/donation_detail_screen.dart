@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../config/api_config.dart';
 import '../models/donation.dart';
 import '../services/api_exception.dart';
 import '../services/donation_service.dart';
+import '../services/request_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
@@ -13,11 +15,13 @@ class DonationDetailScreen extends StatefulWidget {
   const DonationDetailScreen({
     required this.donationId,
     this.donationService,
+    this.requestService,
     super.key,
   });
 
   final int donationId;
   final DonationService? donationService;
+  final RequestService? requestService;
 
   @override
   State<DonationDetailScreen> createState() => _DonationDetailScreenState();
@@ -25,13 +29,17 @@ class DonationDetailScreen extends StatefulWidget {
 
 class _DonationDetailScreenState extends State<DonationDetailScreen> {
   late final DonationService _service;
+  late final RequestService _requestService;
   DonationDetail? _donation;
   ApiException? _error;
+  bool _isSubmitting = false;
+  bool _requestCreated = false;
 
   @override
   void initState() {
     super.initState();
     _service = widget.donationService ?? DonationService();
+    _requestService = widget.requestService ?? RequestService();
     _load();
   }
 
@@ -112,13 +120,93 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
         ),
       );
     }
-    return _DonationDetailContent(donation: donation);
+    return _DonationDetailContent(
+      donation: donation,
+      isSubmitting: _isSubmitting,
+      showRequestAction: donation.puedeSolicitar && !_requestCreated,
+      onRequest: _confirmRequest,
+    );
+  }
+
+  Future<void> _confirmRequest() async {
+    final donation = _donation;
+    if (donation == null || _isSubmitting || _requestCreated) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        scrollable: true,
+        title: const Text('Solicitar donación'),
+        content: Text(
+          '¿Quieres enviar una solicitud para “${donation.titulo}”?',
+        ),
+        actionsOverflowAlignment: OverflowBarAlignment.end,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Enviar solicitud'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await _submitRequest();
+  }
+
+  Future<void> _submitRequest() async {
+    if (_isSubmitting || _requestCreated) return;
+    setState(() => _isSubmitting = true);
+    try {
+      await _requestService.createRequest(widget.donationId);
+      if (!mounted) return;
+      setState(() {
+        _requestCreated = true;
+        _isSubmitting = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Solicitud enviada correctamente.'),
+          action: SnackBarAction(
+            label: 'Ver solicitudes',
+            onPressed: () => context.push('/solicitudes/enviadas'),
+          ),
+        ),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      if (error.type == ApiErrorType.conflict ||
+          error.type == ApiErrorType.notFound) {
+        await _load();
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No pudimos enviar la solicitud. Intenta nuevamente.'),
+        ),
+      );
+    }
   }
 }
 
 class _DonationDetailContent extends StatelessWidget {
-  const _DonationDetailContent({required this.donation});
+  const _DonationDetailContent({
+    required this.donation,
+    required this.isSubmitting,
+    required this.showRequestAction,
+    required this.onRequest,
+  });
   final DonationDetail donation;
+  final bool isSubmitting;
+  final bool showRequestAction;
+  final VoidCallback onRequest;
 
   @override
   Widget build(BuildContext context) {
@@ -136,6 +224,28 @@ class _DonationDetailContent extends StatelessWidget {
               _ImageGallery(images: donation.imagenes, title: donation.titulo),
               SizedBox(height: spacing.large),
               _DetailCard(donation: donation),
+              if (showRequestAction) ...[
+                SizedBox(height: spacing.large),
+                Semantics(
+                  button: true,
+                  label: isSubmitting
+                      ? 'Enviando solicitud'
+                      : 'Solicitar donación',
+                  child: FilledButton.icon(
+                    key: const Key('requestDonationButton'),
+                    onPressed: isSubmitting ? null : onRequest,
+                    icon: isSubmitting
+                        ? const SizedBox.square(
+                            dimension: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.volunteer_activism_outlined),
+                    label: Text(
+                      isSubmitting ? 'Enviando solicitud…' : 'Solicitar donación',
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

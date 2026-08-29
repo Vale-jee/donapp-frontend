@@ -38,7 +38,7 @@ class DonationService {
       if (donation is! Map<String, dynamic>) {
         throw ApiErrorMapper.unexpectedResponse;
       }
-      return DonationDetail.fromJson(donation);
+      return DonationDetail.fromMutationJson(donation);
     } on ApiException {
       rethrow;
     } on FormatException {
