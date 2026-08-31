@@ -438,6 +438,184 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Seleccionar imágenes (1/5)'), findsOneWidget);
   });
+
+  testWidgets('mapea varios errores remotos a sus campos con HTTP 422', (
+    tester,
+  ) async {
+    final donation = _DonationService(
+      error: const ApiException(
+        ApiErrorType.validation,
+        'Error remoto de título',
+        statusCode: 422,
+        fieldErrors: [
+          ApiFieldError(field: 'titulo', message: 'Error remoto de título'),
+          ApiFieldError(
+            field: 'descripcion',
+            message: 'Error remoto de descripción',
+          ),
+          ApiFieldError(
+            field: 'categoriaId',
+            message: 'Error remoto de categoría',
+          ),
+          ApiFieldError(field: 'imagenes', message: 'Error remoto de imágenes'),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      _app(picker: _Picker([_image('one.jpg')]), donation: donation),
+    );
+    await tester.pumpAndSettle();
+    await _completeForm(tester);
+    await tester.tap(find.byKey(const Key('publishDonationButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Error remoto de título'), findsOneWidget);
+    expect(find.text('Error remoto de descripción'), findsOneWidget);
+    expect(find.text('Error remoto de categoría'), findsOneWidget);
+    expect(find.text('Error remoto de imágenes'), findsOneWidget);
+    expect(find.byKey(const Key('createDonationError')), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const Key('donationTitleField')),
+      'Título corregido',
+    );
+    await tester.tap(find.byKey(const Key('donationDescriptionField')));
+    await tester.pump();
+    expect(find.text('Error remoto de título'), findsNothing);
+    expect(find.text('Error remoto de descripción'), findsOneWidget);
+    expect(donation.calls, 1);
+
+    await tester.ensureVisible(find.byKey(const Key('donationCategoryField')));
+    await tester.tap(find.byKey(const Key('donationCategoryField')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ropa').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Error remoto de categoría'), findsNothing);
+    expect(find.text('Error remoto de descripción'), findsOneWidget);
+    expect(donation.calls, 1);
+
+    final picker = find.byKey(const Key('pickDonationImagesButton')).first;
+    await tester.ensureVisible(picker);
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+    expect(find.text('Error remoto de imágenes'), findsNothing);
+    expect(find.text('Error remoto de descripción'), findsOneWidget);
+    expect(donation.calls, 1);
+  });
+
+  for (final imageField in ['imagenes', 'imagenes.0']) {
+    testWidgets('$imageField se muestra como error de imágenes', (
+      tester,
+    ) async {
+      final donation = _DonationService(
+        error: ApiException(
+          ApiErrorType.validation,
+          'Referencia inválida',
+          statusCode: 400,
+          fieldErrors: [
+            ApiFieldError(field: imageField, message: 'Referencia inválida'),
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        _app(picker: _Picker([_image('one.jpg')]), donation: donation),
+      );
+      await tester.pumpAndSettle();
+      await _completeForm(tester);
+      await tester.tap(find.byKey(const Key('publishDonationButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('donationImagesError')), findsOneWidget);
+      expect(find.text('Referencia inválida'), findsOneWidget);
+    });
+  }
+
+  testWidgets('mantiene _root y campos desconocidos como error general', (
+    tester,
+  ) async {
+    final donation = _DonationService(
+      error: const ApiException(
+        ApiErrorType.validation,
+        'Datos inválidos',
+        statusCode: 400,
+        fieldErrors: [
+          ApiFieldError(field: '_root', message: 'Error general remoto'),
+          ApiFieldError(field: 'otroCampo', message: 'Campo no reconocido'),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      _app(picker: _Picker([_image('one.jpg')]), donation: donation),
+    );
+    await tester.pumpAndSettle();
+    await _completeForm(tester);
+    await tester.tap(find.byKey(const Key('publishDonationButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('createDonationError')), findsOneWidget);
+    expect(
+      find.text('Error general remoto\nCampo no reconocido'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('mantiene un 409 sin errores de campo como error general', (
+    tester,
+  ) async {
+    final donation = _DonationService(
+      error: const ApiException(
+        ApiErrorType.conflict,
+        'La categoría seleccionada no está activa.',
+        statusCode: 409,
+      ),
+    );
+    await tester.pumpWidget(
+      _app(picker: _Picker([_image('one.jpg')]), donation: donation),
+    );
+    await tester.pumpAndSettle();
+    await _completeForm(tester);
+    await tester.tap(find.byKey(const Key('publishDonationButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('createDonationError')), findsOneWidget);
+    expect(
+      find.text('La categoría seleccionada no está activa.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('la validación local tiene prioridad sobre el error remoto', (
+    tester,
+  ) async {
+    final donation = _DonationService(
+      error: const ApiException(
+        ApiErrorType.validation,
+        'Error remoto de título',
+        statusCode: 400,
+        fieldErrors: [
+          ApiFieldError(field: 'titulo', message: 'Error remoto de título'),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      _app(picker: _Picker([_image('one.jpg')]), donation: donation),
+    );
+    await tester.pumpAndSettle();
+    await _completeForm(tester);
+    await tester.tap(find.byKey(const Key('publishDonationButton')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('donationTitleField')), 'abc');
+    await tester.tap(find.byKey(const Key('donationDescriptionField')));
+    await tester.pump();
+
+    expect(
+      find.text('El título debe tener al menos 5 caracteres.'),
+      findsOneWidget,
+    );
+    expect(find.text('Error remoto de título'), findsNothing);
+    expect(donation.calls, 1);
+  });
 }
 
 Future<void> _validateFormFields(
@@ -542,6 +720,9 @@ class _UploadService extends ImageUploadService {
 }
 
 class _DonationService extends DonationService {
+  _DonationService({this.error});
+
+  ApiException? error;
   int calls = 0;
   List<String>? references;
   @override
@@ -553,6 +734,7 @@ class _DonationService extends DonationService {
   }) async {
     calls++;
     references = imageReferences;
+    if (error case final failure?) throw failure;
     return _detail;
   }
 }
@@ -565,6 +747,7 @@ class _CategoryService extends CategoryService {
   @override
   Future<List<Category>> getCategories() async => [
     Category(id: 4, nombre: name, descripcion: null),
+    const Category(id: 5, nombre: 'Ropa', descripcion: null),
   ];
 }
 

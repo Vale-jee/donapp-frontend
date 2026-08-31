@@ -88,6 +88,45 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
   bool _submitting = false;
   String? _pageError;
   String? _submitError;
+  Map<String, String> _remoteFieldErrors = const {};
+
+  void _clearRemoteFieldError(String field) {
+    if (!_remoteFieldErrors.containsKey(field)) return;
+    setState(() {
+      _remoteFieldErrors = Map.of(_remoteFieldErrors)..remove(field);
+    });
+  }
+
+  void _applyRemoteFieldErrors(ApiException error) {
+    final fieldErrors = <String, String>{};
+    final generalErrors = <String>[];
+
+    for (final fieldError in error.fieldErrors) {
+      final field = switch (fieldError.field) {
+        'titulo' => 'titulo',
+        'descripcion' => 'descripcion',
+        'categoriaId' => 'categoriaId',
+        'imagenes' => 'imagenes',
+        final field when field.startsWith('imagenes.') => 'imagenes',
+        _ => null,
+      };
+      if (field == null) {
+        generalErrors.add(fieldError.message);
+      } else {
+        fieldErrors.putIfAbsent(field, () => fieldError.message);
+      }
+    }
+
+    setState(() {
+      _remoteFieldErrors = fieldErrors;
+      _submitError = generalErrors.isNotEmpty
+          ? generalErrors.toSet().join('\n')
+          : fieldErrors.isEmpty
+          ? error.message
+          : null;
+    });
+    _formKey.currentState?.validate();
+  }
 
   @override
   void initState() {
@@ -156,6 +195,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
         setState(() {
           _images = List.unmodifiable(combined);
           _submitError = null;
+          _remoteFieldErrors = Map.of(_remoteFieldErrors)..remove('imagenes');
         });
       }
     } on ApiException catch (error) {
@@ -171,7 +211,10 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
   }
 
   void _removeImage(int index) {
-    setState(() => _images = [..._images]..removeAt(index));
+    setState(() {
+      _images = [..._images]..removeAt(index);
+      _remoteFieldErrors = Map.of(_remoteFieldErrors)..remove('imagenes');
+    });
   }
 
   Future<void> _submit() async {
@@ -202,7 +245,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
         context.replace(AppRoutes.donationDetailLocation(donation.id));
       }
     } on ApiException catch (error) {
-      if (mounted) setState(() => _submitError = error.message);
+      if (mounted) _applyRemoteFieldErrors(error);
     } catch (_) {
       if (mounted) {
         setState(
@@ -260,6 +303,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                             controller: _titleController,
                             enabled: !_submitting,
                             autovalidateMode: AutovalidateMode.onUnfocus,
+                            onChanged: (_) => _clearRemoteFieldError('titulo'),
                             validator: (value) {
                               final normalized = _normalizeDonationTitle(
                                 value ?? '',
@@ -270,7 +314,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                               if (normalized.length > 100) {
                                 return 'El título no puede superar 100 caracteres.';
                               }
-                              return null;
+                              return _remoteFieldErrors['titulo'];
                             },
                           ),
                           SizedBox(height: spacing.medium),
@@ -281,6 +325,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                             enabled: !_submitting,
                             maxLines: 5,
                             autovalidateMode: AutovalidateMode.onUnfocus,
+                            onChanged: (_) =>
+                                _clearRemoteFieldError('descripcion'),
                             validator: (value) {
                               final normalized = value?.trim() ?? '';
                               if (normalized.length < 20) {
@@ -292,7 +338,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                               if (!_isPlainDonationDescription(normalized)) {
                                 return 'Escribe la descripción como texto simple, sin etiquetas, enlaces ni formatos especiales.';
                               }
-                              return null;
+                              return _remoteFieldErrors['descripcion'];
                             },
                           ),
                           SizedBox(height: spacing.medium),
@@ -326,11 +372,21 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                                 .toList(growable: false),
                             onChanged: _submitting
                                 ? null
-                                : (value) =>
-                                      setState(() => _categoryId = value),
-                            validator: (value) => value == null
-                                ? 'Selecciona una categoría.'
-                                : null,
+                                : (value) {
+                                    setState(() {
+                                      _categoryId = value;
+                                      _remoteFieldErrors = Map.of(
+                                        _remoteFieldErrors,
+                                      )..remove('categoriaId');
+                                    });
+                                    _formKey.currentState?.validate();
+                                  },
+                            validator: (value) {
+                              if (value == null) {
+                                return 'Selecciona una categoría.';
+                              }
+                              return _remoteFieldErrors['categoriaId'];
+                            },
                           ),
                           SizedBox(height: spacing.large),
                           OutlinedButton(
@@ -359,6 +415,17 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                               ),
                             ),
                           ),
+                          if (_remoteFieldErrors['imagenes']
+                              case final error?) ...[
+                            SizedBox(height: spacing.small),
+                            Text(
+                              error,
+                              key: const Key('donationImagesError'),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ],
                           if (_images.isNotEmpty) ...[
                             SizedBox(height: spacing.medium),
                             SizedBox(

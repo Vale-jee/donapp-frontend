@@ -14,6 +14,7 @@ class AppTextField extends StatelessWidget {
     this.maxLines = 1,
     this.enabled = true,
     this.autovalidateMode,
+    this.onChanged,
     super.key,
   });
 
@@ -27,6 +28,7 @@ class AppTextField extends StatelessWidget {
   final int maxLines;
   final bool enabled;
   final AutovalidateMode? autovalidateMode;
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +39,7 @@ class AppTextField extends StatelessWidget {
       controller: controller,
       validator: validator,
       autovalidateMode: autovalidateMode,
+      onChanged: onChanged,
       keyboardType: keyboardType,
       textInputAction: textInputAction,
       maxLines: maxLines,
