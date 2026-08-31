@@ -72,6 +72,12 @@ class SessionCoordinator implements SessionRecovery {
   }
 
   @override
+  Future<Never> invalidateAuthentication(ApiException cause) async {
+    await _invalidateSession(cause);
+    throw cause;
+  }
+
+  @override
   Future<Never> invalidateInactiveAccount(ApiException cause) async {
     await _invalidateSession(cause);
     throw cause;

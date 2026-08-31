@@ -37,6 +37,7 @@ void main() {
 
         expect(result['data'], {'ok': true});
         expect(recovery.calls, ['old-access']);
+        expect(recovery.authenticationInvalidations, 0);
         expect(authorizationHeaders, [
           'Bearer old-access',
           'Bearer new-access',
@@ -71,6 +72,7 @@ void main() {
 
       expect(requestCount, 2);
       expect(recovery.calls, hasLength(1));
+      expect(recovery.authenticationInvalidations, 1);
     });
 
     test('401 de Login no intenta recuperar sesión', () async {
@@ -97,6 +99,7 @@ void main() {
         ApiErrorType.invalidCredentials,
       );
       expect(recovery.calls, isEmpty);
+      expect(recovery.authenticationInvalidations, 0);
     });
 
     test('403 de permisos no invalida la sesión', () async {
@@ -122,6 +125,7 @@ void main() {
         ApiErrorType.forbidden,
       );
       expect(recovery.inactiveInvalidations, 0);
+      expect(recovery.authenticationInvalidations, 0);
       expect(recovery.calls, isEmpty);
     });
 
@@ -265,12 +269,19 @@ void main() {
 
 class _FakeSessionRecovery implements SessionRecovery {
   final calls = <String>[];
+  int authenticationInvalidations = 0;
   int inactiveInvalidations = 0;
 
   @override
   Future<String> recoverAfterUnauthorized(String failedAccessToken) async {
     calls.add(failedAccessToken);
     return 'new-access';
+  }
+
+  @override
+  Future<Never> invalidateAuthentication(ApiException cause) async {
+    authenticationInvalidations++;
+    throw cause;
   }
 
   @override

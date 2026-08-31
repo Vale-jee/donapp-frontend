@@ -18,6 +18,8 @@ import 'package:donapp_mobile/screens/request_detail_screen.dart';
 import 'package:donapp_mobile/screens/requests_screen.dart';
 import 'package:donapp_mobile/screens/welcome_screen.dart';
 import 'package:donapp_mobile/services/session_coordinator.dart';
+import 'package:donapp_mobile/services/api_client.dart';
+import 'package:donapp_mobile/services/api_error_mapper.dart';
 import 'package:donapp_mobile/services/api_exception.dart';
 import 'package:donapp_mobile/services/auth_service.dart';
 import 'package:donapp_mobile/services/auth_state_controller.dart';
@@ -32,6 +34,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   testWidgets('/ reconstruye SessionGate sin datos previos', (tester) async {
@@ -628,6 +632,70 @@ void main() {
     expect(router.state.uri.path, '/donaciones/4');
   });
 
+  testWidgets('segundo 401 sale de ruta privada y conserva redirect', (
+    tester,
+  ) async {
+    final storage = _ExpiringTokenStorage();
+    final coordinator = SessionCoordinator(
+      tokenStorage: storage,
+      authService: _SuccessfulRefreshAuthService(),
+      profileService: _SuccessfulProfileService(),
+    );
+    final authState = AuthStateController(sessionCoordinator: coordinator);
+    await authState.restore();
+    final router = createAppRouter(
+      authState: authState,
+      initialLocation: '/donaciones/4',
+      authService: _SuccessfulLoginService(),
+      profileService: _SuccessfulProfileService(),
+      tokenStorage: storage,
+      donationService: _EmptyDonationService(),
+      requestService: _EmptyRequestService(),
+    );
+    addTearDown(router.dispose);
+    addTearDown(authState.dispose);
+    await tester.pumpWidget(
+      MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+    );
+    await tester.pumpAndSettle();
+
+    var requestCount = 0;
+    final client = ApiClient(
+      client: MockClient((_) async {
+        requestCount++;
+        return http.Response(
+          '{"success":false,"message":"Access token inválido."}',
+          401,
+        );
+      }),
+      endpointBuilder: (path) => Uri.parse('https://example.test$path'),
+      sessionRecovery: coordinator,
+    );
+    await expectLater(
+      client.get(
+        '/protegido',
+        headers: const {'Authorization': 'Bearer old-access'},
+        successStatusCodes: const {200},
+        context: ApiRequestContext.protectedSession,
+      ),
+      throwsA(isA<ApiException>()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(requestCount, 2);
+    expect(storage.accessToken, isNull);
+    expect(storage.refreshToken, isNull);
+    expect(authState.status, AuthStatus.unauthenticated);
+    expect(authState.profile, isNull);
+    expect(router.state.uri.path, AppRoutes.welcome);
+    expect(router.state.uri.queryParameters['redirect'], '/donaciones/4');
+
+    await tester.tap(find.byKey(const Key('welcomeLoginButton')));
+    await tester.pumpAndSettle();
+    await _submitLogin(tester);
+    expect(router.state.uri.path, '/donaciones/4');
+  });
+
   testWidgets('error recuperable permanece en / sin loop', (tester) async {
     final coordinator = _RecoverableSessionCoordinator();
     final authState = AuthStateController(sessionCoordinator: coordinator);
@@ -1109,6 +1177,17 @@ class _RejectingRefreshAuthService extends AuthService {
       statusCode: 401,
     );
   }
+}
+
+class _SuccessfulRefreshAuthService extends AuthService {
+  @override
+  Future<RefreshedTokens> refresh(String refreshToken) async =>
+      const RefreshedTokens(
+        accessToken: 'new-access',
+        refreshToken: 'new-refresh',
+        accessTokenExpiresIn: 900,
+        refreshTokenExpiresIn: 604800,
+      );
 }
 
 class _EmptyDonationService extends DonationService {

@@ -11,6 +11,7 @@ typedef ApiEndpointBuilder = Uri Function(String path);
 
 abstract interface class SessionRecovery {
   Future<String> recoverAfterUnauthorized(String failedAccessToken);
+  Future<Never> invalidateAuthentication(ApiException cause);
   Future<Never> invalidateInactiveAccount(ApiException cause);
 }
 
@@ -109,6 +110,7 @@ class ApiClient {
       var response = await send(uri, headers).timeout(_timeout);
       var body = _decode(response.body);
       final sessionRecovery = _sessionRecovery;
+      var retriedAfterUnauthorized = false;
 
       if (response.statusCode == 401 &&
           context == ApiRequestContext.protectedSession &&
@@ -122,6 +124,7 @@ class ApiClient {
             ..['Authorization'] = 'Bearer $accessToken';
           response = await send(uri, retryHeaders).timeout(_timeout);
           body = _decode(response.body);
+          retriedAfterUnauthorized = true;
         }
       }
 
@@ -132,6 +135,11 @@ class ApiClient {
           context: context,
           allowSafeBackendMessage: allowSafeBackendMessage,
         );
+        if (retriedAfterUnauthorized &&
+            error.type == ApiErrorType.authentication &&
+            sessionRecovery != null) {
+          return await sessionRecovery.invalidateAuthentication(error);
+        }
         if (context == ApiRequestContext.protectedSession &&
             error.type == ApiErrorType.inactiveAccount &&
             sessionRecovery != null) {

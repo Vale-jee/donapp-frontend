@@ -133,6 +133,25 @@ void main() {
       expect(storage.refreshToken, isNull);
       expect(invalidations, 1);
     });
+
+    test('segundo 401 limpia tokens e invalida AuthStateController', () async {
+      final storage = _completeStorage();
+      final coordinator = _coordinator(storage: storage);
+      final authState = AuthStateController(sessionCoordinator: coordinator);
+      addTearDown(authState.dispose);
+      await authState.restore();
+      expect(authState.status, AuthStatus.authenticated);
+
+      await expectLater(
+        coordinator.invalidateAuthentication(_authentication),
+        throwsA(isA<ApiException>()),
+      );
+
+      expect(storage.accessToken, isNull);
+      expect(storage.refreshToken, isNull);
+      expect(authState.status, AuthStatus.unauthenticated);
+      expect(authState.profile, isNull);
+    });
   });
 
   group('SessionCoordinator.restoreSession', () {
