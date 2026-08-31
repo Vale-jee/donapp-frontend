@@ -256,6 +256,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                             label: 'Título',
                             controller: _titleController,
                             enabled: !_submitting,
+                            autovalidateMode: AutovalidateMode.onUnfocus,
                             validator: (value) {
                               final normalized = _normalizeDonationTitle(
                                 value ?? '',
@@ -276,6 +277,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                             controller: _descriptionController,
                             enabled: !_submitting,
                             maxLines: 5,
+                            autovalidateMode: AutovalidateMode.onUnfocus,
                             validator: (value) {
                               final normalized = value?.trim() ?? '';
                               if (normalized.length < 20) {
@@ -296,6 +298,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                             initialValue: _categoryId,
                             isExpanded: true,
                             itemHeight: null,
+                            autovalidateMode: AutovalidateMode.onUnfocus,
                             decoration: const InputDecoration(
                               labelText: 'Categoría',
                             ),

@@ -13,6 +13,7 @@ class AppTextField extends StatelessWidget {
     this.hintText,
     this.maxLines = 1,
     this.enabled = true,
+    this.autovalidateMode,
     super.key,
   });
 
@@ -25,6 +26,7 @@ class AppTextField extends StatelessWidget {
   final String? hintText;
   final int maxLines;
   final bool enabled;
+  final AutovalidateMode? autovalidateMode;
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +36,7 @@ class AppTextField extends StatelessWidget {
     return TextFormField(
       controller: controller,
       validator: validator,
+      autovalidateMode: autovalidateMode,
       keyboardType: keyboardType,
       textInputAction: textInputAction,
       maxLines: maxLines,

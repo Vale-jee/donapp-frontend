@@ -34,11 +34,7 @@ void main() {
       value: 'abcde',
       error: null,
     ),
-    (
-      name: 'acepta exactamente 100 caracteres',
-      value: 'a' * 100,
-      error: null,
-    ),
+    (name: 'acepta exactamente 100 caracteres', value: 'a' * 100, error: null),
     (
       name: 'rechaza 101 caracteres',
       value: 'a' * 101,
@@ -134,6 +130,144 @@ void main() {
       }
     });
   }
+
+  testWidgets('no muestra errores al construir el formulario', (tester) async {
+    await tester.pumpWidget(_app(picker: _Picker(const [])));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Escribe al menos 5 caracteres.'), findsNothing);
+    expect(find.text('Escribe al menos 20 caracteres.'), findsNothing);
+    expect(find.text('Selecciona una categoría.'), findsNothing);
+    expect(find.text('Selecciona al menos una imagen.'), findsNothing);
+  });
+
+  testWidgets(
+    'título inválido aparece al perder foco y desaparece al corregir',
+    (tester) async {
+      await tester.pumpWidget(_app(picker: _Picker(const [])));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('donationTitleField')));
+      await tester.enterText(
+        find.byKey(const Key('donationTitleField')),
+        'a    b',
+      );
+      await tester.tap(find.byKey(const Key('donationDescriptionField')));
+      await tester.pump();
+      expect(find.text('Escribe al menos 5 caracteres.'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const Key('donationTitleField')),
+        'Mesa válida',
+      );
+      await tester.tap(find.byKey(const Key('donationDescriptionField')));
+      await tester.pump();
+      expect(find.text('Escribe al menos 5 caracteres.'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'descripción inválida aparece al perder foco y desaparece al corregir',
+    (tester) async {
+      await tester.pumpWidget(_app(picker: _Picker(const [])));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('donationDescriptionField')));
+      await tester.enterText(
+        find.byKey(const Key('donationDescriptionField')),
+        'Muy corta',
+      );
+      await tester.tap(find.byKey(const Key('donationTitleField')));
+      await tester.pump();
+      expect(find.text('Escribe al menos 20 caracteres.'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const Key('donationDescriptionField')),
+        validDescription,
+      );
+      await tester.tap(find.byKey(const Key('donationTitleField')));
+      await tester.pump();
+      expect(find.text('Escribe al menos 20 caracteres.'), findsNothing);
+    },
+  );
+
+  testWidgets('categoría usa onUnfocus y submit acepta una selección válida', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app(picker: _Picker(const [])));
+    await tester.pumpAndSettle();
+
+    final category = tester.widget<DropdownButtonFormField<int>>(
+      find.byKey(const Key('donationCategoryField')),
+    );
+    expect(category.autovalidateMode, AutovalidateMode.onUnfocus);
+
+    await tester.ensureVisible(find.byKey(const Key('publishDonationButton')));
+    await tester.tap(find.byKey(const Key('publishDonationButton')));
+    await tester.pump();
+    expect(find.text('Selecciona una categoría.'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('donationCategoryField')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Muebles').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('publishDonationButton')));
+    await tester.tap(find.byKey(const Key('publishDonationButton')));
+    await tester.pump();
+    expect(find.text('Selecciona una categoría.'), findsNothing);
+  });
+
+  testWidgets('submit inválido revalida y no inicia peticiones remotas', (
+    tester,
+  ) async {
+    final upload = _UploadService();
+    final donation = _DonationService();
+    await tester.pumpWidget(
+      _app(picker: _Picker(const []), upload: upload, donation: donation),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('publishDonationButton')));
+    await tester.tap(find.byKey(const Key('publishDonationButton')));
+    await tester.pump();
+
+    expect(find.text('Escribe al menos 5 caracteres.'), findsOneWidget);
+    expect(find.text('Escribe al menos 20 caracteres.'), findsOneWidget);
+    expect(find.text('Selecciona una categoría.'), findsOneWidget);
+    expect(upload.calls, 0);
+    expect(donation.calls, 0);
+  });
+
+  testWidgets('campos válidos sin imágenes conservan el error manual', (
+    tester,
+  ) async {
+    final upload = _UploadService();
+    final donation = _DonationService();
+    await tester.pumpWidget(
+      _app(picker: _Picker(const []), upload: upload, donation: donation),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('donationTitleField')),
+      validTitle,
+    );
+    await tester.enterText(
+      find.byKey(const Key('donationDescriptionField')),
+      validDescription,
+    );
+    await tester.tap(find.byKey(const Key('donationCategoryField')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Muebles').last);
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('publishDonationButton')));
+    await tester.tap(find.byKey(const Key('publishDonationButton')));
+    await tester.pump();
+
+    expect(find.text('Selecciona al menos una imagen.'), findsOneWidget);
+    expect(upload.calls, 0);
+    expect(donation.calls, 0);
+  });
 
   for (final scale in [1.0, 2.0]) {
     testWidgets('categoría no desborda a 240 px con texto $scale×', (
