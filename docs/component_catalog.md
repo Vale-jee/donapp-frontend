@@ -6,7 +6,7 @@ Este documento describe la interfaz pública de los componentes presentacionales
 
 **Propósito:** unifica la presentación básica de un campo de formulario con etiqueta, ayuda opcional, icono inicial y validación.
 
-**Reutilización:** está disponible para formularios que necesiten campos de texto consistentes. Actualmente cuenta con pruebas de componente y se prevé usarlo al consolidar los formularios de la aplicación.
+**Reutilización:** está disponible para formularios que necesiten campos de texto consistentes. Cuenta con pruebas de componente y se utiliza en el formulario de creación de donaciones.
 
 ### Interfaz pública
 
@@ -21,6 +21,8 @@ Este documento describe la interfaz pública de los componentes presentacionales
 | `hintText` | `String?` | No | `null` | Texto de ayuda dentro del campo. |
 | `maxLines` | `int` | No | `1` | Número máximo de líneas. |
 | `enabled` | `bool` | No | `true` | Habilita o deshabilita la edición. |
+| `autovalidateMode` | `AutovalidateMode?` | No | `null` | Controla cuándo Flutter ejecuta automáticamente el validador. |
+| `onChanged` | `ValueChanged<String>?` | No | `null` | Notifica cada cambio del texto al consumidor. |
 | `key` | `Key?` | No | `null` | Identidad del widget en el árbol. |
 
 **Contenido delegado:** la etiqueta, la ayuda, el icono y los mensajes producidos por `validator` provienen del consumidor.
@@ -31,7 +33,7 @@ Este documento describe la interfaz pública de los componentes presentacionales
 
 **Accesibilidad:** conserva la semántica nativa de `TextFormField`; la etiqueta identifica el control y los errores del validador se integran en el campo.
 
-**Restricciones:** no administra ni libera el `TextEditingController`, no define `obscureText` ni callbacks de cambio y no agrega borde de forma explícita.
+**Restricciones:** no administra ni libera el `TextEditingController`, no define `obscureText` y no agrega borde de forma explícita.
 
 ```dart
 AppTextField(
@@ -49,7 +51,7 @@ AppTextField(
 
 **Propósito:** presenta la acción principal a ancho completo, con opción de icono y estado de carga.
 
-**Reutilización:** se usa en `WelcomeScreen`, `LoginScreen` y `RegisterScreen`; también es apropiado para otras acciones principales.
+**Reutilización:** se usa en `WelcomeScreen`, `LoginScreen`, `RegisterScreen` y `CreateDonationScreen`; también es apropiado para otras acciones principales.
 
 ### Interfaz pública
 
@@ -88,7 +90,7 @@ AppPrimaryButton(
 
 **Propósito:** representa de forma consistente estados de carga, contenido vacío o error, con mensaje y acción opcionales.
 
-**Reutilización:** se usa en `SessionGate` para carga y errores de sesión; se prevé reutilizarlo en pantallas que carguen colecciones o contenido asíncrono.
+**Reutilización:** se usa en `SessionGate`, `CreateDonationScreen`, `ExploreDonationsScreen`, `MyDonationsScreen`, `DonationDetailScreen`, las listas de solicitudes enviadas y recibidas, y `RequestDetailScreen`.
 
 ### Interfaz pública
 
@@ -130,18 +132,19 @@ AppContentState(
 
 **Propósito:** presenta el resumen seleccionable de una donación con imagen, título, categoría, ubicación, estado y subtítulo opcional.
 
-**Reutilización:** cuenta con pruebas de componente y se prevé usar en listados o resultados de donaciones.
+**Reutilización:** cuenta con pruebas de componente y se utiliza en Explorar y Mis donaciones.
 
 ### Interfaz pública
 
 | Parámetro | Tipo | Obligatorio | Valor por defecto | Descripción |
 |---|---|---:|---|---|
-| `image` | `ImageProvider<Object>` | Sí | — | Proveedor de la imagen principal. |
+| `image` | `ImageProvider<Object>?` | Sí | — | Proveedor de la imagen principal; `null` muestra el placeholder. |
 | `title` | `String` | Sí | — | Título de la donación. |
 | `category` | `String` | Sí | — | Categoría mostrada en los metadatos. |
 | `location` | `String` | Sí | — | Ubicación mostrada en los metadatos. |
 | `status` | `String` | Sí | — | Estado mostrado como etiqueta visual. |
-| `onTap` | `VoidCallback` | Sí | — | Callback ejecutado al pulsar la tarjeta. |
+| `imageFit` | `BoxFit` | No | `BoxFit.cover` | Define cómo se ajusta la imagen dentro del espacio 16:9. |
+| `onTap` | `VoidCallback?` | No | `null` | Callback ejecutado al pulsar la tarjeta; si es `null`, la tarjeta queda deshabilitada. |
 | `subtitle` | `String?` | No | `null` | Descripción secundaria opcional. |
 | `key` | `Key?` | No | `null` | Identidad del widget en el árbol. |
 
@@ -149,13 +152,13 @@ AppContentState(
 
 **Contenido delegado:** imagen y todos los textos proceden del consumidor.
 
-**Estados o variantes:** con o sin subtítulo. La imagen siempre ocupa una relación visual 16:9 y usa `BoxFit.cover`.
+**Estados o variantes:** con o sin imagen, subtítulo y acción. La imagen ocupa una relación visual 16:9 y respeta el `imageFit` proporcionado.
 
 **Tokens y tema:** usa `AppSpacing.small` y `medium`, `AppRadius.card`, `AppRadius.field` y `AppColorTokens.textSecondary`, todos con sus fallbacks estándar. También consume tipografía y colores del tema Material.
 
 **Accesibilidad:** expone toda la tarjeta como botón con una etiqueta compuesta por título, categoría, ubicación y estado. Excluye la semántica interna y la imagen decorativa para evitar anuncios duplicados.
 
-**Restricciones:** no incluye el subtítulo en la etiqueta semántica; recorta la imagen para cubrir 16:9; no interpreta ni valida el texto del estado y no realiza ninguna acción adicional a `onTap`.
+**Restricciones:** no incluye el subtítulo en la etiqueta semántica, no interpreta ni valida el texto del estado y no realiza ninguna acción adicional a `onTap`.
 
 ```dart
 DonationCard(
@@ -173,7 +176,7 @@ DonationCard(
 
 **Propósito:** ofrece la barra inferior común con cinco destinos fijos: Inicio, Explorar, Donar, Mensajes y Perfil.
 
-**Reutilización:** cuenta con pruebas de componente y se prevé usar como navegación inferior de las pantallas principales que compartan estos cinco destinos.
+**Reutilización:** cuenta con pruebas de componente y está disponible, pero todavía no está integrada como navegación principal de la aplicación.
 
 ### Interfaz pública
 

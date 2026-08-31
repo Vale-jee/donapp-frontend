@@ -1,345 +1,131 @@
 # DonApp
 
-## Descripción
+DonApp es una aplicación móvil que conecta a personas que desean donar artículos en buen estado con personas interesadas en recibirlos. Este repositorio contiene el cliente Flutter; la API REST se ejecuta y configura por separado.
 
-DonApp es una aplicación móvil orientada a facilitar la donación de artículos y recursos entre personas.
+## Tecnologías principales
 
-Busca conectar a personas que tienen ropa, alimentos, útiles escolares y otros artículos en buen estado que ya no utilizan con personas que los necesitan.
-
-El frontend móvil y el backend de DonApp se mantienen en repositorios independientes. Este repositorio contiene únicamente el cliente Flutter; el backend debe configurarse y ejecutarse por separado.
-
-## Público objetivo
-
-DonApp está dirigida principalmente a personas mayores de 18 años que desean donar o solicitar artículos.
-
-También puede beneficiar a familias, estudiantes y comunidades con acceso a un teléfono móvil e Internet.
-
-## Plataforma y tecnologías
-
-- Android como plataforma inicial.
-- Flutter.
-- Dart, con restricción de SDK `^3.13.0` declarada en `pubspec.yaml`.
+- Flutter y Dart.
 - Material 3.
-- `package:http` `^1.6.0` para consumir la API REST.
-- `flutter_secure_storage` `^9.2.4` para almacenar los tokens.
+- API REST de DonApp mediante `package:http`.
+- Autenticación JWT con access token y refresh token.
+- Almacenamiento seguro mediante `flutter_secure_storage`.
+- Navegación declarativa con GoRouter.
+- Selección de imágenes y subida HTTPS mediante un flujo firmado hacia Cloudinary.
 
-El proyecto no fija una versión concreta de Flutter; debe utilizarse una instalación compatible con la restricción de Dart del proyecto.
+## Funcionalidades implementadas
 
-## Estado actual
+- Registro e inicio de sesión.
+- Restauración automática de sesión y recuperación del perfil autenticado.
+- Almacenamiento seguro de access token y refresh token.
+- Renovación y rotación automática de tokens.
+- Rutas públicas y privadas, con regreso al destino solicitado después del Login.
+- Manejo diferenciado de 401, 403 por permisos y cuenta inactiva.
+- Inicio con información real del usuario.
+- Exploración paginada de donaciones y filtro por categoría.
+- Detalle de donación.
+- Publicación completa con categorías obtenidas del backend.
+- Selección, validación y subida segura de imágenes.
+- Consulta de donaciones propias.
+- Solicitudes enviadas y recibidas, detalle y creación de solicitudes.
+- Aceptación, rechazo y cancelación de solicitudes.
+- Validación de formularios al perder foco y nuevamente al enviar.
+- Presentación de errores locales y remotos debajo del campo correspondiente.
+- Conservación del contenido del formulario durante navegación temporal con `push`.
+- Componentes reutilizables para carga, contenido vacío, error y reintento.
 
-Actualmente el frontend implementa:
+## Sesión y navegación
 
-- Registro de usuario desde la aplicación.
-- Inicio de sesión.
-- Almacenamiento seguro de `accessToken` y `refreshToken`.
-- Verificación de autenticación mediante el endpoint de perfil protegido.
-- Home inicial con información real del usuario.
-- Configuración de la API mediante `API_BASE_URL`.
-- Conexión desde un dispositivo Android físico mediante ADB reverse.
-- Manejo de errores de validación, red, timeout y autenticación.
-- Prueba técnica de categorías conservada en el código para evolución posterior.
+El inicio normal de la aplicación sigue este flujo:
 
-Todavía están pendientes en el cliente:
+```text
+Inicio de app
+  → restaurar sesión
+  → consultar perfil
+  → renovar tokens si es necesario
+  → abrir Inicio o el destino privado solicitado
+```
 
-- Publicación completa de donaciones.
-- Búsqueda completa.
-- Solicitudes.
+Una sesión inválida elimina los tokens y el perfil en memoria. El router abandona las rutas privadas y conserva el destino para regresar después de un nuevo Login.
+
+El recorrido funcional principal es:
+
+```text
+Login
+  → Inicio
+  → Explorar
+  → Detalle
+  → Inicio
+  → Donar
+  → Publicar
+  → Detalle de la nueva donación
+```
+
+La descripción de cada paso, sus endpoints y las capturas sugeridas se encuentra en [Flujo funcional de DonApp](docs/functional_flow.md).
+
+## Funcionalidades futuras
+
+- Búsqueda textual completa.
 - Chat.
 - Calificaciones.
 - Recuperación de contraseña.
-- Renovación automática del refresh token.
 
-## Requisitos
+## Requisitos y ejecución
 
-Para preparar y ejecutar la aplicación se necesita:
+Se necesita Flutter compatible con la restricción de Dart declarada en `pubspec.yaml`, Android SDK, un dispositivo o emulador y el backend de DonApp en ejecución.
 
-- Flutter instalado.
-- Dart, incluido normalmente con Flutter.
-- Android SDK.
-- Un dispositivo Android reconocido por Flutter.
-- Depuración USB habilitada si se utiliza un dispositivo físico.
-- Conexión USB para el procedimiento con ADB reverse documentado aquí.
-- Backend de DonApp configurado y ejecutándose por separado.
-- PostgreSQL disponible y configurado para el backend.
-
-Redis y BullMQ no son necesarios para probar registro, inicio de sesión y consulta del perfil.
-
-## Verificación del entorno
-
-Ejecute los siguientes comandos antes de instalar o iniciar la aplicación:
-
-```powershell
-flutter --version
-dart --version
-flutter channel
-flutter doctor -v
-flutter devices
-```
-
-- `flutter --version`: muestra la versión instalada de Flutter y el Dart incluido.
-- `dart --version`: confirma que el ejecutable de Dart está disponible.
-- `flutter channel`: muestra el canal de Flutter actualmente seleccionado.
-- `flutter doctor -v`: revisa Flutter, Android SDK, licencias, toolchains y dispositivos con información detallada.
-- `flutter devices`: enumera los destinos en los que Flutter puede ejecutar la aplicación.
-
-Resuelva los problemas relevantes mostrados por `flutter doctor -v` antes de continuar.
-
-## Instalación
-
-Descargue el frontend y abra una terminal en la raíz de `donapp-frontend`. Instale las dependencias:
+Instale las dependencias y verifique el proyecto:
 
 ```powershell
 flutter pub get
-```
-
-Compruebe el código y las pruebas:
-
-```powershell
 flutter analyze
 flutter test
 ```
 
-## Preparar el backend
+La URL del backend se proporciona mediante `API_BASE_URL`, sin agregar `/api` al final:
 
-Abra otra terminal en la raíz del repositorio independiente del backend DonApp. Instale sus dependencias y ejecútelo:
+```powershell
+flutter run --dart-define=API_BASE_URL=http://localhost:3000
+```
+
+Para usar un dispositivo Android físico conectado por USB con el backend local:
+
+```powershell
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" reverse tcp:3000 tcp:3000
+flutter run --dart-define=API_BASE_URL=http://localhost:3000
+```
+
+La configuración Android permite HTTP únicamente para `localhost` durante el desarrollo; no habilita tráfico sin cifrar de forma global.
+
+## Estructura del frontend
+
+```text
+lib/
+├── config/       # Configuración y construcción de URL de la API
+├── models/       # Autenticación, perfil, donaciones y solicitudes
+├── navigation/   # Rutas públicas, privadas y redirecciones
+├── screens/      # Pantallas y flujos de usuario
+├── services/     # API, sesión, almacenamiento, imágenes y entidades
+├── widgets/      # Componentes presentacionales reutilizables
+└── main.dart     # Inicialización de estado de sesión y router
+
+docs/
+├── component_catalog.md
+└── functional_flow.md
+```
+
+Consulte también el [catálogo de componentes](docs/component_catalog.md).
+
+## Registro y Login
+
+El registro consume `POST /api/auth/register` y vuelve al Login con el correo prellenado. El Login consume `POST /api/auth/login`, guarda ambos tokens, consulta `GET /api/usuarios/perfil` y actualiza el estado global de autenticación. La contraseña nunca se almacena.
+
+## Configuración del backend
+
+El backend utiliza su propio entorno, PostgreSQL y configuración de servicios. Desde su repositorio independiente puede iniciarse con:
 
 ```powershell
 yarn install
 yarn dev
 ```
 
-El backend utiliza su propio archivo `.env` y su propia conexión con PostgreSQL. Esa configuración no se define en el frontend.
-
-El procedimiento documentado supone que el backend queda disponible en el puerto `3000` de la computadora.
-
-## Configuración de API_BASE_URL
-
-El frontend obtiene la URL del backend mediante:
-
-```dart
-String.fromEnvironment('API_BASE_URL')
-```
-
-Por eso la URL se proporciona al compilar o ejecutar la aplicación usando `--dart-define`.
-
-Para la conexión comprobada con un dispositivo físico y ADB reverse se utiliza:
-
-```text
-http://localhost:3000
-```
-
-No agregue `/api` al final. Los servicios del frontend incorporan las rutas completas de cada endpoint.
-
-## Conectar un dispositivo Android físico
-
-Conecte el dispositivo mediante USB, acepte la autorización de depuración y confirme que Flutter lo detecta:
-
-```powershell
-flutter devices
-```
-
-En Windows, confirme también que ADB reconoce el dispositivo:
-
-```powershell
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" devices
-```
-
-El dispositivo debe aparecer con estado `device`. Si aparece como `unauthorized`, revise la pantalla del teléfono y acepte la autorización USB.
-
-Configure la redirección del puerto `3000`:
-
-```powershell
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" reverse tcp:3000 tcp:3000
-```
-
-Compruebe la configuración:
-
-```powershell
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" reverse --list
-```
-
-Debe aparecer una redirección equivalente a:
-
-```text
-tcp:3000 tcp:3000
-```
-
-ADB reverse permite que `localhost:3000` utilizado por la aplicación en el teléfono llegue al puerto `3000` de la computadora a través de USB.
-
-## Ejecutar el frontend
-
-Antes de ejecutar la aplicación confirme que:
-
-- El backend está en ejecución.
-- PostgreSQL está disponible para el backend.
-- El dispositivo está conectado y reconocido.
-- ADB reverse está configurado para el puerto `3000`.
-
-Desde la raíz de `donapp-frontend`, ejecute:
-
-```powershell
-flutter run --dart-define=API_BASE_URL=http://localhost:3000
-```
-
-## Registro de usuario
-
-El registro se realiza completamente desde la aplicación:
-
-```text
-DonApp
-  → Regístrate
-  → completar formulario
-  → POST /api/auth/register
-  → cuenta creada
-  → volver al Login
-```
-
-El formulario actual solicita:
-
-- Nombre completo.
-- Nombre de usuario.
-- Correo electrónico.
-- Ciudad.
-- Contraseña.
-- Confirmar contraseña.
-
-`Confirmar contraseña` es una validación exclusiva del frontend y no se envía al backend. La contraseña no se almacena. Después del registro, el backend crea una cuenta activa con rol `USUARIO` y la aplicación vuelve al Login con únicamente el correo prellenado.
-
-No es necesario utilizar Postman para registrar usuarios.
-
-## Inicio de sesión
-
-El flujo de autenticación es:
-
-```text
-Correo + contraseña
-  → POST /api/auth/login
-  → accessToken + refreshToken
-  → almacenamiento seguro
-  → GET /api/usuarios/perfil
-  → Home
-```
-
-Endpoints utilizados:
-
-```text
-POST /api/auth/login
-GET  /api/usuarios/perfil
-```
-
-La consulta del perfil envía el access token con el encabezado:
-
-```http
-Authorization: Bearer <accessToken>
-```
-
-La contraseña debe escribirse en el Login después de crear la cuenta. El Home se abre únicamente cuando el backend acepta el login y el endpoint protegido devuelve el perfil.
-
-## Almacenamiento seguro
-
-- `accessToken` y `refreshToken` se almacenan mediante `flutter_secure_storage`.
-- La contraseña nunca se almacena.
-- El correo no se almacena como credencial.
-- El perfil completo no se persiste en el almacenamiento seguro.
-- La renovación automática mediante refresh token todavía está pendiente.
-
-## Seguridad de red Android
-
-La configuración Android incluye:
-
-- El permiso `android.permission.INTERNET` en `AndroidManifest.xml`.
-- La referencia a `network_security_config.xml`.
-- HTTP sin cifrar denegado por defecto.
-- Una excepción de desarrollo únicamente para el dominio `localhost`.
-
-No se habilita HTTP globalmente. La excepción permite utilizar `http://localhost:3000` con ADB reverse durante el desarrollo.
-
-## Estructura del frontend
-
-```text
-lib/
-├── config/
-│   └── api_config.dart
-├── models/
-│   ├── auth_session.dart
-│   ├── category.dart
-│   └── user_profile.dart
-├── screens/
-│   ├── home_screen.dart
-│   ├── login_screen.dart
-│   └── register_screen.dart
-├── services/
-│   ├── api_exception.dart
-│   ├── auth_service.dart
-│   ├── category_service.dart
-│   ├── profile_service.dart
-│   └── token_storage.dart
-├── widgets/
-│   └── app_password_field.dart
-└── main.dart
-```
-
-- `config/`: valida `API_BASE_URL` y construye las URL de los endpoints.
-- `models/`: representa y valida las respuestas de autenticación, perfil y categorías.
-- `screens/`: contiene Registro, Login y Home.
-- `services/`: consume la API, traduce errores y encapsula el almacenamiento de tokens.
-- `widgets/`: contiene componentes reutilizables del formulario.
-- `main.dart`: inicializa Material 3 y abre el Login.
-
-El propósito y la interfaz pública de los componentes reutilizables están en el [catálogo de componentes](docs/component_catalog.md).
-
-## Base de datos
-
-No es necesario abrir una herramienta de base de datos para registrar usuarios. El flujo normal es:
-
-```text
-Flutter
-  → API del backend
-  → Prisma
-  → PostgreSQL
-```
-
-Como comprobación opcional, el backend incluye Prisma como dependencia de desarrollo. Desde la raíz del backend puede abrirse Prisma Studio con:
-
-```powershell
-yarn prisma studio
-```
-
-Prisma Studio no forma parte del procedimiento necesario para registrar, iniciar sesión o consultar el perfil.
-
-## Uso de inteligencia artificial
-
-Durante el desarrollo del frontend se utilizó **Codex** como apoyo para revisar, implementar, probar y documentar cambios. Las instrucciones solicitaron examinar primero el código real y trabajar con alcances pequeños y verificables, sin aceptar resultados automáticamente.
-
-| Área | Uso de Codex | Resultado utilizado | Revisión y verificación |
-|---|---|---|---|
-| Análisis y arquitectura | Revisión del código existente y análisis de arquitectura antes de modificar. | Mejoras de arquitectura aplicadas de forma incremental. | Cada resultado se revisó antes de avanzar y se corrigió cuando fue necesario. |
-| Interfaz y componentes | Implementación del sistema de diseño; creación y revisión de componentes reutilizables; pantalla de Bienvenida e integración del branding. | Cambios implementados y componentes incorporados al frontend. | Las decisiones de diseño fueron aprobadas manualmente. Se verificaron accesibilidad, TalkBack y tamaños táctiles. |
-| Sesión y errores | Revisión del manejo común de errores de API, restauración y renovación de sesión, y `SessionGate`. | Flujos y mejoras de arquitectura utilizados en la aplicación. | Se comprobaron navegación y sesión, incluidas pruebas en un dispositivo Android físico. |
-| Calidad y documentación | Apoyo para pruebas, comportamiento responsive, fuente ampliada y documentación técnica. | Pruebas añadidas y documentación generada. | Se ejecutaron `flutter analyze --no-pub` y `flutter test --no-pub`, además de comprobaciones con ancho reducido y texto ampliado. |
-
-La revisión humana incluyó las decisiones de diseño, la validación de los cambios y las pruebas antes de continuar. Ningún cambio se aceptó sin revisión.
-
-## Comandos rápidos
-
-### Backend
-
-```powershell
-yarn dev
-```
-
-### Frontend en dispositivo físico
-
-```powershell
-flutter devices
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" reverse tcp:3000 tcp:3000
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" reverse --list
-flutter run --dart-define=API_BASE_URL=http://localhost:3000
-```
-
-### Verificación
-
-```powershell
-flutter analyze
-flutter test
-```
+El frontend no contiene configuración de base de datos.
