@@ -162,7 +162,10 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
       if (mounted) setState(() => _submitError = error.message);
     } catch (_) {
       if (mounted) {
-        setState(() => _submitError = 'No pudimos seleccionar las imágenes.');
+        setState(
+          () => _submitError =
+              'No pudimos seleccionar las imágenes. Intenta nuevamente.',
+        );
       }
     }
   }
@@ -262,10 +265,10 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                                 value ?? '',
                               );
                               if (normalized.length < 5) {
-                                return 'Escribe al menos 5 caracteres.';
+                                return 'El título debe tener al menos 5 caracteres.';
                               }
                               if (normalized.length > 100) {
-                                return 'Usa máximo 100 caracteres.';
+                                return 'El título no puede superar 100 caracteres.';
                               }
                               return null;
                             },
@@ -281,13 +284,13 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                             validator: (value) {
                               final normalized = value?.trim() ?? '';
                               if (normalized.length < 20) {
-                                return 'Escribe al menos 20 caracteres.';
+                                return 'La descripción debe tener al menos 20 caracteres.';
                               }
                               if (normalized.length > 1000) {
-                                return 'Usa máximo 1000 caracteres.';
+                                return 'La descripción no puede superar 1000 caracteres.';
                               }
                               if (!_isPlainDonationDescription(normalized)) {
-                                return 'Escribe la descripción como texto simple, sin HTML, enlaces ni formato Markdown no permitido.';
+                                return 'Escribe la descripción como texto simple, sin etiquetas, enlaces ni formatos especiales.';
                               }
                               return null;
                             },

@@ -16,7 +16,7 @@ void main() {
   const validTitle = 'Mesa para donar';
   const validDescription = 'Mesa de madera en buen estado para donar.';
   const plainTextError =
-      'Escribe la descripción como texto simple, sin HTML, enlaces ni formato Markdown no permitido.';
+      'Escribe la descripción como texto simple, sin etiquetas, enlaces ni formatos especiales.';
 
   final titleCases = <({String name, String value, String? error})>[
     (
@@ -27,7 +27,7 @@ void main() {
     (
       name: 'rechaza espacios repetidos si normalizado queda bajo el mínimo',
       value: 'a    b',
-      error: 'Escribe al menos 5 caracteres.',
+      error: 'El título debe tener al menos 5 caracteres.',
     ),
     (
       name: 'acepta exactamente 5 caracteres normalizados',
@@ -38,7 +38,7 @@ void main() {
     (
       name: 'rechaza 101 caracteres',
       value: 'a' * 101,
-      error: 'Usa máximo 100 caracteres.',
+      error: 'El título no puede superar 100 caracteres.',
     ),
   ];
   for (final testCase in titleCases) {
@@ -51,8 +51,14 @@ void main() {
       if (testCase.error case final error?) {
         expect(find.text(error), findsOneWidget);
       } else {
-        expect(find.text('Escribe al menos 5 caracteres.'), findsNothing);
-        expect(find.text('Usa máximo 100 caracteres.'), findsNothing);
+        expect(
+          find.text('El título debe tener al menos 5 caracteres.'),
+          findsNothing,
+        );
+        expect(
+          find.text('El título no puede superar 100 caracteres.'),
+          findsNothing,
+        );
       }
     });
   }
@@ -71,12 +77,12 @@ void main() {
     (
       name: 'rechaza descripción menor de 20 caracteres',
       value: 'a' * 19,
-      error: 'Escribe al menos 20 caracteres.',
+      error: 'La descripción debe tener al menos 20 caracteres.',
     ),
     (
       name: 'rechaza descripción mayor de 1000 caracteres',
       value: 'a' * 1001,
-      error: 'Usa máximo 1000 caracteres.',
+      error: 'La descripción no puede superar 1000 caracteres.',
     ),
     (
       name: 'rechaza etiqueta HTML',
@@ -124,8 +130,14 @@ void main() {
       if (testCase.error case final error?) {
         expect(find.text(error), findsOneWidget);
       } else {
-        expect(find.text('Escribe al menos 20 caracteres.'), findsNothing);
-        expect(find.text('Usa máximo 1000 caracteres.'), findsNothing);
+        expect(
+          find.text('La descripción debe tener al menos 20 caracteres.'),
+          findsNothing,
+        );
+        expect(
+          find.text('La descripción no puede superar 1000 caracteres.'),
+          findsNothing,
+        );
         expect(find.text(plainTextError), findsNothing);
       }
     });
@@ -135,8 +147,14 @@ void main() {
     await tester.pumpWidget(_app(picker: _Picker(const [])));
     await tester.pumpAndSettle();
 
-    expect(find.text('Escribe al menos 5 caracteres.'), findsNothing);
-    expect(find.text('Escribe al menos 20 caracteres.'), findsNothing);
+    expect(
+      find.text('El título debe tener al menos 5 caracteres.'),
+      findsNothing,
+    );
+    expect(
+      find.text('La descripción debe tener al menos 20 caracteres.'),
+      findsNothing,
+    );
     expect(find.text('Selecciona una categoría.'), findsNothing);
     expect(find.text('Selecciona al menos una imagen.'), findsNothing);
   });
@@ -154,7 +172,10 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('donationDescriptionField')));
       await tester.pump();
-      expect(find.text('Escribe al menos 5 caracteres.'), findsOneWidget);
+      expect(
+        find.text('El título debe tener al menos 5 caracteres.'),
+        findsOneWidget,
+      );
 
       await tester.enterText(
         find.byKey(const Key('donationTitleField')),
@@ -162,7 +183,10 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('donationDescriptionField')));
       await tester.pump();
-      expect(find.text('Escribe al menos 5 caracteres.'), findsNothing);
+      expect(
+        find.text('El título debe tener al menos 5 caracteres.'),
+        findsNothing,
+      );
     },
   );
 
@@ -179,7 +203,10 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('donationTitleField')));
       await tester.pump();
-      expect(find.text('Escribe al menos 20 caracteres.'), findsOneWidget);
+      expect(
+        find.text('La descripción debe tener al menos 20 caracteres.'),
+        findsOneWidget,
+      );
 
       await tester.enterText(
         find.byKey(const Key('donationDescriptionField')),
@@ -187,7 +214,10 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('donationTitleField')));
       await tester.pump();
-      expect(find.text('Escribe al menos 20 caracteres.'), findsNothing);
+      expect(
+        find.text('La descripción debe tener al menos 20 caracteres.'),
+        findsNothing,
+      );
     },
   );
 
@@ -231,8 +261,14 @@ void main() {
     await tester.tap(find.byKey(const Key('publishDonationButton')));
     await tester.pump();
 
-    expect(find.text('Escribe al menos 5 caracteres.'), findsOneWidget);
-    expect(find.text('Escribe al menos 20 caracteres.'), findsOneWidget);
+    expect(
+      find.text('El título debe tener al menos 5 caracteres.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('La descripción debe tener al menos 20 caracteres.'),
+      findsOneWidget,
+    );
     expect(find.text('Selecciona una categoría.'), findsOneWidget);
     expect(upload.calls, 0);
     expect(donation.calls, 0);
@@ -310,6 +346,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('createDonationError')), findsNothing);
     expect(find.text('Seleccionar imágenes (0/5)'), findsOneWidget);
+  });
+
+  testWidgets('fallo del selector muestra un mensaje útil', (tester) async {
+    await tester.pumpWidget(_app(picker: _FailingPicker()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('pickDonationImagesButton')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('No pudimos seleccionar las imágenes. Intenta nuevamente.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('selecciona una y varias imágenes', (tester) async {
@@ -459,6 +508,14 @@ class _Picker implements DonationGalleryPicker {
   Future<List<XFile>> pickImages() async => selected;
   @override
   Future<List<XFile>> retrieveLostImages() async => recovered;
+}
+
+class _FailingPicker implements DonationGalleryPicker {
+  @override
+  Future<List<XFile>> pickImages() async => throw StateError('picker failed');
+
+  @override
+  Future<List<XFile>> retrieveLostImages() async => const [];
 }
 
 class _UploadService extends ImageUploadService {
