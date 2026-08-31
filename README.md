@@ -96,6 +96,12 @@ flutter run --dart-define=API_BASE_URL=http://localhost:3000
 
 La configuración Android permite HTTP únicamente para `localhost` durante el desarrollo; no habilita tráfico sin cifrar de forma global.
 
+## Inicio rápido desde VS Code
+
+Abra Docker Desktop, confirme que PostgreSQL está disponible y conecte y autorice el teléfono Android. Después, abra `donapp.code-workspace`, vaya a `Terminal → Run Task...` y ejecute `DonApp: Iniciar entorno`.
+
+VS Code comprobará e iniciará Redis cuando sea necesario, configurará ADB reverse, levantará el backend y, cuando este se encuentre listo, iniciará Flutter.
+
 ## Estructura del frontend
 
 ```text
