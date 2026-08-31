@@ -13,6 +13,128 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 
 void main() {
+  const validTitle = 'Mesa para donar';
+  const validDescription = 'Mesa de madera en buen estado para donar.';
+  const plainTextError =
+      'Escribe la descripción como texto simple, sin HTML, enlaces ni formato Markdown no permitido.';
+
+  final titleCases = <({String name, String value, String? error})>[
+    (
+      name: 'acepta un título válido después de normalizar espacios',
+      value: '  Mesa   para   donar  ',
+      error: null,
+    ),
+    (
+      name: 'rechaza espacios repetidos si normalizado queda bajo el mínimo',
+      value: 'a    b',
+      error: 'Escribe al menos 5 caracteres.',
+    ),
+    (
+      name: 'acepta exactamente 5 caracteres normalizados',
+      value: 'abcde',
+      error: null,
+    ),
+    (
+      name: 'acepta exactamente 100 caracteres',
+      value: 'a' * 100,
+      error: null,
+    ),
+    (
+      name: 'rechaza 101 caracteres',
+      value: 'a' * 101,
+      error: 'Usa máximo 100 caracteres.',
+    ),
+  ];
+  for (final testCase in titleCases) {
+    testWidgets(testCase.name, (tester) async {
+      await _validateFormFields(
+        tester,
+        title: testCase.value,
+        description: validDescription,
+      );
+      if (testCase.error case final error?) {
+        expect(find.text(error), findsOneWidget);
+      } else {
+        expect(find.text('Escribe al menos 5 caracteres.'), findsNothing);
+        expect(find.text('Usa máximo 100 caracteres.'), findsNothing);
+      }
+    });
+  }
+
+  final descriptionCases = <({String name, String value, String? error})>[
+    (
+      name: 'acepta descripción de exactamente 20 caracteres',
+      value: 'a' * 20,
+      error: null,
+    ),
+    (
+      name: 'acepta descripción de exactamente 1000 caracteres',
+      value: 'a' * 1000,
+      error: null,
+    ),
+    (
+      name: 'rechaza descripción menor de 20 caracteres',
+      value: 'a' * 19,
+      error: 'Escribe al menos 20 caracteres.',
+    ),
+    (
+      name: 'rechaza descripción mayor de 1000 caracteres',
+      value: 'a' * 1001,
+      error: 'Usa máximo 1000 caracteres.',
+    ),
+    (
+      name: 'rechaza etiqueta HTML',
+      value: 'Descripción con <strong>HTML</strong> visible.',
+      error: plainTextError,
+    ),
+    (
+      name: 'rechaza enlace Markdown',
+      value: 'Descripción con un [enlace](https://example.com).',
+      error: plainTextError,
+    ),
+    (
+      name: 'rechaza imagen Markdown',
+      value: 'Descripción con ![imagen](https://example.com/a.png).',
+      error: plainTextError,
+    ),
+    (
+      name: 'rechaza encabezado Markdown',
+      value: '# Encabezado no permitido en esta descripción',
+      error: plainTextError,
+    ),
+    (
+      name: 'rechaza cita Markdown',
+      value: '> Cita no permitida dentro de esta descripción',
+      error: plainTextError,
+    ),
+    (
+      name: 'rechaza bloque cercado',
+      value: 'Descripción con bloque ```código``` no permitido.',
+      error: plainTextError,
+    ),
+    (
+      name: 'acepta texto plano válido',
+      value: 'Una mesa de madera conservada y lista para donar.',
+      error: null,
+    ),
+  ];
+  for (final testCase in descriptionCases) {
+    testWidgets(testCase.name, (tester) async {
+      await _validateFormFields(
+        tester,
+        title: validTitle,
+        description: testCase.value,
+      );
+      if (testCase.error case final error?) {
+        expect(find.text(error), findsOneWidget);
+      } else {
+        expect(find.text('Escribe al menos 20 caracteres.'), findsNothing);
+        expect(find.text('Usa máximo 1000 caracteres.'), findsNothing);
+        expect(find.text(plainTextError), findsNothing);
+      }
+    });
+  }
+
   for (final scale in [1.0, 2.0]) {
     testWidgets('categoría no desborda a 240 px con texto $scale×', (
       tester,
@@ -133,6 +255,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Seleccionar imágenes (1/5)'), findsOneWidget);
   });
+}
+
+Future<void> _validateFormFields(
+  WidgetTester tester, {
+  required String title,
+  required String description,
+}) async {
+  await tester.pumpWidget(_app(picker: _Picker(const [])));
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byKey(const Key('donationTitleField')), title);
+  await tester.enterText(
+    find.byKey(const Key('donationDescriptionField')),
+    description,
+  );
+  await tester.ensureVisible(find.byKey(const Key('publishDonationButton')));
+  await tester.tap(find.byKey(const Key('publishDonationButton')));
+  await tester.pump();
 }
 
 Future<void> _completeForm(WidgetTester tester) async {

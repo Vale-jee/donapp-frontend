@@ -16,6 +16,43 @@ import '../widgets/app_content_state.dart';
 import '../widgets/app_primary_button.dart';
 import '../widgets/app_text_field.dart';
 
+final _titleWhitespacePattern = RegExp(r'\s+', unicode: true);
+final _htmlTagPattern = RegExp(
+  r'</?[a-z][^<>]*>',
+  caseSensitive: false,
+  unicode: true,
+);
+final _fencedCodePattern = RegExp(r'```', unicode: true);
+final _markdownImagePattern = RegExp(
+  r'!\[[^\]\r\n]*\]\([^\r\n)]+\)',
+  unicode: true,
+);
+final _markdownLinkPattern = RegExp(
+  r'(?<!!)\[[^\]\r\n]+\]\([^\r\n)]+\)',
+  unicode: true,
+);
+final _markdownHeadingPattern = RegExp(
+  r'^\s{0,3}#{1,6}\s+\S',
+  multiLine: true,
+  unicode: true,
+);
+final _markdownQuotePattern = RegExp(
+  r'^\s{0,3}>\s+\S',
+  multiLine: true,
+  unicode: true,
+);
+
+String _normalizeDonationTitle(String value) =>
+    value.trim().replaceAll(_titleWhitespacePattern, ' ');
+
+bool _isPlainDonationDescription(String value) =>
+    !_htmlTagPattern.hasMatch(value) &&
+    !_fencedCodePattern.hasMatch(value) &&
+    !_markdownImagePattern.hasMatch(value) &&
+    !_markdownLinkPattern.hasMatch(value) &&
+    !_markdownHeadingPattern.hasMatch(value) &&
+    !_markdownQuotePattern.hasMatch(value);
+
 class CreateDonationScreen extends StatefulWidget {
   const CreateDonationScreen({
     this.donationService,
@@ -220,7 +257,9 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                             controller: _titleController,
                             enabled: !_submitting,
                             validator: (value) {
-                              final normalized = value?.trim() ?? '';
+                              final normalized = _normalizeDonationTitle(
+                                value ?? '',
+                              );
                               if (normalized.length < 5) {
                                 return 'Escribe al menos 5 caracteres.';
                               }
@@ -244,6 +283,9 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                               }
                               if (normalized.length > 1000) {
                                 return 'Usa máximo 1000 caracteres.';
+                              }
+                              if (!_isPlainDonationDescription(normalized)) {
+                                return 'Escribe la descripción como texto simple, sin HTML, enlaces ni formato Markdown no permitido.';
                               }
                               return null;
                             },
