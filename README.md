@@ -98,7 +98,12 @@ La configuración Android permite HTTP únicamente para `localhost` durante el d
 
 ## Inicio rápido desde VS Code
 
-Abra Docker Desktop, confirme que PostgreSQL está disponible y conecte y autorice el teléfono Android. Después, abra `donapp.code-workspace`, vaya a `Terminal → Run Task...` y ejecute `DonApp: Iniciar entorno`.
+1. Abra Docker Desktop.
+2. Confirme que PostgreSQL está disponible.
+3. Conecte y autorice el teléfono Android.
+4. Abra la carpeta `Proyecto` en VS Code.
+5. Vaya a `Terminal → Run Task...`.
+6. Ejecute `DonApp: Iniciar entorno`.
 
 VS Code comprobará e iniciará Redis cuando sea necesario, configurará ADB reverse, levantará el backend y, cuando este se encuentre listo, iniciará Flutter.
 
