@@ -10,6 +10,7 @@ import 'package:donapp_mobile/services/image_upload_service.dart';
 import 'package:donapp_mobile/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 void main() {
@@ -616,7 +617,145 @@ void main() {
     expect(find.text('Error remoto de título'), findsNothing);
     expect(donation.calls, 1);
   });
+
+  testWidgets('conserva el formulario tras una navegación temporal', (
+    tester,
+  ) async {
+    final picker = _Picker([_image('one.jpg')]);
+    final router = GoRouter(
+      initialLocation: '/crear',
+      routes: [
+        GoRoute(
+          path: '/crear',
+          builder: (_, _) => CreateDonationScreen(
+            galleryPicker: picker,
+            imageUploadService: _UploadService(),
+            donationService: _DonationService(),
+            categoryService: _CategoryService('Muebles'),
+          ),
+        ),
+        GoRoute(
+          path: '/temporal',
+          builder: (_, _) => const Scaffold(
+            body: Text('Pantalla temporal', key: Key('temporaryScreen')),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+    );
+    await tester.pumpAndSettle();
+
+    await _fillDraft(tester);
+    expect(_categoryValue(tester), 4);
+    expect(find.text('Seleccionar imágenes (1/5)'), findsOneWidget);
+
+    router.push('/temporal');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('temporaryScreen')), findsOneWidget);
+
+    router.pop();
+    await tester.pumpAndSettle();
+
+    expect(_fieldText(tester, const Key('donationTitleField')), validTitle);
+    expect(
+      _fieldText(tester, const Key('donationDescriptionField')),
+      validDescription,
+    );
+    expect(_categoryValue(tester), 4);
+    expect(find.text('Muebles'), findsOneWidget);
+    expect(find.text('Seleccionar imágenes (1/5)'), findsOneWidget);
+    expect(find.byKey(const Key('selectedDonationImages')), findsOneWidget);
+  });
+
+  testWidgets('al abandonar y volver a abrir crea un formulario limpio', (
+    tester,
+  ) async {
+    final picker = _Picker([_image('one.jpg')]);
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, _) => Scaffold(
+            body: FilledButton(
+              key: const Key('openCreateDonation'),
+              onPressed: () => context.push('/crear'),
+              child: const Text('Abrir formulario'),
+            ),
+          ),
+        ),
+        GoRoute(
+          path: '/crear',
+          builder: (_, _) => CreateDonationScreen(
+            galleryPicker: picker,
+            imageUploadService: _UploadService(),
+            donationService: _DonationService(),
+            categoryService: _CategoryService('Muebles'),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('openCreateDonation')));
+    await tester.pumpAndSettle();
+    await _fillDraft(tester);
+    expect(_categoryValue(tester), 4);
+    expect(find.text('Seleccionar imágenes (1/5)'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('openCreateDonation')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('openCreateDonation')));
+    await tester.pumpAndSettle();
+
+    expect(_fieldText(tester, const Key('donationTitleField')), isEmpty);
+    expect(_fieldText(tester, const Key('donationDescriptionField')), isEmpty);
+    expect(_categoryValue(tester), isNull);
+    expect(find.text('Seleccionar imágenes (0/5)'), findsOneWidget);
+    expect(find.byKey(const Key('selectedDonationImages')), findsNothing);
+  });
 }
+
+Future<void> _fillDraft(WidgetTester tester) async {
+  await tester.enterText(
+    find.byKey(const Key('donationTitleField')),
+    'Mesa para donar',
+  );
+  await tester.enterText(
+    find.byKey(const Key('donationDescriptionField')),
+    'Mesa de madera en buen estado para donar.',
+  );
+  await tester.tap(find.byKey(const Key('donationCategoryField')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Muebles').last);
+  await tester.pumpAndSettle();
+  final picker = find.byKey(const Key('pickDonationImagesButton')).first;
+  await tester.ensureVisible(picker);
+  await tester.tap(picker);
+  await tester.pumpAndSettle();
+}
+
+String _fieldText(WidgetTester tester, Key key) => tester
+    .widget<TextFormField>(
+      find.descendant(
+        of: find.byKey(key),
+        matching: find.byType(TextFormField),
+      ),
+    )
+    .controller!
+    .text;
+
+int? _categoryValue(WidgetTester tester) => tester
+    .state<FormFieldState<int>>(find.byKey(const Key('donationCategoryField')))
+    .value;
 
 Future<void> _validateFormFields(
   WidgetTester tester, {
