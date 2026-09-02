@@ -20,6 +20,18 @@ enum ImageUploadState {
 
 enum RequestCollectionType { sent, received }
 
+enum PendingOperationEntityType { donation }
+
+enum PendingOperationType { createDonation }
+
+enum PendingOperationState {
+  pending,
+  processing,
+  retryWait,
+  completed,
+  failedPermanent,
+}
+
 class LocalAuthenticatedUsers extends Table {
   IntColumn get userId => integer()();
   TextColumn get nombreVisible => text()();
@@ -136,4 +148,34 @@ class LocalCollectionMetadata extends Table {
   DateTimeColumn get expiresAt => dateTime()();
   @override
   Set<Column<Object>> get primaryKey => {cacheUserId, collectionKey};
+}
+
+@TableIndex(
+  name: 'pending_operations_processable_idx',
+  columns: {#cacheUserId, #state, #nextAttemptAt},
+)
+@TableIndex(
+  name: 'pending_operations_entity_idx',
+  columns: {#cacheUserId, #entityClientId},
+)
+class PendingOperations extends Table {
+  IntColumn get localId => integer().autoIncrement()();
+  TextColumn get operationId => text()();
+  IntColumn get cacheUserId => integer()();
+  TextColumn get entityType => textEnum<PendingOperationEntityType>()();
+  TextColumn get entityClientId => text()();
+  TextColumn get operationType => textEnum<PendingOperationType>()();
+  TextColumn get state => textEnum<PendingOperationState>().withDefault(
+    Constant(PendingOperationState.pending.name),
+  )();
+  IntColumn get attemptCount => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get nextAttemptAt => dateTime().nullable()();
+  DateTimeColumn get lastAttemptAt => dateTime().nullable()();
+  TextColumn get lastErrorCode => text().nullable()();
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => [
+    {operationId},
+  ];
 }

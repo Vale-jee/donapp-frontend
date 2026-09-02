@@ -4542,6 +4542,791 @@ class LocalCollectionMetadataCompanion
   }
 }
 
+class $PendingOperationsTable extends PendingOperations
+    with TableInfo<$PendingOperationsTable, PendingOperation> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PendingOperationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _localIdMeta = const VerificationMeta(
+    'localId',
+  );
+  @override
+  late final GeneratedColumn<int> localId = GeneratedColumn<int>(
+    'local_id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _operationIdMeta = const VerificationMeta(
+    'operationId',
+  );
+  @override
+  late final GeneratedColumn<String> operationId = GeneratedColumn<String>(
+    'operation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _cacheUserIdMeta = const VerificationMeta(
+    'cacheUserId',
+  );
+  @override
+  late final GeneratedColumn<int> cacheUserId = GeneratedColumn<int>(
+    'cache_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<
+    PendingOperationEntityType,
+    String
+  >
+  entityType =
+      GeneratedColumn<String>(
+        'entity_type',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      ).withConverter<PendingOperationEntityType>(
+        $PendingOperationsTable.$converterentityType,
+      );
+  static const VerificationMeta _entityClientIdMeta = const VerificationMeta(
+    'entityClientId',
+  );
+  @override
+  late final GeneratedColumn<String> entityClientId = GeneratedColumn<String>(
+    'entity_client_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<PendingOperationType, String>
+  operationType =
+      GeneratedColumn<String>(
+        'operation_type',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      ).withConverter<PendingOperationType>(
+        $PendingOperationsTable.$converteroperationType,
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<PendingOperationState, String>
+  state =
+      GeneratedColumn<String>(
+        'state',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: Constant(PendingOperationState.pending.name),
+      ).withConverter<PendingOperationState>(
+        $PendingOperationsTable.$converterstate,
+      );
+  static const VerificationMeta _attemptCountMeta = const VerificationMeta(
+    'attemptCount',
+  );
+  @override
+  late final GeneratedColumn<int> attemptCount = GeneratedColumn<int>(
+    'attempt_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
+    'nextAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextAttemptAt =
+      GeneratedColumn<DateTime>(
+        'next_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _lastAttemptAtMeta = const VerificationMeta(
+    'lastAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastAttemptAt =
+      GeneratedColumn<DateTime>(
+        'last_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _lastErrorCodeMeta = const VerificationMeta(
+    'lastErrorCode',
+  );
+  @override
+  late final GeneratedColumn<String> lastErrorCode = GeneratedColumn<String>(
+    'last_error_code',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    localId,
+    operationId,
+    cacheUserId,
+    entityType,
+    entityClientId,
+    operationType,
+    state,
+    attemptCount,
+    createdAt,
+    nextAttemptAt,
+    lastAttemptAt,
+    lastErrorCode,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pending_operations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PendingOperation> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('local_id')) {
+      context.handle(
+        _localIdMeta,
+        localId.isAcceptableOrUnknown(data['local_id']!, _localIdMeta),
+      );
+    }
+    if (data.containsKey('operation_id')) {
+      context.handle(
+        _operationIdMeta,
+        operationId.isAcceptableOrUnknown(
+          data['operation_id']!,
+          _operationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationIdMeta);
+    }
+    if (data.containsKey('cache_user_id')) {
+      context.handle(
+        _cacheUserIdMeta,
+        cacheUserId.isAcceptableOrUnknown(
+          data['cache_user_id']!,
+          _cacheUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_cacheUserIdMeta);
+    }
+    if (data.containsKey('entity_client_id')) {
+      context.handle(
+        _entityClientIdMeta,
+        entityClientId.isAcceptableOrUnknown(
+          data['entity_client_id']!,
+          _entityClientIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_entityClientIdMeta);
+    }
+    if (data.containsKey('attempt_count')) {
+      context.handle(
+        _attemptCountMeta,
+        attemptCount.isAcceptableOrUnknown(
+          data['attempt_count']!,
+          _attemptCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('next_attempt_at')) {
+      context.handle(
+        _nextAttemptAtMeta,
+        nextAttemptAt.isAcceptableOrUnknown(
+          data['next_attempt_at']!,
+          _nextAttemptAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_attempt_at')) {
+      context.handle(
+        _lastAttemptAtMeta,
+        lastAttemptAt.isAcceptableOrUnknown(
+          data['last_attempt_at']!,
+          _lastAttemptAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_error_code')) {
+      context.handle(
+        _lastErrorCodeMeta,
+        lastErrorCode.isAcceptableOrUnknown(
+          data['last_error_code']!,
+          _lastErrorCodeMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {localId};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {operationId},
+  ];
+  @override
+  PendingOperation map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PendingOperation(
+      localId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}local_id'],
+      )!,
+      operationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation_id'],
+      )!,
+      cacheUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cache_user_id'],
+      )!,
+      entityType: $PendingOperationsTable.$converterentityType.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}entity_type'],
+        )!,
+      ),
+      entityClientId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_client_id'],
+      )!,
+      operationType: $PendingOperationsTable.$converteroperationType.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}operation_type'],
+        )!,
+      ),
+      state: $PendingOperationsTable.$converterstate.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}state'],
+        )!,
+      ),
+      attemptCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempt_count'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      nextAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_attempt_at'],
+      ),
+      lastAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_attempt_at'],
+      ),
+      lastErrorCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_error_code'],
+      ),
+    );
+  }
+
+  @override
+  $PendingOperationsTable createAlias(String alias) {
+    return $PendingOperationsTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<PendingOperationEntityType, String, String>
+  $converterentityType = const EnumNameConverter<PendingOperationEntityType>(
+    PendingOperationEntityType.values,
+  );
+  static JsonTypeConverter2<PendingOperationType, String, String>
+  $converteroperationType = const EnumNameConverter<PendingOperationType>(
+    PendingOperationType.values,
+  );
+  static JsonTypeConverter2<PendingOperationState, String, String>
+  $converterstate = const EnumNameConverter<PendingOperationState>(
+    PendingOperationState.values,
+  );
+}
+
+class PendingOperation extends DataClass
+    implements Insertable<PendingOperation> {
+  final int localId;
+  final String operationId;
+  final int cacheUserId;
+  final PendingOperationEntityType entityType;
+  final String entityClientId;
+  final PendingOperationType operationType;
+  final PendingOperationState state;
+  final int attemptCount;
+  final DateTime createdAt;
+  final DateTime? nextAttemptAt;
+  final DateTime? lastAttemptAt;
+  final String? lastErrorCode;
+  const PendingOperation({
+    required this.localId,
+    required this.operationId,
+    required this.cacheUserId,
+    required this.entityType,
+    required this.entityClientId,
+    required this.operationType,
+    required this.state,
+    required this.attemptCount,
+    required this.createdAt,
+    this.nextAttemptAt,
+    this.lastAttemptAt,
+    this.lastErrorCode,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['local_id'] = Variable<int>(localId);
+    map['operation_id'] = Variable<String>(operationId);
+    map['cache_user_id'] = Variable<int>(cacheUserId);
+    {
+      map['entity_type'] = Variable<String>(
+        $PendingOperationsTable.$converterentityType.toSql(entityType),
+      );
+    }
+    map['entity_client_id'] = Variable<String>(entityClientId);
+    {
+      map['operation_type'] = Variable<String>(
+        $PendingOperationsTable.$converteroperationType.toSql(operationType),
+      );
+    }
+    {
+      map['state'] = Variable<String>(
+        $PendingOperationsTable.$converterstate.toSql(state),
+      );
+    }
+    map['attempt_count'] = Variable<int>(attemptCount);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || nextAttemptAt != null) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
+    }
+    if (!nullToAbsent || lastAttemptAt != null) {
+      map['last_attempt_at'] = Variable<DateTime>(lastAttemptAt);
+    }
+    if (!nullToAbsent || lastErrorCode != null) {
+      map['last_error_code'] = Variable<String>(lastErrorCode);
+    }
+    return map;
+  }
+
+  PendingOperationsCompanion toCompanion(bool nullToAbsent) {
+    return PendingOperationsCompanion(
+      localId: Value(localId),
+      operationId: Value(operationId),
+      cacheUserId: Value(cacheUserId),
+      entityType: Value(entityType),
+      entityClientId: Value(entityClientId),
+      operationType: Value(operationType),
+      state: Value(state),
+      attemptCount: Value(attemptCount),
+      createdAt: Value(createdAt),
+      nextAttemptAt: nextAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAttemptAt),
+      lastAttemptAt: lastAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAttemptAt),
+      lastErrorCode: lastErrorCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastErrorCode),
+    );
+  }
+
+  factory PendingOperation.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PendingOperation(
+      localId: serializer.fromJson<int>(json['localId']),
+      operationId: serializer.fromJson<String>(json['operationId']),
+      cacheUserId: serializer.fromJson<int>(json['cacheUserId']),
+      entityType: $PendingOperationsTable.$converterentityType.fromJson(
+        serializer.fromJson<String>(json['entityType']),
+      ),
+      entityClientId: serializer.fromJson<String>(json['entityClientId']),
+      operationType: $PendingOperationsTable.$converteroperationType.fromJson(
+        serializer.fromJson<String>(json['operationType']),
+      ),
+      state: $PendingOperationsTable.$converterstate.fromJson(
+        serializer.fromJson<String>(json['state']),
+      ),
+      attemptCount: serializer.fromJson<int>(json['attemptCount']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
+      lastAttemptAt: serializer.fromJson<DateTime?>(json['lastAttemptAt']),
+      lastErrorCode: serializer.fromJson<String?>(json['lastErrorCode']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'localId': serializer.toJson<int>(localId),
+      'operationId': serializer.toJson<String>(operationId),
+      'cacheUserId': serializer.toJson<int>(cacheUserId),
+      'entityType': serializer.toJson<String>(
+        $PendingOperationsTable.$converterentityType.toJson(entityType),
+      ),
+      'entityClientId': serializer.toJson<String>(entityClientId),
+      'operationType': serializer.toJson<String>(
+        $PendingOperationsTable.$converteroperationType.toJson(operationType),
+      ),
+      'state': serializer.toJson<String>(
+        $PendingOperationsTable.$converterstate.toJson(state),
+      ),
+      'attemptCount': serializer.toJson<int>(attemptCount),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
+      'lastAttemptAt': serializer.toJson<DateTime?>(lastAttemptAt),
+      'lastErrorCode': serializer.toJson<String?>(lastErrorCode),
+    };
+  }
+
+  PendingOperation copyWith({
+    int? localId,
+    String? operationId,
+    int? cacheUserId,
+    PendingOperationEntityType? entityType,
+    String? entityClientId,
+    PendingOperationType? operationType,
+    PendingOperationState? state,
+    int? attemptCount,
+    DateTime? createdAt,
+    Value<DateTime?> nextAttemptAt = const Value.absent(),
+    Value<DateTime?> lastAttemptAt = const Value.absent(),
+    Value<String?> lastErrorCode = const Value.absent(),
+  }) => PendingOperation(
+    localId: localId ?? this.localId,
+    operationId: operationId ?? this.operationId,
+    cacheUserId: cacheUserId ?? this.cacheUserId,
+    entityType: entityType ?? this.entityType,
+    entityClientId: entityClientId ?? this.entityClientId,
+    operationType: operationType ?? this.operationType,
+    state: state ?? this.state,
+    attemptCount: attemptCount ?? this.attemptCount,
+    createdAt: createdAt ?? this.createdAt,
+    nextAttemptAt: nextAttemptAt.present
+        ? nextAttemptAt.value
+        : this.nextAttemptAt,
+    lastAttemptAt: lastAttemptAt.present
+        ? lastAttemptAt.value
+        : this.lastAttemptAt,
+    lastErrorCode: lastErrorCode.present
+        ? lastErrorCode.value
+        : this.lastErrorCode,
+  );
+  PendingOperation copyWithCompanion(PendingOperationsCompanion data) {
+    return PendingOperation(
+      localId: data.localId.present ? data.localId.value : this.localId,
+      operationId: data.operationId.present
+          ? data.operationId.value
+          : this.operationId,
+      cacheUserId: data.cacheUserId.present
+          ? data.cacheUserId.value
+          : this.cacheUserId,
+      entityType: data.entityType.present
+          ? data.entityType.value
+          : this.entityType,
+      entityClientId: data.entityClientId.present
+          ? data.entityClientId.value
+          : this.entityClientId,
+      operationType: data.operationType.present
+          ? data.operationType.value
+          : this.operationType,
+      state: data.state.present ? data.state.value : this.state,
+      attemptCount: data.attemptCount.present
+          ? data.attemptCount.value
+          : this.attemptCount,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      nextAttemptAt: data.nextAttemptAt.present
+          ? data.nextAttemptAt.value
+          : this.nextAttemptAt,
+      lastAttemptAt: data.lastAttemptAt.present
+          ? data.lastAttemptAt.value
+          : this.lastAttemptAt,
+      lastErrorCode: data.lastErrorCode.present
+          ? data.lastErrorCode.value
+          : this.lastErrorCode,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingOperation(')
+          ..write('localId: $localId, ')
+          ..write('operationId: $operationId, ')
+          ..write('cacheUserId: $cacheUserId, ')
+          ..write('entityType: $entityType, ')
+          ..write('entityClientId: $entityClientId, ')
+          ..write('operationType: $operationType, ')
+          ..write('state: $state, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('lastAttemptAt: $lastAttemptAt, ')
+          ..write('lastErrorCode: $lastErrorCode')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    localId,
+    operationId,
+    cacheUserId,
+    entityType,
+    entityClientId,
+    operationType,
+    state,
+    attemptCount,
+    createdAt,
+    nextAttemptAt,
+    lastAttemptAt,
+    lastErrorCode,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PendingOperation &&
+          other.localId == this.localId &&
+          other.operationId == this.operationId &&
+          other.cacheUserId == this.cacheUserId &&
+          other.entityType == this.entityType &&
+          other.entityClientId == this.entityClientId &&
+          other.operationType == this.operationType &&
+          other.state == this.state &&
+          other.attemptCount == this.attemptCount &&
+          other.createdAt == this.createdAt &&
+          other.nextAttemptAt == this.nextAttemptAt &&
+          other.lastAttemptAt == this.lastAttemptAt &&
+          other.lastErrorCode == this.lastErrorCode);
+}
+
+class PendingOperationsCompanion extends UpdateCompanion<PendingOperation> {
+  final Value<int> localId;
+  final Value<String> operationId;
+  final Value<int> cacheUserId;
+  final Value<PendingOperationEntityType> entityType;
+  final Value<String> entityClientId;
+  final Value<PendingOperationType> operationType;
+  final Value<PendingOperationState> state;
+  final Value<int> attemptCount;
+  final Value<DateTime> createdAt;
+  final Value<DateTime?> nextAttemptAt;
+  final Value<DateTime?> lastAttemptAt;
+  final Value<String?> lastErrorCode;
+  const PendingOperationsCompanion({
+    this.localId = const Value.absent(),
+    this.operationId = const Value.absent(),
+    this.cacheUserId = const Value.absent(),
+    this.entityType = const Value.absent(),
+    this.entityClientId = const Value.absent(),
+    this.operationType = const Value.absent(),
+    this.state = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.lastAttemptAt = const Value.absent(),
+    this.lastErrorCode = const Value.absent(),
+  });
+  PendingOperationsCompanion.insert({
+    this.localId = const Value.absent(),
+    required String operationId,
+    required int cacheUserId,
+    required PendingOperationEntityType entityType,
+    required String entityClientId,
+    required PendingOperationType operationType,
+    this.state = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    required DateTime createdAt,
+    this.nextAttemptAt = const Value.absent(),
+    this.lastAttemptAt = const Value.absent(),
+    this.lastErrorCode = const Value.absent(),
+  }) : operationId = Value(operationId),
+       cacheUserId = Value(cacheUserId),
+       entityType = Value(entityType),
+       entityClientId = Value(entityClientId),
+       operationType = Value(operationType),
+       createdAt = Value(createdAt);
+  static Insertable<PendingOperation> custom({
+    Expression<int>? localId,
+    Expression<String>? operationId,
+    Expression<int>? cacheUserId,
+    Expression<String>? entityType,
+    Expression<String>? entityClientId,
+    Expression<String>? operationType,
+    Expression<String>? state,
+    Expression<int>? attemptCount,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? nextAttemptAt,
+    Expression<DateTime>? lastAttemptAt,
+    Expression<String>? lastErrorCode,
+  }) {
+    return RawValuesInsertable({
+      if (localId != null) 'local_id': localId,
+      if (operationId != null) 'operation_id': operationId,
+      if (cacheUserId != null) 'cache_user_id': cacheUserId,
+      if (entityType != null) 'entity_type': entityType,
+      if (entityClientId != null) 'entity_client_id': entityClientId,
+      if (operationType != null) 'operation_type': operationType,
+      if (state != null) 'state': state,
+      if (attemptCount != null) 'attempt_count': attemptCount,
+      if (createdAt != null) 'created_at': createdAt,
+      if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
+      if (lastAttemptAt != null) 'last_attempt_at': lastAttemptAt,
+      if (lastErrorCode != null) 'last_error_code': lastErrorCode,
+    });
+  }
+
+  PendingOperationsCompanion copyWith({
+    Value<int>? localId,
+    Value<String>? operationId,
+    Value<int>? cacheUserId,
+    Value<PendingOperationEntityType>? entityType,
+    Value<String>? entityClientId,
+    Value<PendingOperationType>? operationType,
+    Value<PendingOperationState>? state,
+    Value<int>? attemptCount,
+    Value<DateTime>? createdAt,
+    Value<DateTime?>? nextAttemptAt,
+    Value<DateTime?>? lastAttemptAt,
+    Value<String?>? lastErrorCode,
+  }) {
+    return PendingOperationsCompanion(
+      localId: localId ?? this.localId,
+      operationId: operationId ?? this.operationId,
+      cacheUserId: cacheUserId ?? this.cacheUserId,
+      entityType: entityType ?? this.entityType,
+      entityClientId: entityClientId ?? this.entityClientId,
+      operationType: operationType ?? this.operationType,
+      state: state ?? this.state,
+      attemptCount: attemptCount ?? this.attemptCount,
+      createdAt: createdAt ?? this.createdAt,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
+      lastAttemptAt: lastAttemptAt ?? this.lastAttemptAt,
+      lastErrorCode: lastErrorCode ?? this.lastErrorCode,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (localId.present) {
+      map['local_id'] = Variable<int>(localId.value);
+    }
+    if (operationId.present) {
+      map['operation_id'] = Variable<String>(operationId.value);
+    }
+    if (cacheUserId.present) {
+      map['cache_user_id'] = Variable<int>(cacheUserId.value);
+    }
+    if (entityType.present) {
+      map['entity_type'] = Variable<String>(
+        $PendingOperationsTable.$converterentityType.toSql(entityType.value),
+      );
+    }
+    if (entityClientId.present) {
+      map['entity_client_id'] = Variable<String>(entityClientId.value);
+    }
+    if (operationType.present) {
+      map['operation_type'] = Variable<String>(
+        $PendingOperationsTable.$converteroperationType.toSql(
+          operationType.value,
+        ),
+      );
+    }
+    if (state.present) {
+      map['state'] = Variable<String>(
+        $PendingOperationsTable.$converterstate.toSql(state.value),
+      );
+    }
+    if (attemptCount.present) {
+      map['attempt_count'] = Variable<int>(attemptCount.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (nextAttemptAt.present) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
+    }
+    if (lastAttemptAt.present) {
+      map['last_attempt_at'] = Variable<DateTime>(lastAttemptAt.value);
+    }
+    if (lastErrorCode.present) {
+      map['last_error_code'] = Variable<String>(lastErrorCode.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingOperationsCompanion(')
+          ..write('localId: $localId, ')
+          ..write('operationId: $operationId, ')
+          ..write('cacheUserId: $cacheUserId, ')
+          ..write('entityType: $entityType, ')
+          ..write('entityClientId: $entityClientId, ')
+          ..write('operationType: $operationType, ')
+          ..write('state: $state, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('lastAttemptAt: $lastAttemptAt, ')
+          ..write('lastErrorCode: $lastErrorCode')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4558,7 +5343,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $LocalRequestsTable localRequests = $LocalRequestsTable(this);
   late final $LocalCollectionMetadataTable localCollectionMetadata =
       $LocalCollectionMetadataTable(this);
+  late final $PendingOperationsTable pendingOperations =
+      $PendingOperationsTable(this);
+  late final Index pendingOperationsProcessableIdx = Index(
+    'pending_operations_processable_idx',
+    'CREATE INDEX pending_operations_processable_idx ON pending_operations (cache_user_id, state, next_attempt_at)',
+  );
+  late final Index pendingOperationsEntityIdx = Index(
+    'pending_operations_entity_idx',
+    'CREATE INDEX pending_operations_entity_idx ON pending_operations (cache_user_id, entity_client_id)',
+  );
   late final LocalCacheDao localCacheDao = LocalCacheDao(this as AppDatabase);
+  late final PendingOperationsDao pendingOperationsDao = PendingOperationsDao(
+    this as AppDatabase,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4571,6 +5369,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     localDonationImages,
     localRequests,
     localCollectionMetadata,
+    pendingOperations,
+    pendingOperationsProcessableIdx,
+    pendingOperationsEntityIdx,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -7321,6 +8122,392 @@ typedef $$LocalCollectionMetadataTableProcessedTableManager =
       LocalCollectionMetadataData,
       PrefetchHooks Function()
     >;
+typedef $$PendingOperationsTableCreateCompanionBuilder =
+    PendingOperationsCompanion Function({
+      Value<int> localId,
+      required String operationId,
+      required int cacheUserId,
+      required PendingOperationEntityType entityType,
+      required String entityClientId,
+      required PendingOperationType operationType,
+      Value<PendingOperationState> state,
+      Value<int> attemptCount,
+      required DateTime createdAt,
+      Value<DateTime?> nextAttemptAt,
+      Value<DateTime?> lastAttemptAt,
+      Value<String?> lastErrorCode,
+    });
+typedef $$PendingOperationsTableUpdateCompanionBuilder =
+    PendingOperationsCompanion Function({
+      Value<int> localId,
+      Value<String> operationId,
+      Value<int> cacheUserId,
+      Value<PendingOperationEntityType> entityType,
+      Value<String> entityClientId,
+      Value<PendingOperationType> operationType,
+      Value<PendingOperationState> state,
+      Value<int> attemptCount,
+      Value<DateTime> createdAt,
+      Value<DateTime?> nextAttemptAt,
+      Value<DateTime?> lastAttemptAt,
+      Value<String?> lastErrorCode,
+    });
+
+class $$PendingOperationsTableFilterComposer
+    extends Composer<_$AppDatabase, $PendingOperationsTable> {
+  $$PendingOperationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get localId => $composableBuilder(
+    column: $table.localId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cacheUserId => $composableBuilder(
+    column: $table.cacheUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<
+    PendingOperationEntityType,
+    PendingOperationEntityType,
+    String
+  >
+  get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<String> get entityClientId => $composableBuilder(
+    column: $table.entityClientId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<
+    PendingOperationType,
+    PendingOperationType,
+    String
+  >
+  get operationType => $composableBuilder(
+    column: $table.operationType,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<
+    PendingOperationState,
+    PendingOperationState,
+    String
+  >
+  get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastErrorCode => $composableBuilder(
+    column: $table.lastErrorCode,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PendingOperationsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PendingOperationsTable> {
+  $$PendingOperationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get localId => $composableBuilder(
+    column: $table.localId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cacheUserId => $composableBuilder(
+    column: $table.cacheUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityClientId => $composableBuilder(
+    column: $table.entityClientId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get operationType => $composableBuilder(
+    column: $table.operationType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastErrorCode => $composableBuilder(
+    column: $table.lastErrorCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PendingOperationsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PendingOperationsTable> {
+  $$PendingOperationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get localId =>
+      $composableBuilder(column: $table.localId, builder: (column) => column);
+
+  GeneratedColumn<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cacheUserId => $composableBuilder(
+    column: $table.cacheUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<PendingOperationEntityType, String>
+  get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get entityClientId => $composableBuilder(
+    column: $table.entityClientId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<PendingOperationType, String>
+  get operationType => $composableBuilder(
+    column: $table.operationType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<PendingOperationState, String> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastErrorCode => $composableBuilder(
+    column: $table.lastErrorCode,
+    builder: (column) => column,
+  );
+}
+
+class $$PendingOperationsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PendingOperationsTable,
+          PendingOperation,
+          $$PendingOperationsTableFilterComposer,
+          $$PendingOperationsTableOrderingComposer,
+          $$PendingOperationsTableAnnotationComposer,
+          $$PendingOperationsTableCreateCompanionBuilder,
+          $$PendingOperationsTableUpdateCompanionBuilder,
+          (
+            PendingOperation,
+            BaseReferences<
+              _$AppDatabase,
+              $PendingOperationsTable,
+              PendingOperation
+            >,
+          ),
+          PendingOperation,
+          PrefetchHooks Function()
+        > {
+  $$PendingOperationsTableTableManager(
+    _$AppDatabase db,
+    $PendingOperationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PendingOperationsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PendingOperationsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PendingOperationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> localId = const Value.absent(),
+                Value<String> operationId = const Value.absent(),
+                Value<int> cacheUserId = const Value.absent(),
+                Value<PendingOperationEntityType> entityType =
+                    const Value.absent(),
+                Value<String> entityClientId = const Value.absent(),
+                Value<PendingOperationType> operationType =
+                    const Value.absent(),
+                Value<PendingOperationState> state = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<DateTime?> lastAttemptAt = const Value.absent(),
+                Value<String?> lastErrorCode = const Value.absent(),
+              }) => PendingOperationsCompanion(
+                localId: localId,
+                operationId: operationId,
+                cacheUserId: cacheUserId,
+                entityType: entityType,
+                entityClientId: entityClientId,
+                operationType: operationType,
+                state: state,
+                attemptCount: attemptCount,
+                createdAt: createdAt,
+                nextAttemptAt: nextAttemptAt,
+                lastAttemptAt: lastAttemptAt,
+                lastErrorCode: lastErrorCode,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> localId = const Value.absent(),
+                required String operationId,
+                required int cacheUserId,
+                required PendingOperationEntityType entityType,
+                required String entityClientId,
+                required PendingOperationType operationType,
+                Value<PendingOperationState> state = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                required DateTime createdAt,
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<DateTime?> lastAttemptAt = const Value.absent(),
+                Value<String?> lastErrorCode = const Value.absent(),
+              }) => PendingOperationsCompanion.insert(
+                localId: localId,
+                operationId: operationId,
+                cacheUserId: cacheUserId,
+                entityType: entityType,
+                entityClientId: entityClientId,
+                operationType: operationType,
+                state: state,
+                attemptCount: attemptCount,
+                createdAt: createdAt,
+                nextAttemptAt: nextAttemptAt,
+                lastAttemptAt: lastAttemptAt,
+                lastErrorCode: lastErrorCode,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$PendingOperationsTable, PendingOperation>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $PendingOperationsTable,
+                    PendingOperation
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PendingOperationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PendingOperationsTable,
+      PendingOperation,
+      $$PendingOperationsTableFilterComposer,
+      $$PendingOperationsTableOrderingComposer,
+      $$PendingOperationsTableAnnotationComposer,
+      $$PendingOperationsTableCreateCompanionBuilder,
+      $$PendingOperationsTableUpdateCompanionBuilder,
+      (
+        PendingOperation,
+        BaseReferences<
+          _$AppDatabase,
+          $PendingOperationsTable,
+          PendingOperation
+        >,
+      ),
+      PendingOperation,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -7348,4 +8535,6 @@ class $AppDatabaseManager {
         _db,
         _db.localCollectionMetadata,
       );
+  $$PendingOperationsTableTableManager get pendingOperations =>
+      $$PendingOperationsTableTableManager(_db, _db.pendingOperations);
 }

@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'daos/local_cache_dao.dart';
+import 'daos/pending_operations_dao.dart';
 import 'database_key_storage.dart';
 import 'tables/local_tables.dart';
 
@@ -20,8 +21,9 @@ part 'app_database.g.dart';
     LocalDonationImages,
     LocalRequests,
     LocalCollectionMetadata,
+    PendingOperations,
   ],
-  daos: [LocalCacheDao],
+  daos: [LocalCacheDao, PendingOperationsDao],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase({DatabaseKeyStorage? keyStorage})
@@ -29,7 +31,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -37,6 +39,11 @@ class AppDatabase extends _$AppDatabase {
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
         await migrator.addColumn(localDonations, localDonations.lastAccessedAt);
+      }
+      if (from < 3) {
+        await migrator.createTable(pendingOperations);
+        await migrator.createIndex(pendingOperationsProcessableIdx);
+        await migrator.createIndex(pendingOperationsEntityIdx);
       }
     },
     beforeOpen: (details) async => customStatement('PRAGMA foreign_keys = ON'),

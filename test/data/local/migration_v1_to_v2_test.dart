@@ -9,7 +9,7 @@ import 'package:donapp_mobile/data/local/app_database.dart';
 void main() {
   final key = Uint8List.fromList(List<int>.generate(32, (index) => index + 31));
 
-  test('migra un archivo SQLCipher v1 a v2 sin perder datos', () async {
+  test('migra acumulativamente un archivo SQLCipher v1 a v3', () async {
     final directory = await Directory.systemTemp.createTemp(
       'donapp-migration-',
     );
@@ -20,7 +20,7 @@ void main() {
       _createEncryptedV1(file, key);
 
       final db = AppDatabase.forTesting(openEncryptedNativeDatabase(file, key));
-      expect(db.schemaVersion, 2);
+      expect(db.schemaVersion, 3);
       expect(await db.select(db.localAuthenticatedUsers).get(), hasLength(1));
       expect(await db.select(db.localCategories).get(), hasLength(1));
       final donations = await db.select(db.localDonations).get();
@@ -31,6 +31,7 @@ void main() {
       expect(await db.select(db.localDonationMemberships).get(), hasLength(1));
       expect(await db.select(db.localRequests).get(), hasLength(1));
       expect(await db.select(db.localCollectionMetadata).get(), hasLength(1));
+      expect(await db.select(db.pendingOperations).get(), isEmpty);
 
       final columns = await db
           .customSelect('PRAGMA table_info(local_donations)')
@@ -66,10 +67,65 @@ void main() {
     }
   });
 
+  test('migra SQLCipher v2 a v3 y preserva todos los datos', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'donapp-migration-v2-',
+    );
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}migration.sqlite',
+    );
+    try {
+      _createEncryptedV2(file, key);
+
+      final db = AppDatabase.forTesting(openEncryptedNativeDatabase(file, key));
+      try {
+        expect(db.schemaVersion, 3);
+        expect(await db.select(db.localAuthenticatedUsers).get(), hasLength(1));
+        expect(await db.select(db.localCategories).get(), hasLength(1));
+        expect(await db.select(db.localDonations).get(), hasLength(1));
+        expect(await db.select(db.localDonationImages).get(), hasLength(1));
+        expect(
+          await db.select(db.localDonationMemberships).get(),
+          hasLength(1),
+        );
+        expect(await db.select(db.localRequests).get(), hasLength(1));
+        expect(await db.select(db.localCollectionMetadata).get(), hasLength(1));
+        expect(await db.select(db.pendingOperations).get(), isEmpty);
+
+        final indexes = await db
+            .customSelect('PRAGMA index_list(pending_operations)')
+            .get();
+        expect(
+          indexes.map((row) => row.read<String>('name')),
+          containsAll(<String>[
+            'pending_operations_processable_idx',
+            'pending_operations_entity_idx',
+          ]),
+        );
+        expect(
+          indexes.where((row) => row.read<int>('unique') == 1),
+          hasLength(1),
+        );
+        expect(
+          await db.customSelect('PRAGMA foreign_key_check').get(),
+          isEmpty,
+        );
+        final cipherVersion = await db
+            .customSelect('PRAGMA cipher_version')
+            .getSingle();
+        expect(cipherVersion.data.values.single.toString(), isNotEmpty);
+      } finally {
+        await db.close();
+      }
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
   test(
-    'una instalación nueva v2 crea directamente el esquema completo',
+    'una instalación nueva v3 crea directamente el esquema completo',
     () async {
-      final directory = await Directory.systemTemp.createTemp('donapp-v2-');
+      final directory = await Directory.systemTemp.createTemp('donapp-v3-');
       final file = File(
         '${directory.path}${Platform.pathSeparator}fresh.sqlite',
       );
@@ -90,6 +146,7 @@ void main() {
             'local_donation_images',
             'local_requests',
             'local_collection_metadata',
+            'pending_operations',
           ]),
         );
         final columns = await db
@@ -103,7 +160,7 @@ void main() {
           (await db.customSelect('PRAGMA user_version').getSingle()).read<int>(
             'user_version',
           ),
-          2,
+          3,
         );
         await db.close();
       } finally {
@@ -152,5 +209,19 @@ void _createEncryptedV1(File file, Uint8List key) {
     "INSERT INTO local_collection_metadata VALUES (1, 'explore', $timestamp, $timestamp + 3600)",
   );
   database.execute('PRAGMA user_version = 1');
+  database.close();
+}
+
+void _createEncryptedV2(File file, Uint8List key) {
+  _createEncryptedV1(file, key);
+  final database = sqlite.sqlite3.open(file.path);
+  final hexKey = key
+      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join();
+  database.execute('PRAGMA key = "x\'$hexKey\'"');
+  database.execute(
+    'ALTER TABLE local_donations ADD COLUMN last_accessed_at INTEGER NULL',
+  );
+  database.execute('PRAGMA user_version = 2');
   database.close();
 }
