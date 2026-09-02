@@ -12,6 +12,7 @@ import '../screens/request_detail_screen.dart';
 import '../screens/requests_screen.dart';
 import '../screens/session_gate.dart';
 import '../screens/welcome_screen.dart';
+import '../repositories/donation_repository.dart';
 import '../services/auth_service.dart';
 import '../services/auth_state_controller.dart';
 import '../services/api_client.dart';
@@ -84,6 +85,7 @@ GoRouter createAppRouter({
   ProfileService? profileService,
   TokenStorage? tokenStorage,
   DonationService? donationService,
+  DonationRepository? donationRepository,
   RequestService? requestService,
   CategoryService? categoryService,
   ImageUploadService? imageUploadService,
@@ -118,6 +120,9 @@ GoRouter createAppRouter({
         apiClient: protectedApiClient,
         tokenStorage: effectiveTokenStorage,
       );
+  final useLocalFirstExplore =
+      donationRepository != null ||
+      (donationService == null && categoryService == null);
 
   return GoRouter(
     initialLocation: initialLocation,
@@ -213,6 +218,8 @@ GoRouter createAppRouter({
         builder: (context, state) => ExploreDonationsScreen(
           donationService: effectiveDonationService,
           categoryService: effectiveCategoryService,
+          cacheUserId: useLocalFirstExplore ? authState.profile!.id : null,
+          repository: donationRepository,
         ),
       ),
       GoRoute(

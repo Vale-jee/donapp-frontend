@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -5,6 +7,7 @@ import '../config/api_config.dart';
 import '../models/category.dart';
 import '../models/donation.dart';
 import '../navigation/app_router.dart';
+import '../repositories/donation_repository.dart';
 import '../services/api_exception.dart';
 import '../services/category_service.dart';
 import '../services/donation_service.dart';
@@ -17,11 +20,15 @@ class ExploreDonationsScreen extends StatefulWidget {
   const ExploreDonationsScreen({
     this.donationService,
     this.categoryService,
+    this.cacheUserId,
+    this.repository,
     super.key,
   });
 
   final DonationService? donationService;
   final CategoryService? categoryService;
+  final int? cacheUserId;
+  final DonationRepository? repository;
 
   @override
   State<ExploreDonationsScreen> createState() => _ExploreDonationsScreenState();
@@ -33,6 +40,9 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
   late final DonationService _donationService;
   late final CategoryService _categoryService;
   late final ScrollController _scrollController;
+  DonationRepository? _repository;
+  StreamSubscription<List<DonationListItem>>? _donationsSubscription;
+  StreamSubscription<List<Category>>? _categoriesSubscription;
   List<Category> _categories = const [];
   List<DonationListItem> _donations = const [];
   DonationPagination? _pagination;
@@ -48,11 +58,28 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
     _donationService = widget.donationService ?? DonationService();
     _categoryService = widget.categoryService ?? const CategoryService();
     _scrollController = ScrollController()..addListener(_onScroll);
+    if (widget.cacheUserId != null) {
+      _repository =
+          widget.repository ??
+          DonationRepository.create(
+            donationService: _donationService,
+            categoryService: _categoryService,
+          );
+      _categoriesSubscription = _repository!.watchCategories().listen((
+        categories,
+      ) {
+        if (mounted) setState(() => _categories = categories);
+      });
+      _watchLocalDonations();
+    }
     _loadInitial();
   }
 
   @override
   void dispose() {
+    _donationsSubscription?.cancel();
+    _categoriesSubscription?.cancel();
+    unawaited(_repository?.close());
     _scrollController.dispose();
     super.dispose();
   }
@@ -67,6 +94,39 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
       _errorMessage = null;
       _paginationError = null;
     });
+    final repository = _repository;
+    if (repository != null) {
+      try {
+        await Future.wait<void>([
+          repository.refreshCategories(),
+          repository
+              .refreshExplore(
+                cacheUserId: widget.cacheUserId!,
+                limit: _pageLimit,
+                categoryId: _selectedCategoryId,
+              )
+              .then((page) {
+                if (mounted) setState(() => _pagination = page.pagination);
+              }),
+        ]);
+        if (mounted) setState(() => _isLoading = false);
+      } on ApiException catch (error) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          if (_donations.isEmpty) _errorMessage = error.message;
+        });
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          if (_donations.isEmpty) {
+            _errorMessage = 'No hay datos disponibles todavía sin conexión.';
+          }
+        });
+      }
+      return;
+    }
     try {
       final results = await Future.wait<Object>([
         _categoryService.getCategories(),
@@ -103,6 +163,27 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
   }
 
   Future<void> _refresh() async {
+    final repository = _repository;
+    if (repository != null) {
+      try {
+        final page = await repository.refreshExplore(
+          cacheUserId: widget.cacheUserId!,
+          limit: _pageLimit,
+          categoryId: _selectedCategoryId,
+        );
+        if (mounted) {
+          setState(() {
+            _pagination = page.pagination;
+            _paginationError = null;
+          });
+        }
+      } on ApiException catch (error) {
+        if (mounted && _donations.isEmpty) {
+          setState(() => _errorMessage = error.message);
+        }
+      }
+      return;
+    }
     try {
       final page = await _donationService.getAvailableDonations(
         limit: _pageLimit,
@@ -129,6 +210,7 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
   Future<void> _selectCategory(int? categoryId) async {
     if (_selectedCategoryId == categoryId) return;
     setState(() => _selectedCategoryId = categoryId);
+    if (_repository != null) _watchLocalDonations();
     await _loadInitial();
   }
 
@@ -145,14 +227,23 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
       _paginationError = null;
     });
     try {
-      final page = await _donationService.getAvailableDonations(
-        page: pagination.page + 1,
-        limit: pagination.limit,
-        categoryId: _selectedCategoryId,
-      );
+      final page = _repository == null
+          ? await _donationService.getAvailableDonations(
+              page: pagination.page + 1,
+              limit: pagination.limit,
+              categoryId: _selectedCategoryId,
+            )
+          : await _repository!.refreshExplore(
+              cacheUserId: widget.cacheUserId!,
+              page: pagination.page + 1,
+              limit: pagination.limit,
+              categoryId: _selectedCategoryId,
+            );
       if (!mounted) return;
       setState(() {
-        _donations = [..._donations, ...page.donations];
+        if (_repository == null) {
+          _donations = [..._donations, ...page.donations];
+        }
         _pagination = page.pagination;
         _isLoadingMore = false;
       });
@@ -172,6 +263,25 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
         });
       }
     }
+  }
+
+  void _watchLocalDonations() {
+    unawaited(_donationsSubscription?.cancel());
+    _donationsSubscription = _repository!
+        .watchExplore(
+          cacheUserId: widget.cacheUserId!,
+          categoryId: _selectedCategoryId,
+        )
+        .listen((donations) {
+          if (!mounted) return;
+          setState(() {
+            _donations = donations;
+            if (donations.isNotEmpty) {
+              _isLoading = false;
+              _errorMessage = null;
+            }
+          });
+        });
   }
 
   ImageProvider<Object>? _imageFor(DonationListItem donation) {
