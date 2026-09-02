@@ -866,6 +866,7 @@ class _DonationService extends DonationService {
   List<String>? references;
   @override
   Future<DonationDetail> createDonation({
+    String? clientId,
     required String title,
     required String description,
     required int categoryId,

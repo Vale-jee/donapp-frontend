@@ -71,6 +71,7 @@ void main() {
       ),
     );
     final result = await service.createDonation(
+      clientId: '550e8400-e29b-41d4-a716-446655440000',
       title: 'Mesa para donar',
       description: 'Mesa de madera en buen estado para donar.',
       categoryId: 4,
@@ -86,6 +87,7 @@ void main() {
       'https://images.test/1.jpg',
       'https://images.test/2.jpg',
     ]);
+    expect(body['clientId'], '550e8400-e29b-41d4-a716-446655440000');
     expect(result.id, 4);
   });
   test('envía token y query params correctos y parsea la lista', () async {

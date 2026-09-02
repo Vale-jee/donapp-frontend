@@ -33,6 +33,25 @@ class PendingOperationsDao extends DatabaseAccessor<AppDatabase>
             ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
           .get();
 
+  Future<int> recoverAbandonedProcessing({
+    required int cacheUserId,
+    required DateTime abandonedBefore,
+  }) =>
+      (update(pendingOperations)..where(
+            (row) =>
+                row.cacheUserId.equals(cacheUserId) &
+                row.state.equals(PendingOperationState.processing.name) &
+                (row.lastAttemptAt.isNull() |
+                    row.lastAttemptAt.isSmallerThanValue(abandonedBefore)),
+          ))
+          .write(
+            const PendingOperationsCompanion(
+              state: Value(PendingOperationState.pending),
+              nextAttemptAt: Value(null),
+              lastErrorCode: Value('ABANDONED_PROCESSING'),
+            ),
+          );
+
   Future<List<PendingOperation>> findByEntityClientId({
     required int cacheUserId,
     required String entityClientId,

@@ -13,6 +13,7 @@ class DonationService {
   final TokenStorage _tokenStorage;
 
   Future<DonationDetail> createDonation({
+    String? clientId,
     required String title,
     required String description,
     required int categoryId,
@@ -24,6 +25,7 @@ class DonationService {
         '/api/donaciones',
         headers: {..._headers(accessToken), 'Content-Type': 'application/json'},
         body: {
+          'clientId': ?clientId,
           'titulo': title,
           'descripcion': description,
           'categoriaId': categoryId,
