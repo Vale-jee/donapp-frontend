@@ -125,6 +125,8 @@ docs/
 ```
 
 Consulte también el [catálogo de componentes](docs/component_catalog.md).
+La información conservada en el dispositivo y sus exclusiones se describen en
+la [política de persistencia local](docs/local_persistence.md).
 
 ## Registro y Login
 
