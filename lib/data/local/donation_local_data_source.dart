@@ -57,6 +57,12 @@ class DonationLocalDataSource {
             .toList(growable: false),
       );
 
+  Stream<LocalCollectionMetadataData?> watchExploreMetadata(int cacheUserId) =>
+      (database.select(database.localCollectionMetadata)
+            ..where((row) => row.cacheUserId.equals(cacheUserId))
+            ..where((row) => row.collectionKey.equals('explore')))
+          .watchSingleOrNull();
+
   Future<bool> exploreNeedsRefresh({
     required int cacheUserId,
     required DateTime now,

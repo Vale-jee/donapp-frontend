@@ -13,6 +13,7 @@ import '../services/category_service.dart';
 import '../services/donation_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../theme/app_radius.dart';
 import '../widgets/app_content_state.dart';
 import '../widgets/donation_card.dart';
 
@@ -43,6 +44,7 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
   DonationRepository? _repository;
   StreamSubscription<List<DonationListItem>>? _donationsSubscription;
   StreamSubscription<List<Category>>? _categoriesSubscription;
+  StreamSubscription<ExploreCacheStatus?>? _cacheStatusSubscription;
   List<Category> _categories = const [];
   List<DonationListItem> _donations = const [];
   DonationPagination? _pagination;
@@ -51,6 +53,8 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
   bool _isLoadingMore = false;
   String? _errorMessage;
   String? _paginationError;
+  ExploreCacheStatus? _cacheStatus;
+  bool _refreshFailed = false;
 
   @override
   void initState() {
@@ -71,6 +75,11 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
         if (mounted) setState(() => _categories = categories);
       });
       _watchLocalDonations();
+      _cacheStatusSubscription = _repository!
+          .watchExploreStatus(widget.cacheUserId!)
+          .listen((status) {
+            if (mounted) setState(() => _cacheStatus = status);
+          });
     }
     _loadInitial();
   }
@@ -79,6 +88,7 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
   void dispose() {
     _donationsSubscription?.cancel();
     _categoriesSubscription?.cancel();
+    _cacheStatusSubscription?.cancel();
     unawaited(_repository?.close());
     _scrollController.dispose();
     super.dispose();
@@ -109,17 +119,24 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
                 if (mounted) setState(() => _pagination = page.pagination);
               }),
         ]);
-        if (mounted) setState(() => _isLoading = false);
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _refreshFailed = false;
+          });
+        }
       } on ApiException catch (error) {
         if (!mounted) return;
         setState(() {
           _isLoading = false;
+          _refreshFailed = true;
           if (_donations.isEmpty) _errorMessage = error.message;
         });
       } catch (_) {
         if (!mounted) return;
         setState(() {
           _isLoading = false;
+          _refreshFailed = true;
           if (_donations.isEmpty) {
             _errorMessage = 'No hay datos disponibles todavía sin conexión.';
           }
@@ -175,11 +192,15 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
           setState(() {
             _pagination = page.pagination;
             _paginationError = null;
+            _refreshFailed = false;
           });
         }
       } on ApiException catch (error) {
-        if (mounted && _donations.isEmpty) {
-          setState(() => _errorMessage = error.message);
+        if (mounted) {
+          setState(() {
+            _refreshFailed = true;
+            if (_donations.isEmpty) _errorMessage = error.message;
+          });
         }
       }
       return;
@@ -350,6 +371,15 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
                                   color: colors.textSecondary,
                                 ),
                               ),
+                              if (_donations.isNotEmpty &&
+                                  (_refreshFailed ||
+                                      (_cacheStatus?.isStale ?? false))) ...[
+                                SizedBox(height: spacing.medium),
+                                _ExploreFreshnessBanner(
+                                  refreshFailed: _refreshFailed,
+                                  lastSyncedAt: _cacheStatus?.lastSyncedAt,
+                                ),
+                              ],
                               SizedBox(height: spacing.large),
                               DropdownButtonFormField<int?>(
                                 key: const Key('categoryFilter'),
@@ -437,4 +467,88 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
       ),
     );
   }
+}
+
+class _ExploreFreshnessBanner extends StatelessWidget {
+  const _ExploreFreshnessBanner({
+    required this.refreshFailed,
+    required this.lastSyncedAt,
+  });
+
+  final bool refreshFailed;
+  final DateTime? lastSyncedAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final radius = theme.extension<AppRadius>() ?? const AppRadius();
+    final title = refreshFailed
+        ? 'No pudimos actualizar · mostrando datos guardados'
+        : 'Los datos pueden estar desactualizados';
+    final date = lastSyncedAt == null
+        ? null
+        : 'Última sincronización: ${_formatSyncDate(lastSyncedAt!, DateTime.now())}';
+    final semantics = date == null ? title : '$title. $date';
+    return Semantics(
+      key: const Key('exploreFreshnessIndicator'),
+      container: true,
+      label: semantics,
+      child: ExcludeSemantics(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.yellow400.withValues(alpha: 0.22),
+            borderRadius: BorderRadius.circular(radius.card),
+            border: Border.all(color: AppColors.beige500),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.info_outline, color: AppColors.darkGray),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: theme.textTheme.labelLarge),
+                      if (date != null) ...[
+                        const SizedBox(height: 2),
+                        Text(date, style: theme.textTheme.bodySmall),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _formatSyncDate(DateTime value, DateTime now) {
+  final local = value.toLocal();
+  final today = DateTime(now.year, now.month, now.day);
+  final date = DateTime(local.year, local.month, local.day);
+  final time =
+      '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  if (date == today) return 'hoy $time';
+  if (date == today.subtract(const Duration(days: 1))) return 'ayer $time';
+  const months = <String>[
+    'ene.',
+    'feb.',
+    'mar.',
+    'abr.',
+    'may.',
+    'jun.',
+    'jul.',
+    'ago.',
+    'sep.',
+    'oct.',
+    'nov.',
+    'dic.',
+  ];
+  return '${local.day} ${months[local.month - 1]}, $time';
 }

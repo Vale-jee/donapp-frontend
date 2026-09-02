@@ -6,6 +6,18 @@ import '../models/donation.dart';
 import '../services/category_service.dart';
 import '../services/donation_service.dart';
 
+class ExploreCacheStatus {
+  const ExploreCacheStatus({
+    required this.lastSyncedAt,
+    required this.expiresAt,
+    required this.isStale,
+  });
+
+  final DateTime lastSyncedAt;
+  final DateTime expiresAt;
+  final bool isStale;
+}
+
 class DonationRepository {
   DonationRepository(this._local, this._remote, {DateTime Function()? clock})
     : _clock = clock ?? DateTime.now;
@@ -34,6 +46,18 @@ class DonationRepository {
   }) => _local.watchExplore(cacheUserId: cacheUserId, categoryId: categoryId);
 
   Stream<List<Category>> watchCategories() => _local.watchCategories();
+
+  Stream<ExploreCacheStatus?> watchExploreStatus(int cacheUserId) => _local
+      .watchExploreMetadata(cacheUserId)
+      .map(
+        (metadata) => metadata == null
+            ? null
+            : ExploreCacheStatus(
+                lastSyncedAt: metadata.lastSyncedAt,
+                expiresAt: metadata.expiresAt,
+                isStale: metadata.expiresAt.isBefore(_clock()),
+              ),
+      );
 
   Future<bool> needsExploreRefresh(int cacheUserId) =>
       _local.exploreNeedsRefresh(cacheUserId: cacheUserId, now: _clock());
