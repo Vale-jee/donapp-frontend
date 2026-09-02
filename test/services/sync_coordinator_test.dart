@@ -30,6 +30,7 @@ void main() {
     String? managedPath,
     int attemptCount = 0,
     PendingOperationState operationState = PendingOperationState.pending,
+    DateTime? provisionalCreatedAt,
   }) async {
     final clientId = 'client-$suffix';
     final localId = await db
@@ -47,6 +48,7 @@ void main() {
             city: 'Bogotá',
             categoryId: 4,
             categoryName: 'Muebles',
+            createdAt: Value(provisionalCreatedAt),
           ),
         );
     await db
@@ -92,7 +94,8 @@ void main() {
   );
 
   test('éxito procesa y reconcilia la misma fila sin duplicarla', () async {
-    final seeded = await seed();
+    final provisionalCreatedAt = DateTime.utc(2020, 1, 1);
+    final seeded = await seed(provisionalCreatedAt: provisionalCreatedAt);
     final service = _DonationService((_) async => remoteDonation());
     final imageService = _ImageService();
     await coordinator(
@@ -114,12 +117,77 @@ void main() {
     expect(donations.single.remoteId, 42);
     expect(donations.single.syncState, DonationSyncState.synced);
     expect(donations.single.createdAt?.toUtc(), remoteDonation().createdAt);
+    expect(donations.single.createdAt, isNot(provisionalCreatedAt));
+    expect(
+      donations.single.serverUpdatedAt?.toUtc(),
+      remoteDonation().updatedAt,
+    );
+    expect(donations.single.lastSyncedAt?.toUtc(), now);
     expect(await db.select(db.localDonationMemberships).get(), hasLength(1));
     expect(imageService.calls, 0, reason: 'una URL remota no vuelve a subirse');
 
     await coordinator(donations: service).processPending(1);
     expect(service.calls, 1, reason: 'completed no debe reprocesarse');
   });
+
+  test(
+    'respuesta idempotente adopta tiempos del servidor y conserva IDs',
+    () async {
+      final seeded = await seed(
+        suffix: 'idempotent',
+        provisionalCreatedAt: DateTime.utc(2020, 1, 1),
+      );
+      final existingRemote = remoteDonation();
+
+      await coordinator(
+        donations: _DonationService((_) async => existingRemote),
+      ).processPending(1);
+
+      final saved = await db.select(db.localDonations).getSingle();
+      final operation = await db.pendingOperationsDao.findByOperationId(
+        seeded.operationId,
+      );
+      expect(saved.localId, seeded.localId);
+      expect(saved.clientId, 'client-idempotent');
+      expect(saved.createdAt?.toUtc(), existingRemote.createdAt);
+      expect(saved.serverUpdatedAt?.toUtc(), existingRemote.updatedAt);
+      expect(operation?.operationId, seeded.operationId);
+      expect(operation?.state, PendingOperationState.completed);
+      expect(await db.select(db.localDonations).get(), hasLength(1));
+    },
+  );
+
+  test(
+    'timestamp remoto ausente o inválido no reconcilia ni inventa fecha',
+    () async {
+      for (final suffix in ['missing-time', 'invalid-time']) {
+        final provisional = DateTime.utc(2020, 1, 1);
+        final seeded = await seed(
+          suffix: suffix,
+          provisionalCreatedAt: provisional,
+        );
+        final service = _DonationService(
+          (_) async => throw const FormatException('timestamp remoto inválido'),
+        );
+
+        await coordinator(donations: service).processPending(1);
+
+        final saved = await (db.select(
+          db.localDonations,
+        )..where((row) => row.localId.equals(seeded.localId))).getSingle();
+        final operation = await db.pendingOperationsDao.findByOperationId(
+          seeded.operationId,
+        );
+        expect(saved.remoteId, isNull);
+        expect(saved.createdAt?.toUtc(), provisional);
+        expect(saved.serverUpdatedAt, isNull);
+        expect(saved.syncState, DonationSyncState.failedRetryable);
+        expect(operation?.state, PendingOperationState.retryWait);
+        expect(operation?.lastErrorCode, 'SERVER');
+        expect(operation?.nextAttemptAt?.toUtc(), now.add(syncBackoff(1)));
+      }
+    },
+  );
 
   test('dos llamadas concurrentes procesan una sola vez', () async {
     await seed();

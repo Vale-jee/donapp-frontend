@@ -57,6 +57,7 @@ class LocalDonations extends Table {
   IntColumn get cacheUserId => integer()();
   TextColumn get clientId => text()();
   IntColumn get remoteId => integer().nullable()();
+  // Device-clock metadata used only to operate synchronization and the cache.
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
   DateTimeColumn get expiresAt => dateTime()();
   DateTimeColumn get detailExpiresAt => dateTime().nullable()();
@@ -71,8 +72,11 @@ class LocalDonations extends Table {
   TextColumn get categoryName => text()();
   TextColumn get mainImageUrl => text().nullable()();
   IntColumn get imageCount => integer().withDefault(const Constant(0))();
+  // While pending, createdAt may be provisional. Once confirmed, both fields
+  // below are server authority for business data and conflict resolution.
   DateTimeColumn get createdAt => dateTime().nullable()();
   DateTimeColumn get serverUpdatedAt => dateTime().nullable()();
+  // Device-clock metadata; never participates in business conflict decisions.
   DateTimeColumn get lastAccessedAt => dateTime().nullable()();
   @override
   List<Set<Column<Object>>> get uniqueKeys => [

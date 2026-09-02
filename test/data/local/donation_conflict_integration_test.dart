@@ -40,29 +40,33 @@ void main() {
         ),
       );
 
-  DonationPage page({required String title, required DateTime updatedAt}) =>
-      DonationPage(
-        donations: [
-          DonationListItem(
-            id: 10,
-            titulo: title,
-            ciudad: 'Bogotá',
-            estado: DonationStatus.publicada,
-            createdAt: localTimestamp.subtract(const Duration(days: 1)),
-            updatedAt: updatedAt,
-            categoriaId: 4,
-            categoriaNombre: 'Muebles',
-            imagenPrincipal: null,
-            cantidadImagenes: 0,
-          ),
-        ],
-        pagination: const DonationPagination(
-          page: 1,
-          limit: 20,
-          total: 1,
-          totalPages: 1,
-        ),
-      );
+  DonationPage page({
+    required String title,
+    required DateTime updatedAt,
+    DateTime? createdAt,
+  }) => DonationPage(
+    donations: [
+      DonationListItem(
+        id: 10,
+        titulo: title,
+        ciudad: 'Bogotá',
+        estado: DonationStatus.publicada,
+        createdAt:
+            createdAt ?? localTimestamp.subtract(const Duration(days: 1)),
+        updatedAt: updatedAt,
+        categoriaId: 4,
+        categoriaNombre: 'Muebles',
+        imagenPrincipal: null,
+        cantidadImagenes: 0,
+      ),
+    ],
+    pagination: const DonationPagination(
+      page: 1,
+      limit: 20,
+      total: 1,
+      totalPages: 1,
+    ),
+  );
 
   test('Explore no retrocede negocio pero siempre renueva caché', () async {
     final localId = await seed();
@@ -113,5 +117,32 @@ void main() {
     expect(saved.localId, localId);
     expect(saved.clientId, 'stable-client-id');
     expect(await db.select(db.localDonations).get(), hasLength(1));
+  });
+
+  test('Explore separa timestamps remotos de los del reloj local', () async {
+    final remoteCreatedAt = DateTime.utc(2024, 3, 4, 5, 6, 7);
+    final remoteUpdatedAt = DateTime.utc(2025, 4, 5, 6, 7, 8);
+    final localSyncedAt = DateTime.utc(2030, 1, 2, 3, 4, 5);
+    final localExpiresAt = localSyncedAt.add(const Duration(minutes: 30));
+
+    await source.storeExplorePage(
+      cacheUserId: 1,
+      page: page(
+        title: 'Autoridad remota',
+        createdAt: remoteCreatedAt,
+        updatedAt: remoteUpdatedAt,
+      ),
+      categoryId: null,
+      syncedAt: localSyncedAt,
+      expiresAt: localExpiresAt,
+    );
+
+    final saved = await db.select(db.localDonations).getSingle();
+    expect(saved.createdAt?.toUtc(), remoteCreatedAt);
+    expect(saved.serverUpdatedAt?.toUtc(), remoteUpdatedAt);
+    expect(saved.serverUpdatedAt, isNot(localSyncedAt));
+    expect(saved.lastSyncedAt?.toUtc(), localSyncedAt);
+    expect(saved.lastAccessedAt?.toUtc(), localSyncedAt);
+    expect(saved.expiresAt.toUtc(), localExpiresAt);
   });
 }

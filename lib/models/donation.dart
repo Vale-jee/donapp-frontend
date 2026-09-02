@@ -237,7 +237,12 @@ String _string(Map<String, dynamic> json, String key) {
 
 DateTime _date(Map<String, dynamic> json, String key) {
   final value = json[key];
-  final parsed = value is String ? DateTime.tryParse(value) : null;
+  // Business timestamps must identify an unambiguous server instant. Requiring
+  // an ISO-8601 offset prevents the device locale/time zone from becoming part
+  // of reconciliation or conflict resolution.
+  final hasExplicitZone =
+      value is String && RegExp(r'(?:Z|[+-]\d{2}:\d{2})$').hasMatch(value);
+  final parsed = hasExplicitZone ? DateTime.tryParse(value) : null;
   if (parsed == null) throw FormatException('$key tiene un formato inválido.');
-  return parsed;
+  return parsed.toUtc();
 }

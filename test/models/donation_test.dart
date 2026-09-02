@@ -41,6 +41,31 @@ void main() {
 
     expect(page.donations.single.imagenPrincipal, isNull);
   });
+
+  test('normaliza al mismo instante UTC sin truncar precisión', () {
+    final json = Map<String, dynamic>.from(_detailJson)
+      ..['createdAt'] = '2026-08-20T07:00:00.123456-05:00'
+      ..['updatedAt'] = '2026-08-21T14:30:00.654321+02:30';
+
+    final detail = DonationDetail.fromJson(json);
+
+    expect(detail.createdAt, DateTime.utc(2026, 8, 20, 12, 0, 0, 123, 456));
+    expect(detail.updatedAt, DateTime.utc(2026, 8, 21, 12, 0, 0, 654, 321));
+    expect(detail.createdAt.isUtc, isTrue);
+    expect(detail.updatedAt.isUtc, isTrue);
+  });
+
+  test('rechaza timestamps ausentes, inválidos o sin zona explícita', () {
+    for (final value in <Object?>[
+      null,
+      'fecha-inválida',
+      '2026-08-20T12:00:00',
+    ]) {
+      final json = Map<String, dynamic>.from(_detailJson)
+        ..['updatedAt'] = value;
+      expect(() => DonationDetail.fromJson(json), throwsFormatException);
+    }
+  });
 }
 
 const _detailJson = {
