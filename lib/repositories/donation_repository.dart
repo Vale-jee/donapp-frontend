@@ -1,5 +1,6 @@
 import '../data/local/app_database.dart';
 import '../data/local/donation_local_data_source.dart';
+import '../data/local/local_cache_policy.dart';
 import '../data/remote/donation_remote_data_source.dart';
 import '../models/category.dart';
 import '../models/donation.dart';
@@ -19,8 +20,12 @@ class ExploreCacheStatus {
 }
 
 class DonationRepository {
-  DonationRepository(this._local, this._remote, {DateTime Function()? clock})
-    : _clock = clock ?? DateTime.now;
+  DonationRepository(
+    this._local,
+    this._remote, {
+    DateTime Function()? clock,
+    this.cachePolicy = const LocalCachePolicy(),
+  }) : _clock = clock ?? DateTime.now;
 
   factory DonationRepository.create({
     required DonationService donationService,
@@ -33,11 +38,10 @@ class DonationRepository {
     ).._ownedDatabase = database;
   }
 
-  static const cacheLifetime = Duration(minutes: 30);
-  static const categoryCacheLifetime = Duration(hours: 24);
   final DonationLocalDataSource _local;
   final DonationRemoteDataSource _remote;
   final DateTime Function() _clock;
+  final LocalCachePolicy cachePolicy;
   AppDatabase? _ownedDatabase;
 
   Stream<List<DonationListItem>> watchExplore({
@@ -55,7 +59,10 @@ class DonationRepository {
             : ExploreCacheStatus(
                 lastSyncedAt: metadata.lastSyncedAt,
                 expiresAt: metadata.expiresAt,
-                isStale: metadata.expiresAt.isBefore(_clock()),
+                isStale: cachePolicy.isStale(
+                  expiresAt: metadata.expiresAt,
+                  now: _clock(),
+                ),
               ),
       );
 
@@ -79,7 +86,7 @@ class DonationRepository {
       page: result,
       categoryId: categoryId,
       syncedAt: now,
-      expiresAt: now.add(cacheLifetime),
+      expiresAt: cachePolicy.expiresAt(now, cachePolicy.exploreTtl),
     );
     return result;
   }
@@ -90,7 +97,7 @@ class DonationRepository {
     await _local.storeCategories(
       categories,
       syncedAt: now,
-      expiresAt: now.add(categoryCacheLifetime),
+      expiresAt: cachePolicy.expiresAt(now, cachePolicy.categoriesTtl),
     );
   }
 

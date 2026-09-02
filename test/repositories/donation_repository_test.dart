@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:donapp_mobile/data/local/app_database.dart';
 import 'package:donapp_mobile/data/local/donation_local_data_source.dart';
+import 'package:donapp_mobile/data/local/local_cache_policy.dart';
 import 'package:donapp_mobile/data/local/tables/local_tables.dart';
 import 'package:donapp_mobile/data/remote/donation_remote_data_source.dart';
 import 'package:donapp_mobile/models/category.dart';
@@ -73,6 +74,44 @@ void main() {
       throwsA(_networkError),
     );
     expect(await failing.watchExplore(cacheUserId: 1).first, hasLength(1));
+    final metadata = await db.select(db.localCollectionMetadata).getSingle();
+    expect(metadata.lastSyncedAt.toUtc(), now);
+    expect(
+      metadata.expiresAt.toUtc(),
+      now.add(const LocalCachePolicy().exploreTtl),
+    );
+  });
+
+  test('Explore calcula y renueva TTL desde el reloj local', () async {
+    var clockNow = now;
+    final remoteBusinessTime = DateTime.utc(2020, 1, 1);
+    final repo = DonationRepository(
+      local,
+      DonationRemoteDataSource(
+        _DonationService((_) async => _page(updatedAt: remoteBusinessTime)),
+        _CategoryService(),
+      ),
+      clock: () => clockNow,
+    );
+
+    await repo.refreshExplore(cacheUserId: 1);
+    var metadata = await db.select(db.localCollectionMetadata).getSingle();
+    expect(metadata.lastSyncedAt.toUtc(), clockNow);
+    expect(
+      metadata.expiresAt.toUtc(),
+      clockNow.add(repo.cachePolicy.exploreTtl),
+    );
+    expect(metadata.expiresAt, isNot(remoteBusinessTime));
+
+    clockNow = clockNow.add(const Duration(minutes: 10));
+    await repo.refreshExplore(cacheUserId: 1);
+    metadata = await db.select(db.localCollectionMetadata).getSingle();
+    expect(metadata.lastSyncedAt.toUtc(), clockNow);
+    expect(
+      metadata.expiresAt.toUtc(),
+      clockNow.add(repo.cachePolicy.exploreTtl),
+      reason: 'un contenido remoto sin cambios también renueva la vigencia',
+    );
   });
 
   test('local vacío y backend fallido permanece sin contenido', () async {
@@ -121,6 +160,11 @@ void main() {
     () async {
       final successful = repository(_DonationService((_) async => _page()));
       await successful.refreshCategories();
+      final beforeFailure = await db.select(db.localCategories).getSingle();
+      expect(
+        beforeFailure.expiresAt.toUtc(),
+        now.add(const LocalCachePolicy().categoriesTtl),
+      );
       expect(
         (await successful.watchCategories().first).single.nombre,
         'Muebles',
@@ -132,6 +176,9 @@ void main() {
       );
       await expectLater(failing.refreshCategories(), throwsA(_networkError));
       expect(await failing.watchCategories().first, hasLength(1));
+      final afterFailure = await db.select(db.localCategories).getSingle();
+      expect(afterFailure.lastSyncedAt, beforeFailure.lastSyncedAt);
+      expect(afterFailure.expiresAt, beforeFailure.expiresAt);
     },
   );
 }
