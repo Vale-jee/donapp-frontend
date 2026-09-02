@@ -28,4 +28,6 @@ class DatabaseKeyStorage {
     await _storage.write(key: storageKey, value: base64UrlEncode(key));
     return key;
   }
+
+  Future<void> deleteKey() => _storage.delete(key: storageKey);
 }

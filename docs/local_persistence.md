@@ -59,3 +59,19 @@ para una limpieza futura; esta clasificación no elimina datos.
 Un refresh exitoso renueva `lastSyncedAt` y `expiresAt`, incluso cuando el
 contenido remoto no cambió. Un error remoto conserva ambos valores anteriores y
 no renueva artificialmente la caché.
+
+## Cierre de sesión
+
+Cerrar sesión invalida inmediatamente el estado autenticado en memoria y ejecuta
+una limpieza local completa. Primero bloquea nuevas sincronizaciones y espera la
+operación activa; luego cierra Drift y elimina `donapp.sqlite` junto con sus
+sidecars `-wal`, `-shm` y `-journal`. También elimina imágenes privadas
+administradas, la clave SQLCipher, el access token y el refresh token.
+
+La revocación remota se intenta después de destruir el acceso local, por lo que
+un fallo de red no impide el logout. Las operaciones y donaciones todavía
+pendientes se pierden deliberadamente al eliminar la base por privacidad. Una
+nueva sesión crea una base vacía y una clave criptográfica nueva.
+
+Android Auto Backup está deshabilitado para impedir que la base, imágenes o
+secretos se restauren separados de su contexto criptográfico.

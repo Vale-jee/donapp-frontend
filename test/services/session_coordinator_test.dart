@@ -5,6 +5,7 @@ import 'package:donapp_mobile/models/user_profile.dart';
 import 'package:donapp_mobile/services/api_exception.dart';
 import 'package:donapp_mobile/services/auth_state_controller.dart';
 import 'package:donapp_mobile/services/auth_service.dart';
+import 'package:donapp_mobile/services/local_session_cleanup.dart';
 import 'package:donapp_mobile/services/profile_service.dart';
 import 'package:donapp_mobile/services/session_coordinator.dart';
 import 'package:donapp_mobile/services/token_storage.dart';
@@ -349,13 +350,38 @@ void main() {
       final storage = _completeStorage();
       final auth = _FakeAuthService(logoutError: _network);
 
-      await expectLater(
-        _coordinator(storage: storage, authService: auth).logout(),
-        throwsA(same(_network)),
-      );
+      await _coordinator(storage: storage, authService: auth).logout();
       expect(storage.clearCount, 1);
       expect(storage.accessToken, isNull);
       expect(storage.refreshToken, isNull);
+    });
+
+    test('dos llamadas cercanas comparten una sola limpieza', () async {
+      final storage = _completeStorage();
+      final cleanup = _FakeLocalSessionCleanup();
+      final coordinator = _coordinator(storage: storage, cleanup: cleanup);
+
+      await Future.wait([coordinator.logout(), coordinator.logout()]);
+
+      expect(cleanup.calls, 1);
+      expect(storage.clearCount, 1);
+    });
+
+    test('AuthState elimina el perfil antes de esperar la limpieza', () async {
+      final pendingCleanup = Completer<void>();
+      final coordinator = _coordinator(
+        storage: _completeStorage(),
+        cleanup: _FakeLocalSessionCleanup(pendingCleanup.future),
+      );
+      final authState = AuthStateController(sessionCoordinator: coordinator)
+        ..authenticated(_profile);
+      addTearDown(authState.dispose);
+
+      final logout = authState.logout();
+      expect(authState.status, AuthStatus.unauthenticated);
+      expect(authState.profile, isNull);
+      pendingCleanup.complete();
+      await logout;
     });
   });
 }
@@ -364,13 +390,28 @@ SessionCoordinator _coordinator({
   required _FakeTokenStorage storage,
   _FakeAuthService? authService,
   _FakeProfileService? profileService,
+  LocalSessionCleanup? cleanup,
 }) {
   return SessionCoordinator(
     tokenStorage: storage,
     authService: authService ?? _FakeAuthService(),
     profileService:
         profileService ?? _FakeProfileService((_) async => _profile),
+    localSessionCleanup: cleanup ?? _FakeLocalSessionCleanup(),
   );
+}
+
+class _FakeLocalSessionCleanup extends LocalSessionCleanup {
+  _FakeLocalSessionCleanup([this.completion]);
+
+  final Future<void>? completion;
+  int calls = 0;
+
+  @override
+  Future<void> clear() async {
+    calls++;
+    await completion;
+  }
 }
 
 _FakeTokenStorage _completeStorage() =>

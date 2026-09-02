@@ -2,6 +2,7 @@ import '../models/user_profile.dart';
 import 'api_client.dart';
 import 'api_exception.dart';
 import 'auth_service.dart';
+import 'local_session_cleanup.dart';
 import 'profile_service.dart';
 import 'token_storage.dart';
 
@@ -31,15 +32,19 @@ class SessionCoordinator implements SessionRecovery {
     AuthService? authService,
     ProfileService? profileService,
     TokenStorage? tokenStorage,
+    LocalSessionCleanup? localSessionCleanup,
   }) : _authService = authService ?? AuthService(),
        _profileService = profileService ?? ProfileService(),
-       _tokenStorage = tokenStorage ?? TokenStorage();
+       _tokenStorage = tokenStorage ?? TokenStorage(),
+       _localSessionCleanup = localSessionCleanup ?? LocalSessionCleanup();
 
   final AuthService _authService;
   final ProfileService _profileService;
   final TokenStorage _tokenStorage;
+  final LocalSessionCleanup _localSessionCleanup;
   Future<SessionRestoreResult>? _restoreInProgress;
   Future<String>? _refreshInProgress;
+  Future<void>? _logoutInProgress;
   final List<void Function()> _sessionInvalidatedListeners = [];
 
   TokenStorage get tokenStorage => _tokenStorage;
@@ -198,12 +203,35 @@ class SessionCoordinator implements SessionRecovery {
     }
   }
 
-  Future<void> logout() async {
-    final refreshToken = await _tokenStorage.readRefreshToken();
+  Future<void> logout() {
+    final active = _logoutInProgress;
+    if (active != null) return active;
+    final logout = _logout();
+    _logoutInProgress = logout;
+    return logout.whenComplete(() {
+      if (identical(_logoutInProgress, logout)) _logoutInProgress = null;
+    });
+  }
+
+  Future<void> _logout() async {
+    String? refreshToken;
     try {
-      if (refreshToken != null) await _authService.logout(refreshToken);
-    } finally {
+      refreshToken = await _tokenStorage.readRefreshToken();
+    } on Object {
+      // Continue with local destruction even if secure storage cannot be read.
+    }
+    await _localSessionCleanup.clear();
+    try {
       await _tokenStorage.clearTokens();
+    } on Object {
+      // Local cleanup is best-effort and never restores already deleted data.
+    }
+    if (refreshToken != null) {
+      try {
+        await _authService.logout(refreshToken);
+      } on Object {
+        // Remote revocation is optional; local privacy must work without network.
+      }
     }
   }
 

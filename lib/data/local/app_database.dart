@@ -27,8 +27,38 @@ part 'app_database.g.dart';
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase({DatabaseKeyStorage? keyStorage})
-    : super(_openDatabase(keyStorage ?? DatabaseKeyStorage()));
+    : super(_openDatabase(keyStorage ?? DatabaseKeyStorage())) {
+    _openInstances.add(this);
+  }
   AppDatabase.forTesting(super.executor);
+
+  static final Set<AppDatabase> _openInstances = {};
+
+  static Future<File> databaseFile() async {
+    final directory = await getApplicationSupportDirectory();
+    return File(p.join(directory.path, 'donapp.sqlite'));
+  }
+
+  static Future<Set<String>> managedLocalImagePaths() async {
+    final paths = <String>{};
+    for (final database in List<AppDatabase>.of(_openInstances)) {
+      final rows = await database.select(database.localDonationImages).get();
+      paths.addAll(rows.map((row) => row.managedLocalPath).whereType<String>());
+    }
+    return paths;
+  }
+
+  static Future<void> closeOpenInstances() async {
+    for (final database in List<AppDatabase>.of(_openInstances)) {
+      await database.close();
+    }
+  }
+
+  @override
+  Future<void> close() {
+    _openInstances.remove(this);
+    return super.close();
+  }
 
   @override
   int get schemaVersion => 3;
@@ -52,12 +82,8 @@ class AppDatabase extends _$AppDatabase {
 
 LazyDatabase _openDatabase(DatabaseKeyStorage keyStorage) =>
     LazyDatabase(() async {
-      final directory = await getApplicationSupportDirectory();
       final key = await keyStorage.getOrCreateKey();
-      return openEncryptedNativeDatabase(
-        File(p.join(directory.path, 'donapp.sqlite')),
-        key,
-      );
+      return openEncryptedNativeDatabase(await AppDatabase.databaseFile(), key);
     });
 
 NativeDatabase openEncryptedNativeDatabase(File file, Uint8List key) {

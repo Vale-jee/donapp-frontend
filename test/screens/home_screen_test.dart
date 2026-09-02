@@ -6,6 +6,7 @@ import 'package:donapp_mobile/screens/home_screen.dart';
 import 'package:donapp_mobile/screens/welcome_screen.dart';
 import 'package:donapp_mobile/services/api_exception.dart';
 import 'package:donapp_mobile/services/auth_service.dart';
+import 'package:donapp_mobile/services/local_session_cleanup.dart';
 import 'package:donapp_mobile/services/session_coordinator.dart';
 import 'package:donapp_mobile/services/token_storage.dart';
 import 'package:donapp_mobile/theme/app_theme.dart';
@@ -171,6 +172,7 @@ void main() {
     final coordinator = SessionCoordinator(
       authService: _LogoutAuthService(error: _networkError),
       tokenStorage: storage,
+      localSessionCleanup: _NoopLocalSessionCleanup(),
     );
     await tester.pumpWidget(
       _app(HomeScreen(profile: _profile, sessionCoordinator: coordinator)),
@@ -282,4 +284,9 @@ class _LogoutTokenStorage extends TokenStorage {
   Future<void> clearTokens() async {
     clearCount++;
   }
+}
+
+class _NoopLocalSessionCleanup extends LocalSessionCleanup {
+  @override
+  Future<void> clear() async {}
 }

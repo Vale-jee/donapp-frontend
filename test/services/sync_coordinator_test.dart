@@ -207,6 +207,29 @@ void main() {
     expect(service.calls, 1);
   });
 
+  test(
+    'shutdown espera el sync activo y bloquea escrituras posteriores',
+    () async {
+      await seed();
+      final response = Completer<DonationDetail>();
+      final service = _DonationService((_) => response.future);
+      final sync = coordinator(donations: service);
+      final processing = sync.processPending(1);
+      await Future<void>.delayed(Duration.zero);
+
+      final shutdown = sync.shutdown();
+      response.complete(remoteDonation());
+      await Future.wait([processing, shutdown]);
+      expect(
+        (await db.select(db.localDonations).getSingle()).syncState,
+        DonationSyncState.synced,
+      );
+
+      await sync.processPending(1);
+      expect(service.calls, 1);
+    },
+  );
+
   test('error recuperable persiste backoff creciente', () async {
     final seeded = await seed();
     final service = _DonationService(

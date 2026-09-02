@@ -32,7 +32,11 @@ class SyncCoordinator {
     Future<void> Function(String path)? deleteManagedFile,
     this.conflictResolver = const ConflictResolver(),
   }) : _clock = clock ?? DateTime.now,
-       _deleteManagedFile = deleteManagedFile ?? _deleteFile;
+       _deleteManagedFile = deleteManagedFile ?? _deleteFile {
+    _instances.add(this);
+  }
+
+  static final Set<SyncCoordinator> _instances = {};
 
   final AppDatabase database;
   final DonationService donationService;
@@ -41,8 +45,22 @@ class SyncCoordinator {
   final Future<void> Function(String path) _deleteManagedFile;
   final ConflictResolver conflictResolver;
   Future<void>? _activeSync;
+  bool _acceptingWork = true;
+
+  static Future<void> shutdownAll() async {
+    for (final coordinator in List<SyncCoordinator>.of(_instances)) {
+      await coordinator.shutdown();
+    }
+  }
+
+  Future<void> shutdown() async {
+    _acceptingWork = false;
+    await _activeSync;
+    _instances.remove(this);
+  }
 
   Future<void> processPending(int cacheUserId) {
+    if (!_acceptingWork) return Future<void>.value();
     final active = _activeSync;
     if (active != null) return active;
     final run = _processPending(cacheUserId);

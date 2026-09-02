@@ -70,11 +70,12 @@ class AuthStateController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    _explicitLogoutPending = true;
+    _setState(AuthStatus.unauthenticated);
     try {
       await _sessionCoordinator.logout();
-    } finally {
-      _explicitLogoutPending = true;
-      _setState(AuthStatus.unauthenticated);
+    } on Object {
+      // The local session is invalidated even if a best-effort cleanup stage fails.
     }
   }
 
