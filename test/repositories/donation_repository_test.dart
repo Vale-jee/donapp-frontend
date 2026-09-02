@@ -37,11 +37,15 @@ void main() {
     'respuesta remota se guarda, actualiza membresía y no duplica',
     () async {
       var title = 'Mesa inicial';
+      var updatedAt = DateTime.utc(2026, 8, 21);
       final repo = repository(
-        _DonationService((_) async => _page(title: title)),
+        _DonationService(
+          (_) async => _page(title: title, updatedAt: updatedAt),
+        ),
       );
       await repo.refreshExplore(cacheUserId: 1);
       title = 'Mesa actualizada';
+      updatedAt = updatedAt.add(const Duration(seconds: 1));
       await repo.refreshExplore(cacheUserId: 1);
 
       final cached = await repo.watchExplore(cacheUserId: 1).first;
@@ -163,27 +167,28 @@ class _CategoryService extends CategoryService {
   }
 }
 
-DonationPage _page({String title = 'Mesa', int id = 10}) => DonationPage(
-  donations: [
-    DonationListItem(
-      id: id,
-      titulo: title,
-      ciudad: 'Bogotá',
-      estado: DonationStatus.publicada,
-      createdAt: DateTime.utc(2026, 8, 20),
-      updatedAt: DateTime.utc(2026, 8, 21),
-      categoriaId: 4,
-      categoriaNombre: 'Muebles',
-      imagenPrincipal: null,
-      cantidadImagenes: 0,
-    ),
-  ],
-  pagination: const DonationPagination(
-    page: 1,
-    limit: 20,
-    total: 1,
-    totalPages: 1,
-  ),
-);
+DonationPage _page({String title = 'Mesa', int id = 10, DateTime? updatedAt}) =>
+    DonationPage(
+      donations: [
+        DonationListItem(
+          id: id,
+          titulo: title,
+          ciudad: 'Bogotá',
+          estado: DonationStatus.publicada,
+          createdAt: DateTime.utc(2026, 8, 20),
+          updatedAt: updatedAt ?? DateTime.utc(2026, 8, 21),
+          categoriaId: 4,
+          categoriaNombre: 'Muebles',
+          imagenPrincipal: null,
+          cantidadImagenes: 0,
+        ),
+      ],
+      pagination: const DonationPagination(
+        page: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+      ),
+    );
 
 const _networkError = ApiException(ApiErrorType.network, 'Sin conexión');

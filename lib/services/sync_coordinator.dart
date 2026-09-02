@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../data/local/app_database.dart';
+import '../data/local/conflict_resolver.dart';
 import '../data/local/tables/local_tables.dart';
 import '../models/donation.dart';
 import 'api_exception.dart';
@@ -29,6 +30,7 @@ class SyncCoordinator {
     required this.imageUploadService,
     DateTime Function()? clock,
     Future<void> Function(String path)? deleteManagedFile,
+    this.conflictResolver = const ConflictResolver(),
   }) : _clock = clock ?? DateTime.now,
        _deleteManagedFile = deleteManagedFile ?? _deleteFile;
 
@@ -37,6 +39,7 @@ class SyncCoordinator {
   final ImageUploadService imageUploadService;
   final DateTime Function() _clock;
   final Future<void> Function(String path) _deleteManagedFile;
+  final ConflictResolver conflictResolver;
   Future<void>? _activeSync;
 
   Future<void> processPending(int cacheUserId) {
@@ -171,6 +174,15 @@ class SyncCoordinator {
     List<LocalDonationImage> images,
     DonationDetail remote,
   ) async {
+    final conflictDecision = conflictResolver.resolveConfirmedCreation(
+      remoteServerUpdatedAt: remote.updatedAt,
+    );
+    if (conflictDecision != ConflictDecision.applyRemote) {
+      throw const ApiException(
+        ApiErrorType.unexpectedResponse,
+        'La respuesta no contiene una versión válida del servidor.',
+      );
+    }
     final syncedAt = _clock();
     final managedPaths = images
         .map((image) => image.managedLocalPath)

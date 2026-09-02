@@ -3,12 +3,17 @@ import 'package:drift/drift.dart';
 import '../../models/category.dart';
 import '../../models/donation.dart';
 import 'app_database.dart';
+import 'conflict_resolver.dart';
 import 'tables/local_tables.dart';
 
 class DonationLocalDataSource {
-  DonationLocalDataSource(this.database);
+  DonationLocalDataSource(
+    this.database, {
+    this.conflictResolver = const ConflictResolver(),
+  });
 
   final AppDatabase database;
+  final ConflictResolver conflictResolver;
 
   Stream<List<DonationListItem>> watchExplore({
     required int cacheUserId,
@@ -127,25 +132,36 @@ class DonationLocalDataSource {
                 ..where((row) => row.cacheUserId.equals(cacheUserId))
                 ..where((row) => row.remoteId.equals(donation.id)))
               .getSingleOrNull();
-      final companion = LocalDonationsCompanion(
+      final cacheMetadata = LocalDonationsCompanion(
         cacheUserId: Value(cacheUserId),
         clientId: Value(existing?.clientId ?? 'remote-${donation.id}'),
-        remoteId: Value(donation.id),
         lastSyncedAt: Value(syncedAt),
         expiresAt: Value(expiresAt),
-        syncState: const Value(DonationSyncState.synced),
-        locallyDeleted: const Value(false),
-        title: Value(donation.titulo),
-        city: Value(donation.ciudad),
-        status: Value(donation.estado.apiValue),
-        categoryId: Value(donation.categoriaId),
-        categoryName: Value(donation.categoriaNombre),
-        mainImageUrl: Value(donation.imagenPrincipal?.referencia),
-        imageCount: Value(donation.cantidadImagenes),
-        createdAt: Value(donation.createdAt),
-        serverUpdatedAt: Value(donation.updatedAt),
         lastAccessedAt: Value(syncedAt),
       );
+      final decision = existing == null
+          ? ConflictDecision.applyRemote
+          : conflictResolver.resolveDonation(
+              localSyncState: existing.syncState,
+              localServerUpdatedAt: existing.serverUpdatedAt,
+              remoteServerUpdatedAt: donation.updatedAt,
+            );
+      final companion = decision == ConflictDecision.applyRemote
+          ? cacheMetadata.copyWith(
+              remoteId: Value(donation.id),
+              syncState: const Value(DonationSyncState.synced),
+              locallyDeleted: const Value(false),
+              title: Value(donation.titulo),
+              city: Value(donation.ciudad),
+              status: Value(donation.estado.apiValue),
+              categoryId: Value(donation.categoriaId),
+              categoryName: Value(donation.categoriaNombre),
+              mainImageUrl: Value(donation.imagenPrincipal?.referencia),
+              imageCount: Value(donation.cantidadImagenes),
+              createdAt: Value(donation.createdAt),
+              serverUpdatedAt: Value(donation.updatedAt),
+            )
+          : cacheMetadata;
       final localId = existing == null
           ? await database.into(database.localDonations).insert(companion)
           : existing.localId;
