@@ -15,6 +15,8 @@ void main() {
   late File databaseFile;
   late Directory managedImagesDirectory;
   late File managedImage;
+  late Directory cachedImagesDirectory;
+  late File cachedImage;
 
   setUp(() async {
     FlutterSecureStorage.setMockInitialValues({
@@ -30,6 +32,12 @@ void main() {
     await managedImagesDirectory.create();
     managedImage = File('${managedImagesDirectory.path}/pending.jpg');
     await managedImage.writeAsBytes([1, 2, 3]);
+    cachedImagesDirectory = Directory(
+      '${temporaryDirectory.path}/remote_donation_images',
+    );
+    await cachedImagesDirectory.create();
+    cachedImage = File('${cachedImagesDirectory.path}/cached.image');
+    await cachedImage.writeAsBytes([4, 5, 6]);
   });
 
   tearDown(() async {
@@ -45,10 +53,11 @@ void main() {
     final events = <String>[];
     final cleanup = LocalSessionCleanup(
       shutdownSync: () async => events.add('sync'),
-      managedImagePaths: () async => {managedImage.path},
+      managedImagePaths: () async => {managedImage.path, cachedImage.path},
       closeDatabases: () async => events.add('database'),
       databaseFile: () async => databaseFile,
       managedImagesDirectory: () async => managedImagesDirectory,
+      cachedImagesDirectory: () async => cachedImagesDirectory,
     );
 
     await cleanup.clear();
@@ -59,6 +68,7 @@ void main() {
     }
     expect(await managedImage.exists(), isFalse);
     expect(await managedImagesDirectory.exists(), isFalse);
+    expect(await cachedImagesDirectory.exists(), isFalse);
     expect(
       await const FlutterSecureStorage().read(
         key: DatabaseKeyStorage.storageKey,
@@ -87,6 +97,7 @@ void main() {
       closeDatabases: () async {},
       databaseFile: () async => databaseFile,
       managedImagesDirectory: () async => managedImagesDirectory,
+      cachedImagesDirectory: () async => cachedImagesDirectory,
     ).clear();
 
     final newKey = await DatabaseKeyStorage().getOrCreateKey();

@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../data/local/app_database.dart';
 import '../data/local/database_key_storage.dart';
+import 'remote_image_cache.dart';
 import 'sync_coordinator.dart';
 
 class LocalSessionCleanup {
@@ -15,6 +16,7 @@ class LocalSessionCleanup {
     Future<void> Function()? closeDatabases,
     Future<File> Function()? databaseFile,
     Future<Directory> Function()? managedImagesDirectory,
+    Future<Directory> Function()? cachedImagesDirectory,
   }) : _keyStorage = keyStorage ?? DatabaseKeyStorage(),
        _shutdownSync = shutdownSync ?? SyncCoordinator.shutdownAll,
        _managedImagePaths =
@@ -22,7 +24,9 @@ class LocalSessionCleanup {
        _closeDatabases = closeDatabases ?? AppDatabase.closeOpenInstances,
        _databaseFile = databaseFile ?? AppDatabase.databaseFile,
        _managedImagesDirectory =
-           managedImagesDirectory ?? _defaultManagedImagesDirectory;
+           managedImagesDirectory ?? _defaultManagedImagesDirectory,
+       _cachedImagesDirectory =
+           cachedImagesDirectory ?? RemoteImageCache.defaultDirectory;
 
   static const managedImagesDirectoryName = 'pending_donation_images';
   final DatabaseKeyStorage _keyStorage;
@@ -31,6 +35,7 @@ class LocalSessionCleanup {
   final Future<void> Function() _closeDatabases;
   final Future<File> Function() _databaseFile;
   final Future<Directory> Function() _managedImagesDirectory;
+  final Future<Directory> Function() _cachedImagesDirectory;
 
   /// Best-effort cleanup: every stage runs even if an earlier deletion fails.
   Future<void> clear() async {
@@ -56,6 +61,10 @@ class LocalSessionCleanup {
     }
     await _bestEffort(() async {
       final directory = await _managedImagesDirectory();
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
+    await _bestEffort(() async {
+      final directory = await _cachedImagesDirectory();
       if (await directory.exists()) await directory.delete(recursive: true);
     });
     await _bestEffort(_keyStorage.deleteKey);

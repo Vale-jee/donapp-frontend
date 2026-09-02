@@ -1,6 +1,10 @@
-import 'package:drift/drift.dart';
+import 'dart:io';
+
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 import 'package:donapp_mobile/data/local/app_database.dart';
 import 'package:donapp_mobile/data/local/donation_local_data_source.dart';
@@ -13,6 +17,7 @@ import 'package:donapp_mobile/repositories/donation_repository.dart';
 import 'package:donapp_mobile/services/api_exception.dart';
 import 'package:donapp_mobile/services/category_service.dart';
 import 'package:donapp_mobile/services/donation_service.dart';
+import 'package:donapp_mobile/services/remote_image_cache.dart';
 
 void main() {
   late AppDatabase db;
@@ -28,10 +33,12 @@ void main() {
   DonationRepository repository(
     _DonationService service, {
     CategoryService? categories,
+    RemoteImageCache? imageCache,
   }) => DonationRepository(
     local,
     DonationRemoteDataSource(service, categories ?? _CategoryService()),
     clock: () => now,
+    imageCache: imageCache,
   );
 
   test(
@@ -80,6 +87,28 @@ void main() {
       metadata.expiresAt.toUtc(),
       now.add(const LocalCachePolicy().exploreTtl),
     );
+  });
+
+  test('asocia la copia descargada sin guardar bytes en SQLite', () async {
+    final directory = await Directory.systemTemp.createTemp('donapp-cache-');
+    addTearDown(() => directory.delete(recursive: true));
+    final repo = repository(
+      _DonationService((_) async => _page(withImage: true)),
+      imageCache: RemoteImageCache(
+        client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)),
+        cacheDirectory: () async => directory,
+      ),
+    );
+
+    await repo.refreshExplore(cacheUserId: 1);
+
+    final stored = await db.select(db.localDonationImages).getSingle();
+    expect(stored.remoteUrl, 'https://images.test/mesa.jpg');
+    expect(stored.managedLocalPath, isNull);
+    expect(stored.cachedLocalPath, isNotNull);
+    expect(await File(stored.cachedLocalPath!).readAsBytes(), [1, 2, 3]);
+    final model = (await repo.watchExplore(cacheUserId: 1).first).single;
+    expect(model.imagenPrincipal?.cachedLocalPath, stored.cachedLocalPath);
   });
 
   test('Explore calcula y renueva TTL desde el reloj local', () async {
@@ -214,28 +243,38 @@ class _CategoryService extends CategoryService {
   }
 }
 
-DonationPage _page({String title = 'Mesa', int id = 10, DateTime? updatedAt}) =>
-    DonationPage(
-      donations: [
-        DonationListItem(
-          id: id,
-          titulo: title,
-          ciudad: 'Bogotá',
-          estado: DonationStatus.publicada,
-          createdAt: DateTime.utc(2026, 8, 20),
-          updatedAt: updatedAt ?? DateTime.utc(2026, 8, 21),
-          categoriaId: 4,
-          categoriaNombre: 'Muebles',
-          imagenPrincipal: null,
-          cantidadImagenes: 0,
-        ),
-      ],
-      pagination: const DonationPagination(
-        page: 1,
-        limit: 20,
-        total: 1,
-        totalPages: 1,
-      ),
-    );
+DonationPage _page({
+  String title = 'Mesa',
+  int id = 10,
+  DateTime? updatedAt,
+  bool withImage = false,
+}) => DonationPage(
+  donations: [
+    DonationListItem(
+      id: id,
+      titulo: title,
+      ciudad: 'Bogotá',
+      estado: DonationStatus.publicada,
+      createdAt: DateTime.utc(2026, 8, 20),
+      updatedAt: updatedAt ?? DateTime.utc(2026, 8, 21),
+      categoriaId: 4,
+      categoriaNombre: 'Muebles',
+      imagenPrincipal: withImage
+          ? const DonationImage(
+              id: 20,
+              referencia: 'https://images.test/mesa.jpg',
+              orden: 0,
+            )
+          : null,
+      cantidadImagenes: withImage ? 1 : 0,
+    ),
+  ],
+  pagination: const DonationPagination(
+    page: 1,
+    limit: 20,
+    total: 1,
+    totalPages: 1,
+  ),
+);
 
 const _networkError = ApiException(ApiErrorType.network, 'Sin conexión');

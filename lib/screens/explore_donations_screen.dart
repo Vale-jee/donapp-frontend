@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -108,7 +109,13 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
     if (repository != null) {
       try {
         await Future.wait<void>([
-          repository.refreshCategories(),
+          repository.refreshCategories().onError((error, stackTrace) {
+            _showCachedDataWarning();
+            Error.throwWithStackTrace(
+              error ?? StateError('Falló la actualización de categorías.'),
+              stackTrace,
+            );
+          }),
           repository
               .refreshExplore(
                 cacheUserId: widget.cacheUserId!,
@@ -117,8 +124,15 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
               )
               .then((page) {
                 if (mounted) setState(() => _pagination = page.pagination);
+              })
+              .onError((error, stackTrace) {
+                _showCachedDataWarning();
+                Error.throwWithStackTrace(
+                  error ?? StateError('Falló la actualización de donaciones.'),
+                  stackTrace,
+                );
               }),
-        ]);
+        ], eagerError: true);
         if (mounted) {
           setState(() {
             _isLoading = false;
@@ -202,6 +216,8 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
             if (_donations.isEmpty) _errorMessage = error.message;
           });
         }
+      } catch (_) {
+        _showCachedDataWarning();
       }
       return;
     }
@@ -306,10 +322,11 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
   }
 
   ImageProvider<Object>? _imageFor(DonationListItem donation) {
-    final reference = donation.imagenPrincipal?.referencia;
-    if (reference == null) return null;
-    final uri = ApiConfig.resolveImageReference(reference);
-    return uri == null ? null : NetworkImage(uri.toString());
+    return exploreDonationImageProvider(donation);
+  }
+
+  void _showCachedDataWarning() {
+    if (mounted && !_refreshFailed) setState(() => _refreshFailed = true);
   }
 
   @override
@@ -467,6 +484,20 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
       ),
     );
   }
+}
+
+@visibleForTesting
+ImageProvider<Object>? exploreDonationImageProvider(DonationListItem donation) {
+  final image = donation.imagenPrincipal;
+  final localPath = image?.cachedLocalPath;
+  if (localPath != null) {
+    final file = File(localPath);
+    if (file.existsSync() && file.lengthSync() > 0) return FileImage(file);
+  }
+  final reference = image?.referencia;
+  if (reference == null) return null;
+  final uri = ApiConfig.resolveImageReference(reference);
+  return uri == null ? null : NetworkImage(uri.toString());
 }
 
 class _ExploreFreshnessBanner extends StatelessWidget {

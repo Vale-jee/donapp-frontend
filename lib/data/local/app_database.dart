@@ -44,6 +44,7 @@ class AppDatabase extends _$AppDatabase {
     for (final database in List<AppDatabase>.of(_openInstances)) {
       final rows = await database.select(database.localDonationImages).get();
       paths.addAll(rows.map((row) => row.managedLocalPath).whereType<String>());
+      paths.addAll(rows.map((row) => row.cachedLocalPath).whereType<String>());
     }
     return paths;
   }
@@ -61,7 +62,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -74,6 +75,12 @@ class AppDatabase extends _$AppDatabase {
         await migrator.createTable(pendingOperations);
         await migrator.createIndex(pendingOperationsProcessableIdx);
         await migrator.createIndex(pendingOperationsEntityIdx);
+      }
+      if (from < 4) {
+        await migrator.addColumn(
+          localDonationImages,
+          localDonationImages.cachedLocalPath,
+        );
       }
     },
     beforeOpen: (details) async => customStatement('PRAGMA foreign_keys = ON'),

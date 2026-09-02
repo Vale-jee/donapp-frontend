@@ -31,11 +31,13 @@ class DonationImage {
     required this.id,
     required this.referencia,
     required this.orden,
+    this.cachedLocalPath,
   });
 
   final int id;
   final String referencia;
   final int orden;
+  final String? cachedLocalPath;
 
   factory DonationImage.fromJson(Map<String, dynamic> json) => DonationImage(
     id: _int(json, 'id'),

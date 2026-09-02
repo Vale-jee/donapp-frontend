@@ -2395,6 +2395,17 @@ class $LocalDonationImagesTable extends LocalDonationImages
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _cachedLocalPathMeta = const VerificationMeta(
+    'cachedLocalPath',
+  );
+  @override
+  late final GeneratedColumn<String> cachedLocalPath = GeneratedColumn<String>(
+    'cached_local_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _sortOrderMeta = const VerificationMeta(
     'sortOrder',
   );
@@ -2447,6 +2458,7 @@ class $LocalDonationImagesTable extends LocalDonationImages
     remoteImageId,
     remoteUrl,
     managedLocalPath,
+    cachedLocalPath,
     sortOrder,
     mimeType,
     sizeBytes,
@@ -2505,6 +2517,15 @@ class $LocalDonationImagesTable extends LocalDonationImages
         ),
       );
     }
+    if (data.containsKey('cached_local_path')) {
+      context.handle(
+        _cachedLocalPathMeta,
+        cachedLocalPath.isAcceptableOrUnknown(
+          data['cached_local_path']!,
+          _cachedLocalPathMeta,
+        ),
+      );
+    }
     if (data.containsKey('sort_order')) {
       context.handle(
         _sortOrderMeta,
@@ -2554,6 +2575,10 @@ class $LocalDonationImagesTable extends LocalDonationImages
         DriftSqlType.string,
         data['${effectivePrefix}managed_local_path'],
       ),
+      cachedLocalPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cached_local_path'],
+      ),
       sortOrder: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
@@ -2593,6 +2618,7 @@ class LocalDonationImage extends DataClass
   final int? remoteImageId;
   final String? remoteUrl;
   final String? managedLocalPath;
+  final String? cachedLocalPath;
   final int sortOrder;
   final String? mimeType;
   final int? sizeBytes;
@@ -2603,6 +2629,7 @@ class LocalDonationImage extends DataClass
     this.remoteImageId,
     this.remoteUrl,
     this.managedLocalPath,
+    this.cachedLocalPath,
     required this.sortOrder,
     this.mimeType,
     this.sizeBytes,
@@ -2621,6 +2648,9 @@ class LocalDonationImage extends DataClass
     }
     if (!nullToAbsent || managedLocalPath != null) {
       map['managed_local_path'] = Variable<String>(managedLocalPath);
+    }
+    if (!nullToAbsent || cachedLocalPath != null) {
+      map['cached_local_path'] = Variable<String>(cachedLocalPath);
     }
     map['sort_order'] = Variable<int>(sortOrder);
     if (!nullToAbsent || mimeType != null) {
@@ -2650,6 +2680,9 @@ class LocalDonationImage extends DataClass
       managedLocalPath: managedLocalPath == null && nullToAbsent
           ? const Value.absent()
           : Value(managedLocalPath),
+      cachedLocalPath: cachedLocalPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cachedLocalPath),
       sortOrder: Value(sortOrder),
       mimeType: mimeType == null && nullToAbsent
           ? const Value.absent()
@@ -2672,6 +2705,7 @@ class LocalDonationImage extends DataClass
       remoteImageId: serializer.fromJson<int?>(json['remoteImageId']),
       remoteUrl: serializer.fromJson<String?>(json['remoteUrl']),
       managedLocalPath: serializer.fromJson<String?>(json['managedLocalPath']),
+      cachedLocalPath: serializer.fromJson<String?>(json['cachedLocalPath']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       mimeType: serializer.fromJson<String?>(json['mimeType']),
       sizeBytes: serializer.fromJson<int?>(json['sizeBytes']),
@@ -2689,6 +2723,7 @@ class LocalDonationImage extends DataClass
       'remoteImageId': serializer.toJson<int?>(remoteImageId),
       'remoteUrl': serializer.toJson<String?>(remoteUrl),
       'managedLocalPath': serializer.toJson<String?>(managedLocalPath),
+      'cachedLocalPath': serializer.toJson<String?>(cachedLocalPath),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'mimeType': serializer.toJson<String?>(mimeType),
       'sizeBytes': serializer.toJson<int?>(sizeBytes),
@@ -2704,6 +2739,7 @@ class LocalDonationImage extends DataClass
     Value<int?> remoteImageId = const Value.absent(),
     Value<String?> remoteUrl = const Value.absent(),
     Value<String?> managedLocalPath = const Value.absent(),
+    Value<String?> cachedLocalPath = const Value.absent(),
     int? sortOrder,
     Value<String?> mimeType = const Value.absent(),
     Value<int?> sizeBytes = const Value.absent(),
@@ -2718,6 +2754,9 @@ class LocalDonationImage extends DataClass
     managedLocalPath: managedLocalPath.present
         ? managedLocalPath.value
         : this.managedLocalPath,
+    cachedLocalPath: cachedLocalPath.present
+        ? cachedLocalPath.value
+        : this.cachedLocalPath,
     sortOrder: sortOrder ?? this.sortOrder,
     mimeType: mimeType.present ? mimeType.value : this.mimeType,
     sizeBytes: sizeBytes.present ? sizeBytes.value : this.sizeBytes,
@@ -2736,6 +2775,9 @@ class LocalDonationImage extends DataClass
       managedLocalPath: data.managedLocalPath.present
           ? data.managedLocalPath.value
           : this.managedLocalPath,
+      cachedLocalPath: data.cachedLocalPath.present
+          ? data.cachedLocalPath.value
+          : this.cachedLocalPath,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       mimeType: data.mimeType.present ? data.mimeType.value : this.mimeType,
       sizeBytes: data.sizeBytes.present ? data.sizeBytes.value : this.sizeBytes,
@@ -2753,6 +2795,7 @@ class LocalDonationImage extends DataClass
           ..write('remoteImageId: $remoteImageId, ')
           ..write('remoteUrl: $remoteUrl, ')
           ..write('managedLocalPath: $managedLocalPath, ')
+          ..write('cachedLocalPath: $cachedLocalPath, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('mimeType: $mimeType, ')
           ..write('sizeBytes: $sizeBytes, ')
@@ -2768,6 +2811,7 @@ class LocalDonationImage extends DataClass
     remoteImageId,
     remoteUrl,
     managedLocalPath,
+    cachedLocalPath,
     sortOrder,
     mimeType,
     sizeBytes,
@@ -2782,6 +2826,7 @@ class LocalDonationImage extends DataClass
           other.remoteImageId == this.remoteImageId &&
           other.remoteUrl == this.remoteUrl &&
           other.managedLocalPath == this.managedLocalPath &&
+          other.cachedLocalPath == this.cachedLocalPath &&
           other.sortOrder == this.sortOrder &&
           other.mimeType == this.mimeType &&
           other.sizeBytes == this.sizeBytes &&
@@ -2794,6 +2839,7 @@ class LocalDonationImagesCompanion extends UpdateCompanion<LocalDonationImage> {
   final Value<int?> remoteImageId;
   final Value<String?> remoteUrl;
   final Value<String?> managedLocalPath;
+  final Value<String?> cachedLocalPath;
   final Value<int> sortOrder;
   final Value<String?> mimeType;
   final Value<int?> sizeBytes;
@@ -2804,6 +2850,7 @@ class LocalDonationImagesCompanion extends UpdateCompanion<LocalDonationImage> {
     this.remoteImageId = const Value.absent(),
     this.remoteUrl = const Value.absent(),
     this.managedLocalPath = const Value.absent(),
+    this.cachedLocalPath = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.mimeType = const Value.absent(),
     this.sizeBytes = const Value.absent(),
@@ -2815,6 +2862,7 @@ class LocalDonationImagesCompanion extends UpdateCompanion<LocalDonationImage> {
     this.remoteImageId = const Value.absent(),
     this.remoteUrl = const Value.absent(),
     this.managedLocalPath = const Value.absent(),
+    this.cachedLocalPath = const Value.absent(),
     required int sortOrder,
     this.mimeType = const Value.absent(),
     this.sizeBytes = const Value.absent(),
@@ -2828,6 +2876,7 @@ class LocalDonationImagesCompanion extends UpdateCompanion<LocalDonationImage> {
     Expression<int>? remoteImageId,
     Expression<String>? remoteUrl,
     Expression<String>? managedLocalPath,
+    Expression<String>? cachedLocalPath,
     Expression<int>? sortOrder,
     Expression<String>? mimeType,
     Expression<int>? sizeBytes,
@@ -2839,6 +2888,7 @@ class LocalDonationImagesCompanion extends UpdateCompanion<LocalDonationImage> {
       if (remoteImageId != null) 'remote_image_id': remoteImageId,
       if (remoteUrl != null) 'remote_url': remoteUrl,
       if (managedLocalPath != null) 'managed_local_path': managedLocalPath,
+      if (cachedLocalPath != null) 'cached_local_path': cachedLocalPath,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (mimeType != null) 'mime_type': mimeType,
       if (sizeBytes != null) 'size_bytes': sizeBytes,
@@ -2852,6 +2902,7 @@ class LocalDonationImagesCompanion extends UpdateCompanion<LocalDonationImage> {
     Value<int?>? remoteImageId,
     Value<String?>? remoteUrl,
     Value<String?>? managedLocalPath,
+    Value<String?>? cachedLocalPath,
     Value<int>? sortOrder,
     Value<String?>? mimeType,
     Value<int?>? sizeBytes,
@@ -2863,6 +2914,7 @@ class LocalDonationImagesCompanion extends UpdateCompanion<LocalDonationImage> {
       remoteImageId: remoteImageId ?? this.remoteImageId,
       remoteUrl: remoteUrl ?? this.remoteUrl,
       managedLocalPath: managedLocalPath ?? this.managedLocalPath,
+      cachedLocalPath: cachedLocalPath ?? this.cachedLocalPath,
       sortOrder: sortOrder ?? this.sortOrder,
       mimeType: mimeType ?? this.mimeType,
       sizeBytes: sizeBytes ?? this.sizeBytes,
@@ -2887,6 +2939,9 @@ class LocalDonationImagesCompanion extends UpdateCompanion<LocalDonationImage> {
     }
     if (managedLocalPath.present) {
       map['managed_local_path'] = Variable<String>(managedLocalPath.value);
+    }
+    if (cachedLocalPath.present) {
+      map['cached_local_path'] = Variable<String>(cachedLocalPath.value);
     }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
@@ -2915,6 +2970,7 @@ class LocalDonationImagesCompanion extends UpdateCompanion<LocalDonationImage> {
           ..write('remoteImageId: $remoteImageId, ')
           ..write('remoteUrl: $remoteUrl, ')
           ..write('managedLocalPath: $managedLocalPath, ')
+          ..write('cachedLocalPath: $cachedLocalPath, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('mimeType: $mimeType, ')
           ..write('sizeBytes: $sizeBytes, ')
@@ -6941,6 +6997,7 @@ typedef $$LocalDonationImagesTableCreateCompanionBuilder =
       Value<int?> remoteImageId,
       Value<String?> remoteUrl,
       Value<String?> managedLocalPath,
+      Value<String?> cachedLocalPath,
       required int sortOrder,
       Value<String?> mimeType,
       Value<int?> sizeBytes,
@@ -6953,6 +7010,7 @@ typedef $$LocalDonationImagesTableUpdateCompanionBuilder =
       Value<int?> remoteImageId,
       Value<String?> remoteUrl,
       Value<String?> managedLocalPath,
+      Value<String?> cachedLocalPath,
       Value<int> sortOrder,
       Value<String?> mimeType,
       Value<int?> sizeBytes,
@@ -7018,6 +7076,11 @@ class $$LocalDonationImagesTableFilterComposer
 
   ColumnFilters<String> get managedLocalPath => $composableBuilder(
     column: $table.managedLocalPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cachedLocalPath => $composableBuilder(
+    column: $table.cachedLocalPath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7095,6 +7158,11 @@ class $$LocalDonationImagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get cachedLocalPath => $composableBuilder(
+    column: $table.cachedLocalPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
     builder: (column) => ColumnOrderings(column),
@@ -7161,6 +7229,11 @@ class $$LocalDonationImagesTableAnnotationComposer
 
   GeneratedColumn<String> get managedLocalPath => $composableBuilder(
     column: $table.managedLocalPath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get cachedLocalPath => $composableBuilder(
+    column: $table.cachedLocalPath,
     builder: (column) => column,
   );
 
@@ -7244,6 +7317,7 @@ class $$LocalDonationImagesTableTableManager
                 Value<int?> remoteImageId = const Value.absent(),
                 Value<String?> remoteUrl = const Value.absent(),
                 Value<String?> managedLocalPath = const Value.absent(),
+                Value<String?> cachedLocalPath = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<String?> mimeType = const Value.absent(),
                 Value<int?> sizeBytes = const Value.absent(),
@@ -7254,6 +7328,7 @@ class $$LocalDonationImagesTableTableManager
                 remoteImageId: remoteImageId,
                 remoteUrl: remoteUrl,
                 managedLocalPath: managedLocalPath,
+                cachedLocalPath: cachedLocalPath,
                 sortOrder: sortOrder,
                 mimeType: mimeType,
                 sizeBytes: sizeBytes,
@@ -7266,6 +7341,7 @@ class $$LocalDonationImagesTableTableManager
                 Value<int?> remoteImageId = const Value.absent(),
                 Value<String?> remoteUrl = const Value.absent(),
                 Value<String?> managedLocalPath = const Value.absent(),
+                Value<String?> cachedLocalPath = const Value.absent(),
                 required int sortOrder,
                 Value<String?> mimeType = const Value.absent(),
                 Value<int?> sizeBytes = const Value.absent(),
@@ -7276,6 +7352,7 @@ class $$LocalDonationImagesTableTableManager
                 remoteImageId: remoteImageId,
                 remoteUrl: remoteUrl,
                 managedLocalPath: managedLocalPath,
+                cachedLocalPath: cachedLocalPath,
                 sortOrder: sortOrder,
                 mimeType: mimeType,
                 sizeBytes: sizeBytes,

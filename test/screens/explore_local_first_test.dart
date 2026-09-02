@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -25,7 +26,8 @@ void main() {
     await _repository(local, success: true).refreshCategories();
     await _repository(local, success: true).refreshExplore(cacheUserId: 77);
     await tester.pumpWidget(_app(_repository(local, success: false)));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('Donación guardada'), findsOneWidget);
     expect(find.byKey(const Key('exploreError')), findsNothing);
     expect(find.byKey(const Key('exploreFreshnessIndicator')), findsOneWidget);
@@ -44,6 +46,61 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Donación guardada'), findsOneWidget);
     expect(find.byKey(const Key('exploreFreshnessIndicator')), findsNothing);
+    await _dispose(tester);
+  });
+
+  test('usa la copia local persistida y recurre a red si falta', () async {
+    final directory = await Directory.systemTemp.createTemp('explore-image-');
+    addTearDown(() => directory.delete(recursive: true));
+    final imageFile = File('${directory.path}/cached.image');
+    await imageFile.writeAsBytes([1]);
+    final donation = _page(withImage: true).donations.single;
+    final cachedDonation = DonationListItem(
+      id: donation.id,
+      titulo: donation.titulo,
+      ciudad: donation.ciudad,
+      estado: donation.estado,
+      createdAt: donation.createdAt,
+      updatedAt: donation.updatedAt,
+      categoriaId: donation.categoriaId,
+      categoriaNombre: donation.categoriaNombre,
+      imagenPrincipal: DonationImage(
+        id: 5,
+        referencia: 'https://images.test/cached.jpg',
+        orden: 0,
+        cachedLocalPath: imageFile.path,
+      ),
+      cantidadImagenes: 1,
+    );
+
+    expect(exploreDonationImageProvider(cachedDonation), isA<FileImage>());
+    await imageFile.delete();
+    expect(exploreDonationImageProvider(cachedDonation), isA<NetworkImage>());
+  });
+
+  testWidgets('un fallo de refresh muestra aviso sin esperar otra petición', (
+    tester,
+  ) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final local = DonationLocalDataSource(db);
+    await _repository(local, success: true).refreshExplore(cacheUserId: 77);
+    final pending = Completer<DonationPage>();
+    final repository = DonationRepository(
+      local,
+      DonationRemoteDataSource(
+        _PendingDonationService(pending),
+        _CategoryService(fail: true),
+      ),
+    );
+
+    await tester.pumpWidget(_app(repository));
+    await tester.pump();
+
+    expect(find.text('Donación guardada'), findsOneWidget);
+    expect(find.byKey(const Key('exploreFreshnessIndicator')), findsOneWidget);
+    pending.complete(_page());
+    await tester.pumpAndSettle();
     await _dispose(tester);
   });
 
@@ -171,7 +228,7 @@ class _CategoryService extends CategoryService {
   }
 }
 
-DonationPage _page() => DonationPage(
+DonationPage _page({bool withImage = false}) => DonationPage(
   donations: [
     DonationListItem(
       id: 10,
@@ -182,8 +239,14 @@ DonationPage _page() => DonationPage(
       updatedAt: DateTime.utc(2026, 8, 20),
       categoriaId: 4,
       categoriaNombre: 'Muebles',
-      imagenPrincipal: null,
-      cantidadImagenes: 0,
+      imagenPrincipal: withImage
+          ? const DonationImage(
+              id: 5,
+              referencia: 'https://images.test/cached.jpg',
+              orden: 0,
+            )
+          : null,
+      cantidadImagenes: withImage ? 1 : 0,
     ),
   ],
   pagination: const DonationPagination(

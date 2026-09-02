@@ -9,7 +9,7 @@ import 'package:donapp_mobile/data/local/app_database.dart';
 void main() {
   final key = Uint8List.fromList(List<int>.generate(32, (index) => index + 31));
 
-  test('migra acumulativamente un archivo SQLCipher v1 a v3', () async {
+  test('migra acumulativamente un archivo SQLCipher v1 a v4', () async {
     final directory = await Directory.systemTemp.createTemp(
       'donapp-migration-',
     );
@@ -20,7 +20,7 @@ void main() {
       _createEncryptedV1(file, key);
 
       final db = AppDatabase.forTesting(openEncryptedNativeDatabase(file, key));
-      expect(db.schemaVersion, 3);
+      expect(db.schemaVersion, 4);
       expect(await db.select(db.localAuthenticatedUsers).get(), hasLength(1));
       expect(await db.select(db.localCategories).get(), hasLength(1));
       final donations = await db.select(db.localDonations).get();
@@ -28,6 +28,10 @@ void main() {
       expect(donations.single.title, 'Mesa de comedor');
       expect(donations.single.lastAccessedAt, isNull);
       expect(await db.select(db.localDonationImages).get(), hasLength(1));
+      expect(
+        (await db.select(db.localDonationImages).getSingle()).cachedLocalPath,
+        isNull,
+      );
       expect(await db.select(db.localDonationMemberships).get(), hasLength(1));
       expect(await db.select(db.localRequests).get(), hasLength(1));
       expect(await db.select(db.localCollectionMetadata).get(), hasLength(1));
@@ -67,7 +71,7 @@ void main() {
     }
   });
 
-  test('migra SQLCipher v2 a v3 y preserva todos los datos', () async {
+  test('migra SQLCipher v2 a v4 y preserva todos los datos', () async {
     final directory = await Directory.systemTemp.createTemp(
       'donapp-migration-v2-',
     );
@@ -79,7 +83,7 @@ void main() {
 
       final db = AppDatabase.forTesting(openEncryptedNativeDatabase(file, key));
       try {
-        expect(db.schemaVersion, 3);
+        expect(db.schemaVersion, 4);
         expect(await db.select(db.localAuthenticatedUsers).get(), hasLength(1));
         expect(await db.select(db.localCategories).get(), hasLength(1));
         expect(await db.select(db.localDonations).get(), hasLength(1));
@@ -123,9 +127,9 @@ void main() {
   });
 
   test(
-    'una instalación nueva v3 crea directamente el esquema completo',
+    'una instalación nueva v4 crea directamente el esquema completo',
     () async {
-      final directory = await Directory.systemTemp.createTemp('donapp-v3-');
+      final directory = await Directory.systemTemp.createTemp('donapp-v4-');
       final file = File(
         '${directory.path}${Platform.pathSeparator}fresh.sqlite',
       );
@@ -156,11 +160,18 @@ void main() {
           columns.map((row) => row.read<String>('name')),
           contains('last_accessed_at'),
         );
+        final imageColumns = await db
+            .customSelect('PRAGMA table_info(local_donation_images)')
+            .get();
+        expect(
+          imageColumns.map((row) => row.read<String>('name')),
+          contains('cached_local_path'),
+        );
         expect(
           (await db.customSelect('PRAGMA user_version').getSingle()).read<int>(
             'user_version',
           ),
-          3,
+          4,
         );
         await db.close();
       } finally {

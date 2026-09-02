@@ -6,6 +6,7 @@ import '../models/category.dart';
 import '../models/donation.dart';
 import '../services/category_service.dart';
 import '../services/donation_service.dart';
+import '../services/remote_image_cache.dart';
 
 class ExploreCacheStatus {
   const ExploreCacheStatus({
@@ -25,6 +26,7 @@ class DonationRepository {
     this._remote, {
     DateTime Function()? clock,
     this.cachePolicy = const LocalCachePolicy(),
+    this.imageCache,
   }) : _clock = clock ?? DateTime.now;
 
   factory DonationRepository.create({
@@ -35,6 +37,7 @@ class DonationRepository {
     return DonationRepository(
       DonationLocalDataSource(database),
       DonationRemoteDataSource(donationService, categoryService),
+      imageCache: RemoteImageCache(),
     ).._ownedDatabase = database;
   }
 
@@ -42,6 +45,7 @@ class DonationRepository {
   final DonationRemoteDataSource _remote;
   final DateTime Function() _clock;
   final LocalCachePolicy cachePolicy;
+  final RemoteImageCache? imageCache;
   AppDatabase? _ownedDatabase;
 
   Stream<List<DonationListItem>> watchExplore({
@@ -88,7 +92,38 @@ class DonationRepository {
       syncedAt: now,
       expiresAt: cachePolicy.expiresAt(now, cachePolicy.exploreTtl),
     );
+    await _cacheRemoteImages(cacheUserId, result.donations);
     return result;
+  }
+
+  Future<void> _cacheRemoteImages(
+    int cacheUserId,
+    List<DonationListItem> donations,
+  ) async {
+    final cache = imageCache;
+    if (cache == null) return;
+    await Future.wait(
+      donations.map((donation) async {
+        final image = donation.imagenPrincipal;
+        if (image == null) return;
+        try {
+          final path = await cache.cache(
+            cacheUserId: cacheUserId,
+            donationId: donation.id,
+            imageId: image.id,
+            reference: image.referencia,
+          );
+          await _local.attachRemoteImageCache(
+            cacheUserId: cacheUserId,
+            donationRemoteId: donation.id,
+            remoteImageId: image.id,
+            cachedLocalPath: path,
+          );
+        } on Object {
+          // A failed image download must not invalidate cached donation data.
+        }
+      }),
+    );
   }
 
   Future<void> refreshCategories() async {

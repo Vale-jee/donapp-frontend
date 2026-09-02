@@ -33,6 +33,18 @@ class DonationLocalDataSource {
                     DonationCollectionType.explore,
                   ),
             ),
+            leftOuterJoin(
+              database.localDonationImages,
+              database.localDonationImages.localDonationId.equalsExp(
+                    database.localDonations.localId,
+                  ) &
+                  database.localDonationImages.uploadState.equalsValue(
+                    ImageUploadState.remote,
+                  ) &
+                  database.localDonationImages.remoteUrl.equalsExp(
+                    database.localDonations.mainImageUrl,
+                  ),
+            ),
           ])
           ..where(database.localDonations.cacheUserId.equals(cacheUserId))
           ..where(database.localDonations.locallyDeleted.equals(false));
@@ -42,7 +54,12 @@ class DonationLocalDataSource {
     query.orderBy([OrderingTerm.desc(database.localDonations.createdAt)]);
     return query.watch().map(
       (rows) => rows
-          .map((row) => _toModel(row.readTable(database.localDonations)))
+          .map(
+            (row) => _toModel(
+              row.readTable(database.localDonations),
+              image: row.readTableOrNull(database.localDonationImages),
+            ),
+          )
           .toList(growable: false),
     );
   }
@@ -170,6 +187,32 @@ class DonationLocalDataSource {
           database.localDonations,
         )..where((row) => row.localId.equals(localId))).write(companion);
       }
+      final mainImage = donation.imagenPrincipal;
+      if (mainImage != null) {
+        final existingImage =
+            await (database.select(database.localDonationImages)
+                  ..where((row) => row.localDonationId.equals(localId))
+                  ..where(
+                    (row) =>
+                        row.uploadState.equalsValue(ImageUploadState.remote),
+                  )
+                  ..where((row) => row.remoteImageId.equals(mainImage.id)))
+                .getSingleOrNull();
+        final image = LocalDonationImagesCompanion(
+          localDonationId: Value(localId),
+          remoteImageId: Value(mainImage.id),
+          remoteUrl: Value(mainImage.referencia),
+          sortOrder: Value(mainImage.orden),
+          uploadState: const Value(ImageUploadState.remote),
+        );
+        if (existingImage == null) {
+          await database.into(database.localDonationImages).insert(image);
+        } else {
+          await (database.update(database.localDonationImages)
+                ..where((row) => row.localId.equals(existingImage.localId)))
+              .write(image);
+        }
+      }
       await database
           .into(database.localDonationMemberships)
           .insertOnConflictUpdate(
@@ -194,24 +237,53 @@ class DonationLocalDataSource {
         );
   });
 
-  DonationListItem _toModel(LocalDonation row) => DonationListItem(
-    id: row.remoteId!,
-    titulo: row.title,
-    ciudad: row.city,
-    estado: DonationStatusJson.fromJson(row.status),
-    createdAt:
-        row.createdAt ??
-        row.lastSyncedAt ??
-        DateTime.fromMillisecondsSinceEpoch(0),
-    updatedAt:
-        row.serverUpdatedAt ??
-        row.lastSyncedAt ??
-        DateTime.fromMillisecondsSinceEpoch(0),
-    categoriaId: row.categoryId,
-    categoriaNombre: row.categoryName,
-    imagenPrincipal: row.mainImageUrl == null
-        ? null
-        : DonationImage(id: 0, referencia: row.mainImageUrl!, orden: 0),
-    cantidadImagenes: row.imageCount,
-  );
+  Future<void> attachRemoteImageCache({
+    required int cacheUserId,
+    required int donationRemoteId,
+    required int remoteImageId,
+    required String cachedLocalPath,
+  }) async {
+    final donation =
+        await (database.select(database.localDonations)
+              ..where((row) => row.cacheUserId.equals(cacheUserId))
+              ..where((row) => row.remoteId.equals(donationRemoteId)))
+            .getSingleOrNull();
+    if (donation == null) return;
+    await (database.update(database.localDonationImages)
+          ..where((row) => row.localDonationId.equals(donation.localId))
+          ..where((row) => row.remoteImageId.equals(remoteImageId))
+          ..where(
+            (row) => row.uploadState.equalsValue(ImageUploadState.remote),
+          ))
+        .write(
+          LocalDonationImagesCompanion(cachedLocalPath: Value(cachedLocalPath)),
+        );
+  }
+
+  DonationListItem _toModel(LocalDonation row, {LocalDonationImage? image}) =>
+      DonationListItem(
+        id: row.remoteId!,
+        titulo: row.title,
+        ciudad: row.city,
+        estado: DonationStatusJson.fromJson(row.status),
+        createdAt:
+            row.createdAt ??
+            row.lastSyncedAt ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        updatedAt:
+            row.serverUpdatedAt ??
+            row.lastSyncedAt ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        categoriaId: row.categoryId,
+        categoriaNombre: row.categoryName,
+        imagenPrincipal: row.mainImageUrl == null
+            ? null
+            : DonationImage(
+                id: image?.remoteImageId ?? 0,
+                referencia: row.mainImageUrl!,
+                orden: image?.sortOrder ?? 0,
+                cachedLocalPath: image?.cachedLocalPath,
+              ),
+        cantidadImagenes: row.imageCount,
+      );
 }

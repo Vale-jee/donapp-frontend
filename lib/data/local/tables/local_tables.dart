@@ -113,6 +113,7 @@ class LocalDonationImages extends Table {
   IntColumn get remoteImageId => integer().nullable()();
   TextColumn get remoteUrl => text().nullable()();
   TextColumn get managedLocalPath => text().nullable()();
+  TextColumn get cachedLocalPath => text().nullable()();
   IntColumn get sortOrder => integer()();
   TextColumn get mimeType => text().nullable()();
   IntColumn get sizeBytes => integer().nullable()();

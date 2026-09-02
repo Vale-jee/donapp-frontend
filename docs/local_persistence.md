@@ -15,6 +15,7 @@ DonApp aplica minimización: conserva sólo la información necesaria para una s
 | Solicitudes: identificadores de cuenta, solicitud y colección; detalle, estado, causa opcional de cancelación y fechas; datos mínimos visibles de donación y participante; timestamps de servidor y caché | SQLite: `local_requests` | Representar offline una solicitud, su estado, donación y participante visible | TTL declarado de 30 minutos; vencidas pueden seguir disponibles como desactualizadas | Base destruida en logout |
 | URL e identificador remotos, orden, MIME, tamaño y estado de subida de imagen | SQLite: `local_donation_images` | Mostrar la imagen y conservar referencias de sincronización | Mientras la donación permanezca en caché o pendiente | Reconciliación o logout |
 | `managedLocalPath` | SQLite y archivo privado en `pending_donation_images` | Copia temporal para subida diferida | Hasta confirmar sincronización o logout | Confirmación remota o logout, incluidos huérfanos del directorio administrado |
+| `cachedLocalPath` | SQLite y archivo privado en `remote_donation_images` | Copia de una imagen remota ya publicada para lectura offline | Mientras la imagen permanezca en caché o hasta logout | Limpieza de caché futura o logout, incluidos huérfanos del directorio administrado |
 | `cacheUserId`, donación, colección, `lastSeenAt`, `expiresAt` | SQLite: `local_donation_memberships` | Componer Explore/donaciones propias y controlar vigencia | Mientras la colección esté en caché; expirar no borra | Reconciliación o logout |
 | `cacheUserId`, clave de colección, `lastSyncedAt`, `expiresAt` | SQLite: `local_collection_metadata` | Control técnico de frescura y sincronización | TTL de la colección | Refresh exitoso o logout |
 | `operationId`, `entityClientId`, `cacheUserId`, tipos, estado, intentos, fechas de control y `lastErrorCode` sanitizado | SQLite: `pending_operations` | Reintentar sincronización sin duplicarla | Mientras esté pendiente, procesándose o esperando reintento | Al completarse según sync o al destruir la base en logout |
@@ -24,6 +25,10 @@ Las solicitudes tienen estructura local y TTL preparados; esto no implica que to
 ## Imágenes locales
 
 La URL remota es una referencia para mostrar o sincronizar una imagen. En una creación pendiente, `managedLocalPath` apunta a una copia temporal controlada por la aplicación dentro de almacenamiento privado. Se elimina tras la confirmación remota o el logout y no se conserva deliberadamente después.
+
+`cachedLocalPath` tiene un ciclo de vida independiente: corresponde a una copia
+de lectura de una imagen remota ya publicada y nunca se utiliza como fuente de
+una subida pendiente.
 
 No se guardan imágenes como blobs o base64 ni se extraen o persisten metadatos EXIF. Los temporales externos administrados por el selector de imágenes no pertenecen al directorio privado gestionado por DonApp.
 
