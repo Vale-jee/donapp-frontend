@@ -61,6 +61,7 @@ class LocalDonations extends Table {
   IntColumn get imageCount => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().nullable()();
   DateTimeColumn get serverUpdatedAt => dateTime().nullable()();
+  DateTimeColumn get lastAccessedAt => dateTime().nullable()();
   @override
   List<Set<Column<Object>>> get uniqueKeys => [
     {cacheUserId, clientId},

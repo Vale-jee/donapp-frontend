@@ -970,6 +970,18 @@ class $LocalDonationsTable extends LocalDonations
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _lastAccessedAtMeta = const VerificationMeta(
+    'lastAccessedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastAccessedAt =
+      GeneratedColumn<DateTime>(
+        'last_accessed_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     localId,
@@ -991,6 +1003,7 @@ class $LocalDonationsTable extends LocalDonations
     imageCount,
     createdAt,
     serverUpdatedAt,
+    lastAccessedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1150,6 +1163,15 @@ class $LocalDonationsTable extends LocalDonations
         ),
       );
     }
+    if (data.containsKey('last_accessed_at')) {
+      context.handle(
+        _lastAccessedAtMeta,
+        lastAccessedAt.isAcceptableOrUnknown(
+          data['last_accessed_at']!,
+          _lastAccessedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1242,6 +1264,10 @@ class $LocalDonationsTable extends LocalDonations
         DriftSqlType.dateTime,
         data['${effectivePrefix}server_updated_at'],
       ),
+      lastAccessedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_accessed_at'],
+      ),
     );
   }
 
@@ -1276,6 +1302,7 @@ class LocalDonation extends DataClass implements Insertable<LocalDonation> {
   final int imageCount;
   final DateTime? createdAt;
   final DateTime? serverUpdatedAt;
+  final DateTime? lastAccessedAt;
   const LocalDonation({
     required this.localId,
     required this.cacheUserId,
@@ -1296,6 +1323,7 @@ class LocalDonation extends DataClass implements Insertable<LocalDonation> {
     required this.imageCount,
     this.createdAt,
     this.serverUpdatedAt,
+    this.lastAccessedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1339,6 +1367,9 @@ class LocalDonation extends DataClass implements Insertable<LocalDonation> {
     if (!nullToAbsent || serverUpdatedAt != null) {
       map['server_updated_at'] = Variable<DateTime>(serverUpdatedAt);
     }
+    if (!nullToAbsent || lastAccessedAt != null) {
+      map['last_accessed_at'] = Variable<DateTime>(lastAccessedAt);
+    }
     return map;
   }
 
@@ -1379,6 +1410,9 @@ class LocalDonation extends DataClass implements Insertable<LocalDonation> {
       serverUpdatedAt: serverUpdatedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(serverUpdatedAt),
+      lastAccessedAt: lastAccessedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAccessedAt),
     );
   }
 
@@ -1409,6 +1443,7 @@ class LocalDonation extends DataClass implements Insertable<LocalDonation> {
       imageCount: serializer.fromJson<int>(json['imageCount']),
       createdAt: serializer.fromJson<DateTime?>(json['createdAt']),
       serverUpdatedAt: serializer.fromJson<DateTime?>(json['serverUpdatedAt']),
+      lastAccessedAt: serializer.fromJson<DateTime?>(json['lastAccessedAt']),
     );
   }
   @override
@@ -1436,6 +1471,7 @@ class LocalDonation extends DataClass implements Insertable<LocalDonation> {
       'imageCount': serializer.toJson<int>(imageCount),
       'createdAt': serializer.toJson<DateTime?>(createdAt),
       'serverUpdatedAt': serializer.toJson<DateTime?>(serverUpdatedAt),
+      'lastAccessedAt': serializer.toJson<DateTime?>(lastAccessedAt),
     };
   }
 
@@ -1459,6 +1495,7 @@ class LocalDonation extends DataClass implements Insertable<LocalDonation> {
     int? imageCount,
     Value<DateTime?> createdAt = const Value.absent(),
     Value<DateTime?> serverUpdatedAt = const Value.absent(),
+    Value<DateTime?> lastAccessedAt = const Value.absent(),
   }) => LocalDonation(
     localId: localId ?? this.localId,
     cacheUserId: cacheUserId ?? this.cacheUserId,
@@ -1483,6 +1520,9 @@ class LocalDonation extends DataClass implements Insertable<LocalDonation> {
     serverUpdatedAt: serverUpdatedAt.present
         ? serverUpdatedAt.value
         : this.serverUpdatedAt,
+    lastAccessedAt: lastAccessedAt.present
+        ? lastAccessedAt.value
+        : this.lastAccessedAt,
   );
   LocalDonation copyWithCompanion(LocalDonationsCompanion data) {
     return LocalDonation(
@@ -1525,6 +1565,9 @@ class LocalDonation extends DataClass implements Insertable<LocalDonation> {
       serverUpdatedAt: data.serverUpdatedAt.present
           ? data.serverUpdatedAt.value
           : this.serverUpdatedAt,
+      lastAccessedAt: data.lastAccessedAt.present
+          ? data.lastAccessedAt.value
+          : this.lastAccessedAt,
     );
   }
 
@@ -1549,7 +1592,8 @@ class LocalDonation extends DataClass implements Insertable<LocalDonation> {
           ..write('mainImageUrl: $mainImageUrl, ')
           ..write('imageCount: $imageCount, ')
           ..write('createdAt: $createdAt, ')
-          ..write('serverUpdatedAt: $serverUpdatedAt')
+          ..write('serverUpdatedAt: $serverUpdatedAt, ')
+          ..write('lastAccessedAt: $lastAccessedAt')
           ..write(')'))
         .toString();
   }
@@ -1575,6 +1619,7 @@ class LocalDonation extends DataClass implements Insertable<LocalDonation> {
     imageCount,
     createdAt,
     serverUpdatedAt,
+    lastAccessedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -1598,7 +1643,8 @@ class LocalDonation extends DataClass implements Insertable<LocalDonation> {
           other.mainImageUrl == this.mainImageUrl &&
           other.imageCount == this.imageCount &&
           other.createdAt == this.createdAt &&
-          other.serverUpdatedAt == this.serverUpdatedAt);
+          other.serverUpdatedAt == this.serverUpdatedAt &&
+          other.lastAccessedAt == this.lastAccessedAt);
 }
 
 class LocalDonationsCompanion extends UpdateCompanion<LocalDonation> {
@@ -1621,6 +1667,7 @@ class LocalDonationsCompanion extends UpdateCompanion<LocalDonation> {
   final Value<int> imageCount;
   final Value<DateTime?> createdAt;
   final Value<DateTime?> serverUpdatedAt;
+  final Value<DateTime?> lastAccessedAt;
   const LocalDonationsCompanion({
     this.localId = const Value.absent(),
     this.cacheUserId = const Value.absent(),
@@ -1641,6 +1688,7 @@ class LocalDonationsCompanion extends UpdateCompanion<LocalDonation> {
     this.imageCount = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.serverUpdatedAt = const Value.absent(),
+    this.lastAccessedAt = const Value.absent(),
   });
   LocalDonationsCompanion.insert({
     this.localId = const Value.absent(),
@@ -1662,6 +1710,7 @@ class LocalDonationsCompanion extends UpdateCompanion<LocalDonation> {
     this.imageCount = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.serverUpdatedAt = const Value.absent(),
+    this.lastAccessedAt = const Value.absent(),
   }) : cacheUserId = Value(cacheUserId),
        clientId = Value(clientId),
        expiresAt = Value(expiresAt),
@@ -1690,6 +1739,7 @@ class LocalDonationsCompanion extends UpdateCompanion<LocalDonation> {
     Expression<int>? imageCount,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? serverUpdatedAt,
+    Expression<DateTime>? lastAccessedAt,
   }) {
     return RawValuesInsertable({
       if (localId != null) 'local_id': localId,
@@ -1711,6 +1761,7 @@ class LocalDonationsCompanion extends UpdateCompanion<LocalDonation> {
       if (imageCount != null) 'image_count': imageCount,
       if (createdAt != null) 'created_at': createdAt,
       if (serverUpdatedAt != null) 'server_updated_at': serverUpdatedAt,
+      if (lastAccessedAt != null) 'last_accessed_at': lastAccessedAt,
     });
   }
 
@@ -1734,6 +1785,7 @@ class LocalDonationsCompanion extends UpdateCompanion<LocalDonation> {
     Value<int>? imageCount,
     Value<DateTime?>? createdAt,
     Value<DateTime?>? serverUpdatedAt,
+    Value<DateTime?>? lastAccessedAt,
   }) {
     return LocalDonationsCompanion(
       localId: localId ?? this.localId,
@@ -1755,6 +1807,7 @@ class LocalDonationsCompanion extends UpdateCompanion<LocalDonation> {
       imageCount: imageCount ?? this.imageCount,
       createdAt: createdAt ?? this.createdAt,
       serverUpdatedAt: serverUpdatedAt ?? this.serverUpdatedAt,
+      lastAccessedAt: lastAccessedAt ?? this.lastAccessedAt,
     );
   }
 
@@ -1820,6 +1873,9 @@ class LocalDonationsCompanion extends UpdateCompanion<LocalDonation> {
     if (serverUpdatedAt.present) {
       map['server_updated_at'] = Variable<DateTime>(serverUpdatedAt.value);
     }
+    if (lastAccessedAt.present) {
+      map['last_accessed_at'] = Variable<DateTime>(lastAccessedAt.value);
+    }
     return map;
   }
 
@@ -1844,7 +1900,8 @@ class LocalDonationsCompanion extends UpdateCompanion<LocalDonation> {
           ..write('mainImageUrl: $mainImageUrl, ')
           ..write('imageCount: $imageCount, ')
           ..write('createdAt: $createdAt, ')
-          ..write('serverUpdatedAt: $serverUpdatedAt')
+          ..write('serverUpdatedAt: $serverUpdatedAt, ')
+          ..write('lastAccessedAt: $lastAccessedAt')
           ..write(')'))
         .toString();
   }
@@ -4997,6 +5054,7 @@ typedef $$LocalDonationsTableCreateCompanionBuilder =
       Value<int> imageCount,
       Value<DateTime?> createdAt,
       Value<DateTime?> serverUpdatedAt,
+      Value<DateTime?> lastAccessedAt,
     });
 typedef $$LocalDonationsTableUpdateCompanionBuilder =
     LocalDonationsCompanion Function({
@@ -5019,6 +5077,7 @@ typedef $$LocalDonationsTableUpdateCompanionBuilder =
       Value<int> imageCount,
       Value<DateTime?> createdAt,
       Value<DateTime?> serverUpdatedAt,
+      Value<DateTime?> lastAccessedAt,
     });
 
 final class $$LocalDonationsTableReferences
@@ -5196,6 +5255,11 @@ class $$LocalDonationsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<DateTime> get lastAccessedAt => $composableBuilder(
+    column: $table.lastAccessedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
   Expression<bool> localDonationMembershipsRefs(
     Expression<bool> Function($$LocalDonationMembershipsTableFilterComposer f)
     f,
@@ -5352,6 +5416,11 @@ class $$LocalDonationsTableOrderingComposer
     column: $table.serverUpdatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<DateTime> get lastAccessedAt => $composableBuilder(
+    column: $table.lastAccessedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$LocalDonationsTableAnnotationComposer
@@ -5437,6 +5506,11 @@ class $$LocalDonationsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get serverUpdatedAt => $composableBuilder(
     column: $table.serverUpdatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastAccessedAt => $composableBuilder(
+    column: $table.lastAccessedAt,
     builder: (column) => column,
   );
 
@@ -5546,6 +5620,7 @@ class $$LocalDonationsTableTableManager
                 Value<int> imageCount = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
                 Value<DateTime?> serverUpdatedAt = const Value.absent(),
+                Value<DateTime?> lastAccessedAt = const Value.absent(),
               }) => LocalDonationsCompanion(
                 localId: localId,
                 cacheUserId: cacheUserId,
@@ -5566,6 +5641,7 @@ class $$LocalDonationsTableTableManager
                 imageCount: imageCount,
                 createdAt: createdAt,
                 serverUpdatedAt: serverUpdatedAt,
+                lastAccessedAt: lastAccessedAt,
               ),
           createCompanionCallback:
               ({
@@ -5588,6 +5664,7 @@ class $$LocalDonationsTableTableManager
                 Value<int> imageCount = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
                 Value<DateTime?> serverUpdatedAt = const Value.absent(),
+                Value<DateTime?> lastAccessedAt = const Value.absent(),
               }) => LocalDonationsCompanion.insert(
                 localId: localId,
                 cacheUserId: cacheUserId,
@@ -5608,6 +5685,7 @@ class $$LocalDonationsTableTableManager
                 imageCount: imageCount,
                 createdAt: createdAt,
                 serverUpdatedAt: serverUpdatedAt,
+                lastAccessedAt: lastAccessedAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(

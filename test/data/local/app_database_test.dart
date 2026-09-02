@@ -36,7 +36,7 @@ void main() {
   );
 
   test('crea la base e inserta perfil mínimo y categoría', () async {
-    expect(db.schemaVersion, 1);
+    expect(db.schemaVersion, 2);
     await db.localCacheDao.putAuthenticatedUser(
       LocalAuthenticatedUsersCompanion.insert(
         userId: const Value(1),
