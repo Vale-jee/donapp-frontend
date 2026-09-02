@@ -125,7 +125,8 @@ docs/
 ```
 
 Consulte también el [catálogo de componentes](docs/component_catalog.md).
-La información conservada en el dispositivo y sus exclusiones se describen en
+DonApp utiliza almacenamiento local cifrado para soporte offline. Sus políticas
+de minimización, retención, sincronización y limpieza de sesión se documentan en
 la [política de persistencia local](docs/local_persistence.md).
 
 ## Registro y Login

@@ -1,77 +1,64 @@
 # Política de persistencia local
 
-DonApp conserva localmente solo los datos necesarios para restaurar una sesión
-limitada, presentar contenido consultado anteriormente y sincronizar creaciones
-de donaciones pendientes. La base SQLite está cifrada con SQLCipher y cada dato
-de caché que pertenece a una cuenta se separa mediante `cacheUserId`.
+DonApp aplica minimización: conserva sólo la información necesaria para una sesión offline limitada, mostrar contenido consultado y sincronizar creaciones pendientes. SQLite se cifra con SQLCipher, los secretos se separan en almacenamiento seguro y los datos de cada cuenta se aíslan mediante `cacheUserId`.
 
-## Datos persistidos
+## Inventario y retención
 
-| Almacenamiento | Contenido necesario | Finalidad |
-| --- | --- | --- |
-| `local_authenticated_users` | Identificador, nombre visible, ciudad y vigencia de la validación offline | Identificar al dueño de la caché y ofrecer una sesión offline limitada |
-| `local_categories` | Identificador, nombre, descripción y vigencia de caché | Reconstruir listados y formularios previamente cargados |
-| `local_donations` | Identificadores local/remoto, datos visibles de la donación y estado de sincronización/caché | Explore, detalle, donaciones propias y creación pendiente |
-| `local_donation_images` | Referencia remota o ruta privada temporal, orden, tipo técnico y estado de subida | Mostrar imágenes remotas y reintentar una creación pendiente |
-| `local_requests` | Estado, relación con la donación y datos públicos mínimos del participante | Mostrar solicitudes consultadas sin habilitar mutaciones offline |
-| membresías y metadatos | Identificadores de colección, acceso, sincronización y expiración | Componer vistas locales y controlar la caché |
-| `pending_operations` | Identificadores, tipo, estado, intentos, tiempos de control y código de error sanitizado | Reintentar una operación sin duplicarla |
+| Dato | Ubicación | Propósito | Retención | Eliminación |
+| --- | --- | --- | --- | --- |
+| Perfil: `userId`, `nombreVisible`, `city`, `lastValidatedAt`, `offlineSessionValidUntil` | SQLite: `local_authenticated_users` | Identificar la caché, mostrar información mínima y restaurar una sesión offline limitada | Mientras la sesión local sea válida | Base destruida en logout |
+| Access token | `flutter_secure_storage`: `donapp_access_token` | Autenticar solicitudes | Hasta expiración, invalidez o logout | Sesión inválida o logout local |
+| Refresh token | `flutter_secure_storage`: `donapp_refresh_token` | Renovar y restaurar la sesión | Hasta expiración, invalidez o logout | Sesión inválida o logout local |
+| Clave SQLCipher aleatoria de 32 bytes | `flutter_secure_storage`: `donapp_local_database_key_v1` | Cifrar y abrir SQLite | Mientras exista el almacenamiento local de la sesión | Logout; su valor no se registra ni expone |
+| Categorías: identificador, nombre, descripción, `lastSyncedAt`, `expiresAt` | SQLite: `local_categories` | Filtros, creación de donaciones y funcionamiento offline | TTL de 24 horas; vencidas siguen disponibles como desactualizadas | Base destruida en logout |
+| Donaciones: identificadores local/remoto/de cliente y cuenta; título, descripción, ciudad, categoría, estado, datos de imagen, timestamps y metadatos de caché/sync | SQLite: `local_donations` | Explore, detalle, donaciones propias, lectura offline, caché, creación pendiente y reconciliación | Explore y detalle: TTL de 30 minutos. Vencer no borra; siete días después sólo puede ser candidata a limpieza futura | Reconciliación cuando corresponda o logout; no hay limpieza automática por antigüedad |
+| Solicitudes: identificadores de cuenta, solicitud y colección; detalle, estado, causa opcional de cancelación y fechas; datos mínimos visibles de donación y participante; timestamps de servidor y caché | SQLite: `local_requests` | Representar offline una solicitud, su estado, donación y participante visible | TTL declarado de 30 minutos; vencidas pueden seguir disponibles como desactualizadas | Base destruida en logout |
+| URL e identificador remotos, orden, MIME, tamaño y estado de subida de imagen | SQLite: `local_donation_images` | Mostrar la imagen y conservar referencias de sincronización | Mientras la donación permanezca en caché o pendiente | Reconciliación o logout |
+| `managedLocalPath` | SQLite y archivo privado en `pending_donation_images` | Copia temporal para subida diferida | Hasta confirmar sincronización o logout | Confirmación remota o logout, incluidos huérfanos del directorio administrado |
+| `cacheUserId`, donación, colección, `lastSeenAt`, `expiresAt` | SQLite: `local_donation_memberships` | Componer Explore/donaciones propias y controlar vigencia | Mientras la colección esté en caché; expirar no borra | Reconciliación o logout |
+| `cacheUserId`, clave de colección, `lastSyncedAt`, `expiresAt` | SQLite: `local_collection_metadata` | Control técnico de frescura y sincronización | TTL de la colección | Refresh exitoso o logout |
+| `operationId`, `entityClientId`, `cacheUserId`, tipos, estado, intentos, fechas de control y `lastErrorCode` sanitizado | SQLite: `pending_operations` | Reintentar sincronización sin duplicarla | Mientras esté pendiente, procesándose o esperando reintento | Al completarse según sync o al destruir la base en logout |
 
-Las imágenes no se almacenan como bytes o base64 en SQLite. Una ruta privada
-administrada por la aplicación solo se conserva mientras la creación la
-necesita; se elimina después de una confirmación remota. Los archivos temporales
-que pueda mantener el selector de imágenes quedan fuera de esta política y
-deberán tratarse en un flujo de limpieza específico.
+Las solicitudes tienen estructura local y TTL preparados; esto no implica que todas sus pantallas o mutaciones offline estén integradas. Membresías y metadatos son controles técnicos vinculables a la cuenta, no datos personales principales. No se persisten cursores ni otros metadatos de paginación.
+
+## Imágenes locales
+
+La URL remota es una referencia para mostrar o sincronizar una imagen. En una creación pendiente, `managedLocalPath` apunta a una copia temporal controlada por la aplicación dentro de almacenamiento privado. Se elimina tras la confirmación remota o el logout y no se conserva deliberadamente después.
+
+No se guardan imágenes como blobs o base64 ni se extraen o persisten metadatos EXIF. Los temporales externos administrados por el selector de imágenes no pertenecen al directorio privado gestionado por DonApp.
 
 ## Datos excluidos deliberadamente
 
-SQLite no guarda email, teléfono, contraseña, nombre completo adicional,
-atributos administrativos, tokens, clave SQLCipher, cuerpos HTTP, payloads de
-operaciones, mensajes completos de error, URLs firmadas temporales, bytes de
-imágenes ni metadatos EXIF.
+DonApp no persiste localmente:
 
-`accessToken`, `refreshToken` y la clave de 32 bytes de SQLCipher se conservan
-exclusivamente en `flutter_secure_storage`. No se copian a SQLite, preferencias,
-archivos ni logs. El código de persistencia y sincronización tampoco registra
-tokens, payloads, respuestas HTTP o rutas privadas de imágenes.
+- contraseña;
+- email dentro del perfil offline mínimo;
+- teléfono e información personal adicional no requerida;
+- roles o atributos administrativos innecesarios;
+- tokens o clave SQLCipher en SQLite;
+- payloads o cuerpos HTTP completos;
+- cuerpos o mensajes completos de error;
+- URLs firmadas temporales y payloads en la cola;
+- blobs, base64 o EXIF de imágenes.
 
-Los datos de negocio y los tiempos confirmados por el servidor permanecen
-separados de los metadatos locales usados para caché, acceso, reintentos y
-sincronización.
+Los tokens y la clave están únicamente en `flutter_secure_storage`; no se copian a SQLite. Persistencia y sincronización evitan registrar sus valores, payloads HTTP, respuestas completas o rutas privadas.
 
-## Vigencia de la caché
+## TTL, retención y borrado
 
-La política central de caché define estas vigencias desde el último refresh
-remoto exitoso:
+El TTL representa frescura, no tiempo máximo de almacenamiento ni una orden de borrado. `expiresAt` se calcula con el reloj local como `lastSyncedAt + TTL`; las fechas de negocio del servidor no participan. Un dato vencido puede seguir visible offline como posiblemente desactualizado.
 
-- Explore: 30 minutos.
-- Categorías: 24 horas.
-- Detalle de donación: 30 minutos cuando se integre su lectura local.
-- Solicitudes: 30 minutos cuando se integre su lectura local.
-- Perfil offline: usa `offlineSessionValidUntil`; no comparte el TTL de caché.
+`LocalCachePolicy` clasifica como candidata a limpieza futura una entrada que lleva más de siete días vencida. Esta clasificación no elimina datos: no existe limpieza automática basada en esos siete días. Un refresh exitoso renueva `lastSyncedAt` y `expiresAt`, aunque el contenido no cambie; un error remoto conserva los valores anteriores.
 
-`expiresAt` se calcula con el reloj local como `lastSyncedAt + TTL`. Las fechas
-de creación o actualización del servidor no participan en ese cálculo. Un dato
-vencido sigue siendo legible y visible, pero se marca como posiblemente
-desactualizado. Después de siete días vencido puede clasificarse como candidato
-para una limpieza futura; esta clasificación no elimina datos.
-
-Un refresh exitoso renueva `lastSyncedAt` y `expiresAt`, incluso cuando el
-contenido remoto no cambió. Un error remoto conserva ambos valores anteriores y
-no renueva artificialmente la caché.
+El perfil no comparte los TTL de caché: `offlineSessionValidUntil` delimita su validez y se conserva mientras la sesión local sea válida.
 
 ## Cierre de sesión
 
-Cerrar sesión invalida inmediatamente el estado autenticado en memoria y ejecuta
-una limpieza local completa. Primero bloquea nuevas sincronizaciones y espera la
-operación activa; luego cierra Drift y elimina `donapp.sqlite` junto con sus
-sidecars `-wal`, `-shm` y `-journal`. También elimina imágenes privadas
-administradas, la clave SQLCipher, el access token y el refresh token.
+El logout invalida inmediatamente autenticación y perfil en memoria. Luego bloquea sincronizaciones nuevas, espera la activa, cierra Drift y elimina `donapp.sqlite` y sus sidecars `-wal`, `-shm` y `-journal`. También elimina imágenes privadas administradas, clave SQLCipher, access token y refresh token.
 
-La revocación remota se intenta después de destruir el acceso local, por lo que
-un fallo de red no impide el logout. Las operaciones y donaciones todavía
-pendientes se pierden deliberadamente al eliminar la base por privacidad. Una
-nueva sesión crea una base vacía y una clave criptográfica nueva.
+Al destruir la base desaparecen perfil, cachés, membresías, metadatos y operaciones pendientes. Las donaciones no sincronizadas y sus imágenes se pierden deliberadamente por privacidad y no pasan a otro login. Una sesión nueva crea almacenamiento vacío y una clave nueva.
 
-Android Auto Backup está deshabilitado para impedir que la base, imágenes o
-secretos se restauren separados de su contexto criptográfico.
+La revocación remota no condiciona la limpieza local, de modo que un fallo de red no impide el logout. Android Auto Backup está deshabilitado para evitar restaurar la base, imágenes o secretos fuera de su contexto criptográfico.
+
+## Nota de privacidad
+
+La estrategia combina minimización, cifrado local, separación de secretos y limpieza al cerrar sesión. Estas medidas reducen la exposición sin sustituir los controles de seguridad del sistema operativo y del dispositivo.
