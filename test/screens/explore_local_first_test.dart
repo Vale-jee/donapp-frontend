@@ -49,6 +49,93 @@ void main() {
     await _dispose(tester);
   });
 
+  testWidgets(
+    'pull fallido conserva banner tras spinner y un éxito posterior lo limpia',
+    (tester) async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final local = DonationLocalDataSource(db);
+      final donations = _MutableDonationService();
+      final categories = _MutableCategoryService();
+      final repository = DonationRepository(
+        local,
+        DonationRemoteDataSource(donations, categories),
+      );
+      await tester.pumpWidget(_app(repository));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('exploreFreshnessIndicator')), findsNothing);
+      final lastSyncedAt =
+          (await db.select(db.localCollectionMetadata).getSingle()).lastSyncedAt
+              .toLocal();
+
+      donations.fail = false;
+      categories.fail = true;
+      await tester.drag(
+        find.byKey(const Key('exploreList')),
+        const Offset(0, 350),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Donación guardada'), findsOneWidget);
+      expect(find.byType(RefreshProgressIndicator), findsNothing);
+      expect(
+        find.byKey(const Key('exploreFreshnessIndicator')),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'Última sincronización: hoy '
+          '${lastSyncedAt.hour.toString().padLeft(2, '0')}:'
+          '${lastSyncedAt.minute.toString().padLeft(2, '0')}',
+        ),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        find.byKey(const Key('exploreFreshnessIndicator')),
+        findsOneWidget,
+      );
+
+      donations.fail = false;
+      categories.fail = false;
+      await tester.drag(
+        find.byKey(const Key('exploreList')),
+        const Offset(0, 350),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('exploreFreshnessIndicator')), findsNothing);
+      await _dispose(tester);
+    },
+  );
+
+  for (final failure in ['donaciones', 'categorías']) {
+    testWidgets('caché fresca muestra banner si fallan $failure', (
+      tester,
+    ) async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final local = DonationLocalDataSource(db);
+      await _repository(local, success: true).refreshExplore(cacheUserId: 77);
+      await tester.pumpWidget(
+        _app(
+          _repository(
+            local,
+            success: true,
+            donationSuccess: failure != 'donaciones',
+            categoriesSuccess: failure != 'categorías',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Donación guardada'), findsOneWidget);
+      expect(
+        find.byKey(const Key('exploreFreshnessIndicator')),
+        findsOneWidget,
+      );
+      await _dispose(tester);
+    });
+  }
+
   test('usa la copia local persistida y recurre a red si falta', () async {
     final directory = await Directory.systemTemp.createTemp('explore-image-');
     addTearDown(() => directory.delete(recursive: true));
@@ -101,6 +188,7 @@ void main() {
     expect(find.byKey(const Key('exploreFreshnessIndicator')), findsOneWidget);
     pending.complete(_page());
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('exploreFreshnessIndicator')), findsOneWidget);
     await _dispose(tester);
   });
 
@@ -163,12 +251,14 @@ void main() {
 DonationRepository _repository(
   DonationLocalDataSource local, {
   required bool success,
+  bool? donationSuccess,
+  bool? categoriesSuccess,
   DateTime Function()? clock,
 }) => DonationRepository(
   local,
   DonationRemoteDataSource(
-    _DonationService(success: success),
-    _CategoryService(fail: !success),
+    _DonationService(success: donationSuccess ?? success),
+    _CategoryService(fail: !(categoriesSuccess ?? success)),
   ),
   clock: clock,
 );
@@ -224,6 +314,30 @@ class _CategoryService extends CategoryService {
     if (fail) {
       throw const ApiException(ApiErrorType.network, 'Sin conexión');
     }
+    return const [Category(id: 4, nombre: 'Muebles', descripcion: null)];
+  }
+}
+
+class _MutableDonationService extends DonationService {
+  bool fail = false;
+
+  @override
+  Future<DonationPage> getAvailableDonations({
+    int page = 1,
+    int limit = 20,
+    int? categoryId,
+  }) async {
+    if (fail) throw const ApiException(ApiErrorType.network, 'Sin conexión');
+    return _page();
+  }
+}
+
+class _MutableCategoryService extends CategoryService {
+  bool fail = false;
+
+  @override
+  Future<List<Category>> getCategories() async {
+    if (fail) throw const ApiException(ApiErrorType.network, 'Sin conexión');
     return const [Category(id: 4, nombre: 'Muebles', descripcion: null)];
   }
 }

@@ -55,7 +55,8 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
   String? _errorMessage;
   String? _paginationError;
   ExploreCacheStatus? _cacheStatus;
-  bool _refreshFailed = false;
+  bool _refreshFailedWithCachedData = false;
+  int _refreshAttempt = 0;
 
   @override
   void initState() {
@@ -107,10 +108,11 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
     });
     final repository = _repository;
     if (repository != null) {
+      final attempt = ++_refreshAttempt;
       try {
         await Future.wait<void>([
           repository.refreshCategories().onError((error, stackTrace) {
-            _showCachedDataWarning();
+            _showCachedDataWarning(attempt);
             Error.throwWithStackTrace(
               error ?? StateError('Falló la actualización de categorías.'),
               stackTrace,
@@ -126,31 +128,37 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
                 if (mounted) setState(() => _pagination = page.pagination);
               })
               .onError((error, stackTrace) {
-                _showCachedDataWarning();
+                _showCachedDataWarning(attempt);
                 Error.throwWithStackTrace(
                   error ?? StateError('Falló la actualización de donaciones.'),
                   stackTrace,
                 );
               }),
-        ], eagerError: true);
+        ], eagerError: false);
         if (mounted) {
           setState(() {
             _isLoading = false;
-            _refreshFailed = false;
+            if (attempt == _refreshAttempt) {
+              _refreshFailedWithCachedData = false;
+            }
           });
         }
       } on ApiException catch (error) {
         if (!mounted) return;
         setState(() {
           _isLoading = false;
-          _refreshFailed = true;
+          if (attempt == _refreshAttempt) {
+            _refreshFailedWithCachedData = true;
+          }
           if (_donations.isEmpty) _errorMessage = error.message;
         });
       } catch (_) {
         if (!mounted) return;
         setState(() {
           _isLoading = false;
-          _refreshFailed = true;
+          if (attempt == _refreshAttempt) {
+            _refreshFailedWithCachedData = true;
+          }
           if (_donations.isEmpty) {
             _errorMessage = 'No hay datos disponibles todavía sin conexión.';
           }
@@ -196,28 +204,52 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
   Future<void> _refresh() async {
     final repository = _repository;
     if (repository != null) {
+      final attempt = ++_refreshAttempt;
       try {
-        final page = await repository.refreshExplore(
-          cacheUserId: widget.cacheUserId!,
-          limit: _pageLimit,
-          categoryId: _selectedCategoryId,
-        );
+        DonationPage? page;
+        await Future.wait<void>([
+          repository.refreshCategories().onError((error, stackTrace) {
+            _showCachedDataWarning(attempt);
+            Error.throwWithStackTrace(
+              error ?? StateError('Falló la actualización de categorías.'),
+              stackTrace,
+            );
+          }),
+          repository
+              .refreshExplore(
+                cacheUserId: widget.cacheUserId!,
+                limit: _pageLimit,
+                categoryId: _selectedCategoryId,
+              )
+              .then((result) => page = result)
+              .onError((error, stackTrace) {
+                _showCachedDataWarning(attempt);
+                Error.throwWithStackTrace(
+                  error ?? StateError('Falló la actualización de donaciones.'),
+                  stackTrace,
+                );
+              }),
+        ], eagerError: false);
         if (mounted) {
           setState(() {
-            _pagination = page.pagination;
+            _pagination = page?.pagination ?? _pagination;
             _paginationError = null;
-            _refreshFailed = false;
+            if (attempt == _refreshAttempt) {
+              _refreshFailedWithCachedData = false;
+            }
           });
         }
       } on ApiException catch (error) {
         if (mounted) {
           setState(() {
-            _refreshFailed = true;
+            if (attempt == _refreshAttempt) {
+              _refreshFailedWithCachedData = true;
+            }
             if (_donations.isEmpty) _errorMessage = error.message;
           });
         }
       } catch (_) {
-        _showCachedDataWarning();
+        _showCachedDataWarning(attempt);
       }
       return;
     }
@@ -325,8 +357,12 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
     return exploreDonationImageProvider(donation);
   }
 
-  void _showCachedDataWarning() {
-    if (mounted && !_refreshFailed) setState(() => _refreshFailed = true);
+  void _showCachedDataWarning(int attempt) {
+    if (mounted &&
+        attempt == _refreshAttempt &&
+        !_refreshFailedWithCachedData) {
+      setState(() => _refreshFailedWithCachedData = true);
+    }
   }
 
   @override
@@ -389,11 +425,11 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
                                 ),
                               ),
                               if (_donations.isNotEmpty &&
-                                  (_refreshFailed ||
+                                  (_refreshFailedWithCachedData ||
                                       (_cacheStatus?.isStale ?? false))) ...[
                                 SizedBox(height: spacing.medium),
                                 _ExploreFreshnessBanner(
-                                  refreshFailed: _refreshFailed,
+                                  refreshFailed: _refreshFailedWithCachedData,
                                   lastSyncedAt: _cacheStatus?.lastSyncedAt,
                                 ),
                               ],
@@ -517,9 +553,9 @@ class _ExploreFreshnessBanner extends StatelessWidget {
         ? 'No pudimos actualizar · mostrando datos guardados'
         : 'Los datos pueden estar desactualizados';
     final date = lastSyncedAt == null
-        ? null
+        ? 'Sin sincronización reciente'
         : 'Última sincronización: ${_formatSyncDate(lastSyncedAt!, DateTime.now())}';
-    final semantics = date == null ? title : '$title. $date';
+    final semantics = '$title. $date';
     return Semantics(
       key: const Key('exploreFreshnessIndicator'),
       container: true,
@@ -543,10 +579,8 @@ class _ExploreFreshnessBanner extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(title, style: theme.textTheme.labelLarge),
-                      if (date != null) ...[
-                        const SizedBox(height: 2),
-                        Text(date, style: theme.textTheme.bodySmall),
-                      ],
+                      const SizedBox(height: 2),
+                      Text(date, style: theme.textTheme.bodySmall),
                     ],
                   ),
                 ),
