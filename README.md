@@ -129,6 +129,19 @@ DonApp utiliza almacenamiento local cifrado para soporte offline. Sus políticas
 de minimización, retención, sincronización y limpieza de sesión se documentan en
 la [política de persistencia local](docs/local_persistence.md).
 
+## Uso de inteligencia artificial
+
+Durante el desarrollo del frontend se utilizó **Codex** como apoyo para revisar el código real, proponer alternativas, detectar riesgos, generar pruebas y documentar decisiones. Las propuestas no se aceptaron automáticamente.
+
+| Área | Uso de Codex | Resultado utilizado | Revisión y verificación |
+| --- | --- | --- | --- |
+| Persistencia local | Comparación de alternativas y revisión del esquema, cifrado, migraciones, minimización y TTL. | Drift sobre SQLite con SQLCipher, migraciones no destructivas, almacenamiento seguro separado y limpieza destructiva al cerrar sesión. | Pruebas de esquema, cifrado, migración, retención y logout. |
+| Lectura y recursos offline | Revisión del flujo local-first, estados de frescura y ciclo de vida de imágenes. | Explore conserva datos locales, distingue caché stale de refresh fallido y usa `cachedLocalPath` para imágenes remotas; las copias de subida usan `managedLocalPath`. | Pruebas de repositorio y widgets, accesibilidad y ejecución offline en dispositivo. |
+| Sincronización | Análisis de colas, reintentos, concurrencia, conflictos e identificadores estables. | `pending_operations`, `SyncCoordinator`, UUID para `clientId` y `operationId`, backoff, máximo de intentos, idempotencia y resolución SERVER-WINS/LWW con timestamps del servidor. | Pruebas de unicidad, reintentos, concurrencia, reconciliación y conflictos. |
+| Diagnóstico y calidad | Apoyo para aislar diferencias entre pruebas automatizadas y el entorno físico. | Se comprobó que `adb reverse` puede mantener accesible el backend por USB durante modo avión y debe retirarse temporalmente para una prueba offline real. | `flutter analyze`, suite automatizada, revisión de Git y verificación final en un celular. |
+
+Las decisiones finales y la aceptación de cambios correspondieron al equipo, con revisión del diff, análisis estático, pruebas automatizadas y comprobaciones reales de la aplicación.
+
 ## Registro y Login
 
 El registro consume `POST /api/auth/register` y vuelve al Login con el correo prellenado. El Login consume `POST /api/auth/login`, guarda ambos tokens, consulta `GET /api/usuarios/perfil` y actualiza el estado global de autenticación. La contraseña nunca se almacena.
