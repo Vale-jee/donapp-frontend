@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:donapp_mobile/data/local/app_database.dart';
+import 'package:donapp_mobile/data/local/donation_local_data_source.dart';
+import 'package:donapp_mobile/data/remote/donation_remote_data_source.dart';
 import 'package:donapp_mobile/models/user_profile.dart';
 import 'package:donapp_mobile/models/auth_session.dart';
 import 'package:donapp_mobile/models/category.dart';
@@ -7,6 +10,7 @@ import 'package:donapp_mobile/models/donation.dart';
 import 'package:donapp_mobile/models/request.dart';
 import 'package:donapp_mobile/models/refreshed_tokens.dart';
 import 'package:donapp_mobile/navigation/app_router.dart';
+import 'package:donapp_mobile/repositories/donation_repository.dart';
 import 'package:donapp_mobile/screens/home_screen.dart';
 import 'package:donapp_mobile/screens/my_donations_screen.dart';
 import 'package:donapp_mobile/screens/explore_donations_screen.dart';
@@ -32,6 +36,7 @@ import 'package:donapp_mobile/services/token_storage.dart';
 import 'package:donapp_mobile/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:drift/native.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
@@ -148,6 +153,48 @@ void main() {
     expect(harness.router.state.uri.path, AppRoutes.explore);
     expect(find.byType(ExploreDonationsScreen), findsOneWidget);
   });
+
+  testWidgets(
+    'wiring real del router conserva caché y muestra banner si falla el pull',
+    (tester) async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final donations = _ToggleExploreDonationService();
+      final categories = _ToggleExploreCategoryService();
+      final repository = DonationRepository(
+        DonationLocalDataSource(db),
+        DonationRemoteDataSource(donations, categories),
+      );
+      await repository.refreshCategories();
+      await repository.refreshExplore(cacheUserId: 1);
+      donations.fail = true;
+      categories.fail = true;
+
+      await _pumpAuthenticatedRouter(
+        tester,
+        AppRoutes.explore,
+        _ValidSessionCoordinator(),
+        donationRepository: repository,
+      );
+      expect(find.text('Donación desde router'), findsOneWidget);
+
+      await tester.drag(
+        find.byKey(const Key('exploreList')),
+        const Offset(0, 350),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Donación desde router'), findsOneWidget);
+      expect(
+        find.byKey(const Key('exploreFreshnessIndicator')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Última sincronización:'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.pump(const Duration(milliseconds: 1));
+    },
+  );
 
   testWidgets('/donaciones/mias es privada y se reconstruye desde su URI', (
     tester,
@@ -1001,6 +1048,7 @@ _pumpAuthenticatedRouter(
   ProfileService? profileService,
   TokenStorage? tokenStorage,
   DonationService? donationService,
+  DonationRepository? donationRepository,
   RequestService? requestService,
   CategoryService? categoryService,
   ImageUploadService? imageUploadService,
@@ -1015,6 +1063,7 @@ _pumpAuthenticatedRouter(
     profileService: profileService,
     tokenStorage: tokenStorage,
     donationService: donationService,
+    donationRepository: donationRepository,
     requestService: requestService,
     categoryService: categoryService,
     imageUploadService: imageUploadService,
@@ -1328,6 +1377,55 @@ class _SingleDonationService extends _EmptyDonationService {
 class _EmptyCategoryService extends CategoryService {
   @override
   Future<List<Category>> getCategories() async => const [];
+}
+
+class _ToggleExploreDonationService extends DonationService {
+  bool fail = false;
+
+  @override
+  Future<DonationPage> getAvailableDonations({
+    int page = 1,
+    int limit = 20,
+    int? categoryId,
+  }) async {
+    if (fail) {
+      throw const ApiException(ApiErrorType.network, 'Sin conexión');
+    }
+    return DonationPage(
+      donations: [
+        DonationListItem(
+          id: 41,
+          titulo: 'Donación desde router',
+          ciudad: 'Bogotá',
+          estado: DonationStatus.publicada,
+          createdAt: DateTime.utc(2026, 9, 1),
+          updatedAt: DateTime.utc(2026, 9, 1),
+          categoriaId: 4,
+          categoriaNombre: 'Muebles',
+          imagenPrincipal: null,
+          cantidadImagenes: 0,
+        ),
+      ],
+      pagination: DonationPagination(
+        page: page,
+        limit: limit,
+        total: 1,
+        totalPages: 1,
+      ),
+    );
+  }
+}
+
+class _ToggleExploreCategoryService extends CategoryService {
+  bool fail = false;
+
+  @override
+  Future<List<Category>> getCategories() async {
+    if (fail) {
+      throw const ApiException(ApiErrorType.network, 'Sin conexión');
+    }
+    return const [Category(id: 4, nombre: 'Muebles', descripcion: null)];
+  }
 }
 
 class _EmptyGalleryPicker implements DonationGalleryPicker {
