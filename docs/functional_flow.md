@@ -7,7 +7,7 @@ Este documento resume el recorrido principal del cliente móvil, los endpoints q
 | Paso | Acción | Endpoint o servicio | Resultado esperado | Evidencia visual sugerida |
 |---|---|---|---|---|
 | Login | Ingresar correo y contraseña. | `POST /api/auth/login` y `GET /api/usuarios/perfil` | Los tokens se almacenan de forma segura, se recupera el perfil y se abre Inicio o el destino privado solicitado. | Login completo e Inicio autenticado. |
-| Explorar | Abrir Explorar desde Inicio. | `GET /api/donaciones` | Se presenta un listado real y paginado de donaciones, con filtro opcional por categoría. | Varias tarjetas de donaciones. |
+| Explorar | Abrir Explorar desde Inicio. | Caché local y `GET /api/donaciones` | Se muestran primero las tarjetas guardadas y luego se intenta el refresh remoto. Ante un fallo se conservan el contenido, las imágenes locales disponibles y la última sincronización real. | Varias tarjetas de donaciones y, sin red, aviso de datos guardados. |
 | Detalle | Seleccionar una donación. | `GET /api/donaciones/{id}` | Se muestra la información completa de la donación y las acciones disponibles para el usuario. | Pantalla de detalle. |
 | Crear | Volver a Inicio y abrir Donar. | `GET /api/categorias` | El formulario queda preparado con las categorías activas obtenidas del backend. | Formulario con una categoría seleccionada. |
 | Imágenes | Seleccionar entre una y cinco imágenes válidas. | `POST /api/imagenes/firma` y subida HTTPS firmada hacia Cloudinary | Se obtienen URL seguras, conservando el orden, listas para incluir en la creación. | Previsualizaciones de imágenes en el formulario. |

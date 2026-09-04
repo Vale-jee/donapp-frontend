@@ -7,6 +7,7 @@ DonApp es una aplicación móvil que conecta a personas que desean donar artícu
 - Flutter y Dart.
 - Material 3.
 - API REST de DonApp mediante `package:http`.
+- Drift sobre SQLite cifrado con SQLCipher para persistencia local.
 - Autenticación JWT con access token y refresh token.
 - Almacenamiento seguro mediante `flutter_secure_storage`.
 - Navegación declarativa con GoRouter.
@@ -62,6 +63,10 @@ Login
 
 La descripción de cada paso, sus endpoints y las capturas sugeridas se encuentra en [Flujo funcional de DonApp](docs/functional_flow.md).
 
+## Arquitectura resumida
+
+Las pantallas consumen repositorios que coordinan fuentes locales y remotas (`UI → Repository → LocalDataSource / RemoteDataSource`). Los servicios de sesión administran autenticación y limpieza local; `SyncCoordinator` procesa la cola persistida. El backend sigue siendo la autoridad remota sobre los datos confirmados.
+
 ## Funcionalidades futuras
 
 - Búsqueda textual completa.
@@ -94,6 +99,8 @@ Para usar un dispositivo Android físico conectado por USB con el backend local:
 flutter run --dart-define=API_BASE_URL=http://localhost:3000
 ```
 
+Para comprobar una desconexión real, retire temporalmente el reverse con `adb reverse --remove tcp:3000`: el túnel USB puede mantener accesible el backend incluso con modo avión. Esta es una consideración exclusiva de desarrollo y depuración.
+
 La configuración Android permite HTTP únicamente para `localhost` durante el desarrollo; no habilita tráfico sin cifrar de forma global.
 
 ## Inicio rápido desde VS Code
@@ -121,13 +128,16 @@ lib/
 
 docs/
 ├── component_catalog.md
-└── functional_flow.md
+├── functional_flow.md
+└── local_persistence.md
 ```
 
 Consulte también el [catálogo de componentes](docs/component_catalog.md).
 DonApp utiliza almacenamiento local cifrado para soporte offline. Sus políticas
 de minimización, retención, sincronización y limpieza de sesión se documentan en
 la [política de persistencia local](docs/local_persistence.md).
+
+El soporte offline actual se concentra en la lectura local-first de Explore. Otras pantallas, las solicitudes y sus mutaciones aún no tienen integración offline completa; tampoco se admiten edición o eliminación offline. La pantalla de publicación continúa requiriendo el flujo remoto de subida y creación.
 
 ## Uso de inteligencia artificial
 
