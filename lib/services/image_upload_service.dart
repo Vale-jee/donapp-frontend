@@ -12,6 +12,35 @@ import 'token_storage.dart';
 const maxDonationImages = 5;
 const maxDonationImageBytes = 5 * 1024 * 1024;
 
+enum CloudinaryFailure {
+  timeout,
+  invalidSignature,
+  invalidApiKey,
+  invalidImage,
+  rejected,
+  rateLimited,
+  unavailable,
+}
+
+/// Retains only a safe classification, never the signed request or raw body.
+class CloudinaryUploadException extends ApiException {
+  const CloudinaryUploadException(
+    super.type,
+    super.message, {
+    required this.failure,
+    super.statusCode,
+  });
+
+  final CloudinaryFailure failure;
+}
+
+const _uploadTimeout = CloudinaryUploadException(
+  ApiErrorType.timeout,
+  'La subida de la imagen está tardando más de lo esperado. '
+  'Verifica tu conexión e intenta nuevamente.',
+  failure: CloudinaryFailure.timeout,
+);
+
 class CloudinaryUploadAuthorization {
   const CloudinaryUploadAuthorization({
     required this.uploadUrl,
@@ -144,34 +173,43 @@ class ImageUploadService {
     XFile image,
     CloudinaryUploadAuthorization authorization,
   ) async {
+    final abort = Completer<void>();
     try {
-      final request = http.MultipartRequest('POST', authorization.uploadUrl)
-        ..fields.addAll({
-          'api_key': authorization.apiKey,
-          'timestamp': '${authorization.timestamp}',
-          'signature': authorization.signature,
-          'folder': authorization.folder,
-          'allowed_formats': authorization.allowedFormats,
-        })
-        ..files.add(
-          http.MultipartFile.fromBytes(
-            'file',
-            await image.readAsBytes(),
-            filename: image.name.isEmpty
-                ? 'donacion.${_mimeSubtype(image)}'
-                : image.name,
-            contentType: http.MediaType('image', _mimeSubtype(image)),
-          ),
-        );
-      final streamed = await _uploadClient
-          .send(request)
-          .timeout(const Duration(seconds: 30));
-      final response = await http.Response.fromStream(streamed);
+      final bytes = await image.readAsBytes();
+      final request =
+          http.AbortableMultipartRequest(
+              'POST',
+              authorization.uploadUrl,
+              abortTrigger: abort.future,
+            )
+            ..fields.addAll({
+              'api_key': authorization.apiKey,
+              'timestamp': '${authorization.timestamp}',
+              'signature': authorization.signature,
+              'folder': authorization.folder,
+              'allowed_formats': authorization.allowedFormats,
+            })
+            ..files.add(
+              http.MultipartFile.fromBytes(
+                'file',
+                bytes,
+                filename: image.name.isEmpty
+                    ? 'donacion.${_mimeSubtype(image)}'
+                    : image.name,
+                contentType: http.MediaType('image', _mimeSubtype(image)),
+              ),
+            );
+      // A real mobile upload exceeded 30 seconds. Bound the entire exchange,
+      // including the response body, without changing the backend timeouts.
+      final response = await _sendUpload(request).timeout(
+        const Duration(seconds: 120),
+        onTimeout: () {
+          abort.complete();
+          throw TimeoutException('Image upload');
+        },
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw const ApiException(
-          ApiErrorType.server,
-          'No pudimos subir una de las imágenes. Intenta nuevamente.',
-        );
+        throw _cloudinaryError(response);
       }
       final decoded = jsonDecode(response.body);
       final secureUrl = decoded is Map<String, dynamic>
@@ -187,10 +225,63 @@ class ImageUploadService {
     } on http.ClientException {
       throw ApiErrorMapper.network;
     } on TimeoutException {
-      throw ApiErrorMapper.timeout;
+      throw _uploadTimeout;
     } on FormatException {
       throw ApiErrorMapper.unexpectedResponse;
     }
+  }
+
+  Future<http.Response> _sendUpload(http.BaseRequest request) async {
+    final streamed = await _uploadClient.send(request);
+    return http.Response.fromStream(streamed);
+  }
+
+  CloudinaryUploadException _cloudinaryError(http.Response response) {
+    String message = '';
+    try {
+      final body = jsonDecode(response.body);
+      final error = body is Map<String, dynamic> ? body['error'] : null;
+      final value = error is Map<String, dynamic> ? error['message'] : null;
+      if (value is String) message = value.toLowerCase();
+    } on FormatException {
+      // HTML/proxy errors must use the same safe status classification.
+    }
+    final status = response.statusCode;
+    final failure = switch (status) {
+      408 => CloudinaryFailure.timeout,
+      429 => CloudinaryFailure.rateLimited,
+      >= 500 => CloudinaryFailure.unavailable,
+      _ when message.contains('invalid signature') =>
+        CloudinaryFailure.invalidSignature,
+      _
+          when message.contains('invalid api_key') ||
+              message.contains('unknown api_key') =>
+        CloudinaryFailure.invalidApiKey,
+      _
+          when message.contains('invalid image') ||
+              message.contains('not allowed') =>
+        CloudinaryFailure.invalidImage,
+      _ => CloudinaryFailure.rejected,
+    };
+    final type = switch (failure) {
+      CloudinaryFailure.timeout => ApiErrorType.timeout,
+      CloudinaryFailure.rateLimited => ApiErrorType.rateLimited,
+      CloudinaryFailure.unavailable => ApiErrorType.server,
+      CloudinaryFailure.invalidSignature ||
+      CloudinaryFailure.invalidApiKey => ApiErrorType.configuration,
+      _ when status == 401 || status == 403 || status == 404 =>
+        ApiErrorType.configuration,
+      _ when status >= 400 && status < 500 => ApiErrorType.validation,
+      _ => ApiErrorType.unexpectedResponse,
+    };
+    return CloudinaryUploadException(
+      type,
+      failure == CloudinaryFailure.timeout
+          ? _uploadTimeout.message
+          : 'No pudimos subir una de las imágenes. Intenta nuevamente.',
+      failure: failure,
+      statusCode: status,
+    );
   }
 
   String _extension(String name) =>

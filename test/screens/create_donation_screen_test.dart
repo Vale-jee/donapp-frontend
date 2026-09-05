@@ -1,9 +1,13 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:donapp_mobile/models/category.dart';
 import 'package:donapp_mobile/models/donation.dart';
 import 'package:donapp_mobile/screens/create_donation_screen.dart';
 import 'package:donapp_mobile/services/api_exception.dart';
+import 'package:donapp_mobile/services/api_client.dart';
+import 'package:donapp_mobile/services/token_storage.dart';
 import 'package:donapp_mobile/services/category_service.dart';
 import 'package:donapp_mobile/services/donation_service.dart';
 import 'package:donapp_mobile/services/image_upload_service.dart';
@@ -12,8 +16,133 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
+  for (final outcome in ['success', 'timeout', '400', '401', '429', '503']) {
+    testWidgets('flujo HTTP real de publicación: $outcome', (tester) async {
+      final stages = <String>[];
+      final uploadResponse = Completer<http.Response>();
+      final tokenStorage = _HttpTokenStorage();
+      final apiClient = ApiClient(
+        endpointBuilder: (path) => Uri.parse('https://donapp.test$path'),
+        client: MockClient((request) async {
+          expect(request.method, 'POST');
+          stages.add(request.url.path);
+          if (request.url.path == '/api/imagenes/firma') {
+            return http.Response(
+              jsonEncode({
+                'success': true,
+                'message': 'Carga de imagen autorizada.',
+                'data': {
+                  'uploadUrl':
+                      'https://api.cloudinary.com/v1_1/demo/image/upload',
+                  'apiKey': 'test-key',
+                  'timestamp': 1787900000,
+                  'signature': 'test-signature',
+                  'folder': 'donapp/donaciones',
+                  'allowedFormats': 'jpg,jpeg,png,webp',
+                },
+              }),
+              200,
+            );
+          }
+          expect(request.url.path, '/api/donaciones');
+          expect(jsonDecode(request.body)['imagenes'], [
+            'https://images.test/a.jpg',
+          ]);
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'message': 'Donación creada.',
+              'data': {
+                'donacion': {
+                  'id': 9,
+                  'titulo': 'Mesa para donar',
+                  'descripcion': 'Mesa de madera en buen estado para donar.',
+                  'ciudad': 'Bogotá',
+                  'estado': 'PUBLICADA',
+                  'createdAt': '2026-08-28T00:00:00.000Z',
+                  'updatedAt': '2026-08-28T00:00:00.000Z',
+                  'categoria': {'id': 4, 'nombre': 'Muebles'},
+                  'imagenes': [],
+                },
+              },
+            }),
+            201,
+          );
+        }),
+      );
+      DonationDetail? created;
+      await tester.pumpWidget(
+        _app(
+          picker: _Picker([_image('one.jpg')]),
+          upload: ImageUploadService(
+            apiClient: apiClient,
+            tokenStorage: tokenStorage,
+            uploadClient: MockClient((request) async {
+              stages.add('upload');
+              expect(request.headers.containsKey('Authorization'), isFalse);
+              return uploadResponse.future;
+            }),
+          ),
+          donation: DonationService(
+            apiClient: apiClient,
+            tokenStorage: tokenStorage,
+          ),
+          onCreated: (value) => created = value,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _completeForm(tester);
+      await tester.tap(find.byKey(const Key('publishDonationButton')));
+      await tester.pump();
+      expect(stages, ['/api/imagenes/firma', 'upload']);
+      expect(created, isNull);
+      if (outcome == 'timeout') {
+        uploadResponse.completeError(
+          TimeoutException('test-signature test-key test-token'),
+        );
+      } else if (outcome == 'success') {
+        uploadResponse.complete(
+          http.Response(
+            jsonEncode({
+              'secure_url': 'https://images.test/a.jpg',
+              'public_id': 'donapp/donaciones/a',
+            }),
+            200,
+          ),
+        );
+      } else {
+        uploadResponse.complete(
+          http.Response(
+            jsonEncode({
+              'error': {'message': 'test-signature test-key test-token'},
+            }),
+            int.parse(outcome),
+          ),
+        );
+      }
+      await tester.pumpAndSettle();
+      if (outcome == 'success') {
+        expect(stages, ['/api/imagenes/firma', 'upload', '/api/donaciones']);
+        expect(created?.id, 9);
+      } else {
+        expect(stages, ['/api/imagenes/firma', 'upload']);
+        expect(created, isNull);
+        final message = tester
+            .widget<Text>(find.byKey(const Key('createDonationError')))
+            .data!;
+        for (final secret in ['test-signature', 'test-key', 'test-token']) {
+          expect(message, isNot(contains(secret)));
+        }
+        if (outcome == 'timeout') {
+          expect(message, contains('Verifica tu conexión'));
+        }
+      }
+    });
+  }
   const validTitle = 'Mesa para donar';
   const validDescription = 'Mesa de madera en buen estado para donar.';
   const plainTextError =
@@ -796,8 +925,8 @@ Future<void> _completeForm(WidgetTester tester) async {
 
 Widget _app({
   required DonationGalleryPicker picker,
-  _UploadService? upload,
-  _DonationService? donation,
+  ImageUploadService? upload,
+  DonationService? donation,
   ValueChanged<DonationDetail>? onCreated,
   String categoryName = 'Muebles',
   MediaQueryData? mediaQuery,
@@ -825,6 +954,11 @@ class _Picker implements DonationGalleryPicker {
   Future<List<XFile>> pickImages() async => selected;
   @override
   Future<List<XFile>> retrieveLostImages() async => recovered;
+}
+
+class _HttpTokenStorage extends TokenStorage {
+  @override
+  Future<String?> readAccessToken() async => 'test-token';
 }
 
 class _FailingPicker implements DonationGalleryPicker {
