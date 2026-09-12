@@ -285,3 +285,10 @@ ApiClient obtiene el access token mediante TokenStorage.readAccessToken (Flutter
 Donaciones, solicitudes y firma de imágenes delegan la lectura y construcción del Bearer al cliente. Sus parámetros de TokenStorage se conservan para inyección independiente. Login, registro, refresh, logout y categorías usan contextos publicos y no reciben access token automáticamente. Perfil conserva un Bearer explícito para consultar la identidad del token recibido durante login/restauración. Un Authorization explícito tiene prioridad, sin distinguir mayúsculas, y no se duplica. Ante 401, el reintento existente reemplaza ese header con el token que devuelve el coordinador; las peticiones siguientes vuelven a leer el almacenamiento.
 
 Cloudinary y RemoteImageCache mantienen transportes externos separados y no usan esta inyección. La firma de imágenes pertenece a la API propia y sí la utiliza.
+
+
+## CoordinaciÃ³n de renovaciones concurrentes
+
+SessionCoordinator comparte `_refreshInProgress` entre los 401 protegidos y la restauraciÃ³n tras un 401 de perfil. Ambos pasan por `recoverAfterUnauthorized`: durante la renovaciÃ³n reciben el mismo Future, que incluye lectura de almacenamiento, POST de refresh y guardado de ambos tokens. Un 401 tardÃ­o reutiliza el access token ya rotado si difiere del que fallÃ³. El Future se libera al terminar con Ã©xito o error, permitiendo renovaciones posteriores. El mecanismo pertenece al coordinador y no bloquea otras operaciones ni vuelve a entrar en la restauraciÃ³n.
+
+Un fallo definitivo invalida la sesiÃ³n dentro del proceso compartido y propaga el mismo error a quienes esperan. La restauraciÃ³n lo traduce a estado invÃ¡lido sin repetir la limpieza. Red, timeout y 5xx conservan los tokens. Cada peticiÃ³n protegida mantiene su Ãºnico reintento con el token renovado; la consulta posterior del perfil conserva su tratamiento de errores.

@@ -69,22 +69,28 @@ class SessionCoordinator implements SessionRecovery {
   }
 
   @override
-  Future<String> recoverAfterUnauthorized(String failedAccessToken) async {
+  Future<String> recoverAfterUnauthorized(String failedAccessToken) {
+    final inProgress = _refreshInProgress;
+    if (inProgress != null) return inProgress;
+
+    // Include storage reads and writes in the shared operation. No caller may
+    // use a partially persisted token pair while rotation is still in flight.
+    late final Future<String> refresh;
+    refresh = _recoverAccessToken(failedAccessToken).whenComplete(() {
+      if (identical(_refreshInProgress, refresh)) _refreshInProgress = null;
+    });
+    _refreshInProgress = refresh;
+    return refresh;
+  }
+
+  Future<String> _recoverAccessToken(String failedAccessToken) async {
     final currentAccessToken = await _tokenStorage.readAccessToken();
     if (currentAccessToken != null &&
         currentAccessToken.isNotEmpty &&
         currentAccessToken != failedAccessToken) {
       return currentAccessToken;
     }
-
-    final inProgress = _refreshInProgress;
-    if (inProgress != null) return inProgress;
-
-    final refresh = _refreshAccessToken();
-    _refreshInProgress = refresh;
-    return refresh.whenComplete(() {
-      if (identical(_refreshInProgress, refresh)) _refreshInProgress = null;
-    });
+    return _refreshAccessToken();
   }
 
   @override
@@ -175,21 +181,17 @@ class SessionCoordinator implements SessionRecovery {
       }
     }
 
-    return _refreshAndRestoreProfile(refreshToken);
+    return _refreshAndRestoreProfile(accessToken);
   }
 
   Future<SessionRestoreResult> _refreshAndRestoreProfile(
-    String refreshToken,
+    String failedAccessToken,
   ) async {
     try {
-      final refreshed = await _authService.refresh(refreshToken);
-      await _tokenStorage.saveTokens(
-        accessToken: refreshed.accessToken,
-        refreshToken: refreshed.refreshToken,
-      );
+      final accessToken = await recoverAfterUnauthorized(failedAccessToken);
 
       try {
-        final profile = await _profileService.getProfile(refreshed.accessToken);
+        final profile = await _profileService.getProfile(accessToken);
         return SessionRestoreResult.valid(profile);
       } on ApiException catch (error) {
         if (_isRecoverable(error)) {
@@ -206,7 +208,6 @@ class SessionCoordinator implements SessionRecovery {
       if (_isRecoverable(error)) {
         return SessionRestoreResult.recoverableError(error.message);
       }
-      await _tokenStorage.clearTokens();
       return const SessionRestoreResult.invalid();
     } on Object {
       await _tokenStorage.clearTokens();

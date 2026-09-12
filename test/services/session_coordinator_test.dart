@@ -17,6 +17,215 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  group('Refresh compartido entre peticiones y restauracion', () {
+    for (final count in [2, 6]) {
+      test(
+        '$count peticiones HTTP comparten refresh y conservan el reintento',
+        () async {
+          final storage = _completeStorage();
+          final pending = Completer<http.Response>();
+          var refreshCount = 0;
+          final attempts = <String, List<String?>>{};
+          final client = MockClient((request) async {
+            if (request.url.path == '/api/auth/refresh') {
+              refreshCount++;
+              expect(request.method, 'POST');
+              expect(jsonDecode(request.body), {'refreshToken': 'old-refresh'});
+              expect(request.headers.containsKey('authorization'), isFalse);
+              return pending.future;
+            }
+            expect(request.method, 'POST');
+            expect(jsonDecode(request.body), {'value': request.url.path});
+            expect(request.headers['x-test'], 'preserved');
+            final sent = attempts.putIfAbsent(request.url.path, () => []);
+            sent.add(request.headers['authorization']);
+            return sent.length == 1
+                ? http.Response('', 401)
+                : http.Response('{"success":true,"data":null}', 200);
+          });
+          addTearDown(client.close);
+          final coordinator = SessionCoordinator(
+            tokenStorage: storage,
+            apiClient: ApiClient(
+              client: client,
+              endpointBuilder: (path) => Uri.https('shared.test', path),
+            ),
+          );
+          final requests = List.generate(
+            count,
+            (i) => coordinator.protectedApiClient.post(
+              '/private/$i',
+              headers: {'x-test': 'preserved'},
+              body: {'value': '/private/$i'},
+              context: ApiRequestContext.protectedSession,
+              successStatusCodes: {200},
+            ),
+          );
+          await Future<void>.delayed(Duration.zero);
+          expect(attempts, hasLength(count));
+          expect(refreshCount, 1);
+          pending.complete(
+            http.Response(
+              jsonEncode({
+                'success': true,
+                'data': {
+                  'accessToken': 'new-access',
+                  'refreshToken': 'new-refresh',
+                  'accessTokenExpiresIn': 900,
+                  'refreshTokenExpiresIn': 604800,
+                },
+              }),
+              200,
+            ),
+          );
+          await Future.wait(requests);
+          expect(refreshCount, 1);
+          expect(
+            attempts.values,
+            everyElement(['Bearer old-access', 'Bearer new-access']),
+          );
+          expect(storage.savedPairs, [('new-access', 'new-refresh')]);
+        },
+      );
+    }
+
+    for (final error in [
+      _authentication,
+      _network,
+      _timeout,
+      const ApiException(
+        ApiErrorType.server,
+        'Servidor temporalmente no disponible.',
+      ),
+    ]) {
+      test('fallo compartido ${error.type} libera el futuro', () async {
+        final storage = _completeStorage();
+        final pending = Completer<RefreshedTokens>();
+        final auth = _FakeAuthService(refreshResult: pending.future);
+        final coordinator = _coordinator(storage: storage, authService: auth);
+        var invalidations = 0;
+        coordinator.addSessionInvalidatedListener(() => invalidations++);
+        final first = coordinator.recoverAfterUnauthorized('old-access');
+        final futures = List.generate(
+          5,
+          (_) => coordinator.recoverAfterUnauthorized('old-access'),
+        );
+        expect(futures, everyElement(same(first)));
+        final results = Future.wait(
+          [first, ...futures].map((future) async {
+            try {
+              await future;
+              fail('Expected failure');
+            } on ApiException catch (error) {
+              return error;
+            }
+          }),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(auth.refreshCount, 1);
+        pending.completeError(error);
+        final errors = await results;
+        expect(errors, everyElement(same(errors.first)));
+        expect(errors.first.type, error.type);
+        final definitive = error.type == ApiErrorType.authentication;
+        expect(invalidations, definitive ? 1 : 0);
+        expect(storage.clearCount, definitive ? 1 : 0);
+        expect(storage.accessToken, definitive ? isNull : 'old-access');
+        expect(storage.refreshToken, definitive ? isNull : 'old-refresh');
+      });
+    }
+
+    for (final restoreFirst in [true, false]) {
+      for (final fails in [true, false]) {
+        test(
+          'restauracion y 401 comparten refresh (restoreFirst=$restoreFirst, fails=$fails)',
+          () async {
+            final storage = _completeStorage();
+            final pending = Completer<RefreshedTokens>();
+            final auth = _FakeAuthService(refreshResult: pending.future);
+            final coordinator = _coordinator(
+              storage: storage,
+              authService: auth,
+              profileService: _expiredThenValidProfile(),
+            );
+            var invalidations = 0;
+            coordinator.addSessionInvalidatedListener(() => invalidations++);
+            Future<SessionRestoreResult>? restore;
+            Future<String>? recovery;
+            if (restoreFirst) {
+              restore = coordinator.restoreSession();
+            } else {
+              recovery = coordinator.recoverAfterUnauthorized('old-access');
+            }
+            await Future<void>.delayed(Duration.zero);
+            restore ??= coordinator.restoreSession();
+            recovery ??= coordinator.recoverAfterUnauthorized('old-access');
+            final result = recovery.then<Object>(
+              (value) => value,
+              onError: (Object error) => error,
+            );
+            await Future<void>.delayed(Duration.zero);
+            expect(auth.refreshCount, 1);
+            if (fails) {
+              pending.completeError(_authentication);
+            } else {
+              pending.complete(_refreshed);
+            }
+            expect(
+              (await restore).status,
+              fails ? SessionRestoreStatus.invalid : SessionRestoreStatus.valid,
+            );
+            expect(await result, fails ? isA<ApiException>() : 'new-access');
+            expect(auth.refreshCount, 1);
+            expect(storage.clearCount, fails ? 1 : 0);
+            expect(invalidations, fails ? 1 : 0);
+            expect(
+              storage.savedPairs,
+              fails ? isEmpty : [('new-access', 'new-refresh')],
+            );
+          },
+        );
+      }
+    }
+
+    test(
+      'espera el guardado completo antes de reutilizar el access nuevo',
+      () async {
+        final storage = _PausedTokenStorage();
+        final auth = _FakeAuthService();
+        final coordinator = _coordinator(storage: storage, authService: auth);
+        final first = coordinator.recoverAfterUnauthorized('old-access');
+        await storage.started.future;
+        expect(storage.accessToken, 'new-access');
+        expect(storage.refreshToken, 'old-refresh');
+        final second = coordinator.recoverAfterUnauthorized('old-access');
+        expect(second, same(first));
+        var completed = false;
+        final observed = second.then((_) => completed = true);
+        await Future<void>.delayed(Duration.zero);
+        expect(completed, isFalse);
+        storage.release.complete();
+        await Future.wait([first, second]);
+        await observed;
+        expect(storage.refreshToken, 'new-refresh');
+        expect(auth.refreshCount, 1);
+      },
+    );
+
+    test('una renovacion posterior inicia otro proceso', () async {
+      final storage = _completeStorage();
+      final auth = _FakeAuthService();
+      final coordinator = _coordinator(storage: storage, authService: auth);
+      final first = coordinator.recoverAfterUnauthorized('old-access');
+      await first;
+      final next = coordinator.recoverAfterUnauthorized('new-access');
+      expect(identical(first, next), isFalse);
+      await next;
+      expect(auth.refreshCount, 2);
+      expect(storage.savedPairs, hasLength(2));
+    });
+  });
+
   group('Composición de la API', () {
     for (final restore in [true, false]) {
       test('comparte transporte y limita refresh (restore=$restore)', () async {
@@ -656,4 +865,24 @@ class _FakeProfileService extends ProfileService {
 
   @override
   Future<UserProfile> getProfile(String accessToken) => handler(accessToken);
+}
+
+class _PausedTokenStorage extends _FakeTokenStorage {
+  _PausedTokenStorage()
+    : super(accessToken: 'old-access', refreshToken: 'old-refresh');
+  final started = Completer<void>();
+  final release = Completer<void>();
+  @override
+  Future<void> saveTokens({
+    required String accessToken,
+    required String refreshToken,
+  }) async {
+    this.accessToken = accessToken;
+    started.complete();
+    await release.future;
+    await super.saveTokens(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+    );
+  }
 }
