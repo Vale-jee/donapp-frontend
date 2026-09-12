@@ -65,6 +65,151 @@ Ante una autenticación definitivamente inválida:
 - Las imágenes se validan por cantidad, formato y tamaño antes de subirlas.
 - Una navegación temporal realizada con `push` mantiene montado el formulario y conserva texto, categoría e imágenes. Si el usuario abandona la ruta y abre un formulario nuevo, comienza limpio.
 
+## Correspondencia entre JSON del servidor y modelos Dart
+
+Esta referencia describe el código actual de usuario/perfil, donación y solicitud. Las rutas de campo son relativas a `data.usuario`, `data.donacion` o `data.solicitud`, salvo que se indique `data` explícitamente. Los servicios extraen estos contenedores antes de invocar `fromJson`; no son atributos adicionales de las entidades.
+
+En las tablas, **O** significa clave obligatoria en la respuesta del backend para la variante indicada; **C** significa presencia condicional. La columna **Null B/D** distingue backend y Dart. Una clave obligatoria puede contener `null`: los parsers actuales también toleran su ausencia cuando se indica «ausencia → null». Esto es tolerancia del cliente, no permiso para omitirla en el contrato. Los parámetros `required` de un constructor Dart no garantizan presencia en JSON ni impiden tipos nullable.
+
+Los tipos backend corresponden a TypeScript y su representación JSON: `number` entero procede de `Int` de Prisma; `Date` se serializa como string ISO-8601. No se enumeran como campos JSON las columnas ni relaciones que los selectores del servidor excluyen. El esquema y la política de almacenamiento local se describen en [Persistencia local](local_persistence.md).
+
+### Usuario y perfil
+
+`GET /api/usuarios/perfil` produce `UserProfile`. `POST /api/auth/login` incluye una proyección menor, `AuthUser`, en `AuthSession.usuario`; no debe interpretarse como un perfil completo. El resumen público de participantes de solicitudes se documenta más abajo.
+
+| Entidad/modelo | Campo JSON backend | Campo Dart | Tipo backend → JSON | Tipo Dart | Presencia | Null B/D | Transformación / observación |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Perfil | `id` | `id` | number entero | int | O | No/No | Directa. |
+| Perfil | `nombreCompleto` | `nombreCompleto` | string | String | O | No/No | Exige string no vacío. |
+| Perfil | `nombreVisible` | `nombreVisible` | string | String | O | No/No | Conserva el nombre español. |
+| Perfil | `email` | `email` | string | String | O | No/No | Lectura sin normalización. |
+| Perfil | `ciudad` | `ciudad` | string | String | O | No/No | Exige string no vacío. |
+| Perfil | `telefono` | `telefono` | string o null | String? | O | Sí/Sí | Ausencia → null; admite string vacío. |
+| Perfil | `fotoPerfil` | `fotoPerfil` | string o null | String? | O | Sí/Sí | Ausencia → null; admite string vacío. |
+| Perfil | `activo` | `activo` | boolean | bool | O | No/No | Sin coerción. |
+| Perfil | `createdAt` | `createdAt` | Date → string ISO | DateTime | O | No/No | DateTime.tryParse; sin toUtc explícito. |
+| Perfil | `updatedAt` | `updatedAt` | Date → string ISO | DateTime | O | No/No | Igual que createdAt. |
+| Perfil | `rol` | `rol` | objeto | ProfileRole | O | No/No | Objeto anidado. |
+| Rol de perfil | `rol.codigo` | `rol.codigo` | Role → string: ADMIN/USUARIO | String | O | No/No | Dart valida string no vacío, no enum. |
+| Rol de perfil | `rol.nombre` | `rol.nombre` | string | String | O | No/No | Directa. |
+| Usuario de login | `id` | `AuthUser.id` | number entero | int | O | No/No | Directa. |
+| Usuario de login | `nombreVisible` | `AuthUser.nombreVisible` | string | String | O | No/No | Sin renombrado. |
+| Usuario de login | `fotoPerfil` | `AuthUser.fotoPerfil` | string o null | String? | O | Sí/Sí | Ausencia → null; admite string vacío. |
+| Usuario de login | `rol` | `AuthUser.rol` | objeto | AuthRole | O | No/No | Objeto anidado. |
+| Rol de login | `rol.codigo` | `rol.codigo` | string: ADMIN/USUARIO | String | O | No/No | No se convierte en enum Dart. |
+| Rol de login | `rol.nombre` | `rol.nombre` | string | String | O | No/No | Directa. |
+
+### Donación
+
+**D** identifica `DonationDetail`, usado en GET por id y POST de creación. **L** identifica `DonationListItem`, usado en GET de disponibles y propias. El POST usa `fromMutationJson`; el GET por id usa `fromJson`.
+
+| Entidad/modelo | Campo JSON backend | Campo Dart | Tipo backend → JSON | Tipo Dart | Presencia | Null B/D | Transformación / observación |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Donación D/L | `id` | `id` | number entero | int | O | No/No | Directa. |
+| Donación D/L | `titulo` | `titulo` | string | String | O | No/No | No se llama title en estos modelos. |
+| Donación D | `descripcion` | `descripcion` | string | String | O | No/No | No está en el listado. |
+| Donación D/L | `ciudad` | `ciudad` | string | String | O | No/No | El backend la obtiene del perfil al crear. |
+| Donación D/L | `estado` | `estado` | EstadoDonacion → string | DonationStatus | O | No/No | PUBLICADA/RESERVADA/ENTREGADA/RETIRADA → publicada/reservada/entregada/retirada. |
+| Donación D/L | `createdAt` | `createdAt` | Date → string ISO | DateTime | O | No/No | Exige Z u offset ±hh:mm; parsea y convierte a UTC. |
+| Donación D/L | `updatedAt` | `updatedAt` | Date → string ISO | DateTime | O | No/No | Misma conversión UTC. |
+| Donación D/L | `categoria` | Sin objeto propio | objeto | — | O | No/— | Se aplana en dos atributos. |
+| Donación D/L | `categoria.id` | `categoriaId` | number entero | int | O | No/No | Aplanamiento. |
+| Donación D/L | `categoria.nombre` | `categoriaNombre` | string | String | O | No/No | Aplanamiento. |
+| Donación D | `imagenes` | `imagenes` | array de objetos | List<DonationImage> | O | No/No | Copia inmutable ordenada por orden. |
+| Donación L | `imagenPrincipal` | `imagenPrincipal` | objeto o null | DonationImage? | O | Sí/Sí | Primera imagen en backend; ausencia → null en Dart. |
+| Donación L | `cantidadImagenes` | `cantidadImagenes` | number entero | int | O | No/No | Conteo del backend; no lo calcula Flutter. |
+| Imagen | `imagenes[].id` / `imagenPrincipal.id` | `DonationImage.id` | number entero | int | O en imagen | No/No | Directa. |
+| Imagen | `imagenes[].referencia` / `imagenPrincipal.referencia` | `DonationImage.referencia` | string | String | O en imagen | No/No | Referencia remota. |
+| Imagen | `imagenes[].orden` / `imagenPrincipal.orden` | `DonationImage.orden` | number entero | int | O en imagen | No/No | Orden asignado desde 1 al crear. |
+| Imagen local | No existe | `cachedLocalPath` | — | String? | Opcional local | —/Sí | No se lee del JSON; ruta de caché local. |
+| Donación D | `puedeSolicitar` | `puedeSolicitar` | boolean | bool | O GET; ausente POST | No/No | Calculado por backend en GET; fromMutationJson asigna false sin leerlo. |
+| Donación creada | `clientId` | No se lee en DonationDetail | string o null; propiedad TS opcional | — | C: POST lo selecciona; GET lo omite | Sí/— | El cliente lo envía para idempotencia, pero ignora el valor devuelto. |
+| Respuesta de creación | `data.procesamientoAsincrono` | No consumido | objeto | — | O POST | No/— | Metadato fuera de donacion. |
+| Respuesta de creación | `data.procesamientoAsincrono.estado` | No consumido | string: ENQUEUED/PENDING_RECONCILIATION | — | O POST | No/— | DonationService solo extrae data.donacion. |
+
+### Solicitud y resúmenes anidados
+
+Los campos comunes se leen mediante `_RequestFields` en `SentRequestListItem`, `ReceivedRequestListItem` y `RequestDetail`. `CreatedRequest` solo conserva `id`, `status` y `donation`, aunque POST devuelve más campos. Los listados usan GET `/api/solicitudes/enviadas` y `/recibidas`; detalle y acciones usan GET por id y PATCH `aceptar`, `rechazar`, `cancelar`.
+
+| Entidad/modelo | Campo JSON backend | Campo Dart | Tipo backend → JSON | Tipo Dart | Presencia | Null B/D | Transformación / observación |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Solicitud | `id` | `id` | number entero | int | O | No/No | También CreatedRequest. |
+| Solicitud | `estado` | `status` | EstadoSolicitud → string | RequestStatus | O | No/No | PENDIENTE/ACEPTADA/RECHAZADA/CANCELADA → pendiente/aceptada/rechazada/cancelada. También CreatedRequest. |
+| Solicitud | `causaCancelacion` | `cancellationCause` | CausaCancelacionSolicitud → string o null | CancellationCause? | O | Sí/Sí | Ausencia → null; POST devuelve el campo pero CreatedRequest lo ignora. |
+| Solicitud | `aceptadaAt` | `acceptedAt` | Date → string ISO o null | DateTime? | O | Sí/Sí | Ausencia → null; parseo sin toUtc explícito. Ignorado en CreatedRequest. |
+| Solicitud | `rechazadaAt` | `rejectedAt` | Date → string ISO o null | DateTime? | O | Sí/Sí | Igual; ignorado en CreatedRequest. |
+| Solicitud | `canceladaAt` | `cancelledAt` | Date → string ISO o null | DateTime? | O | Sí/Sí | Igual; ignorado en CreatedRequest. |
+| Solicitud | `createdAt` | `createdAt` | Date → string ISO | DateTime | O | No/No | DateTime.tryParse; ignorado en CreatedRequest. |
+| Solicitud | `updatedAt` | `updatedAt` | Date → string ISO | DateTime | O | No/No | Igual; ignorado en CreatedRequest. |
+| Solicitud | `donacion` | `donation` | objeto RequestDonation | RequestDonationSummary | O | No/No | También CreatedRequest. |
+| Solicitud enviada | `donante` | `donor` | objeto PublicUser | RequestUserSummary | O en enviadas | No/No | Ausente en creación y recibidas. |
+| Solicitud recibida | `solicitante` | `applicant` | objeto PublicUser | RequestUserSummary | O en recibidas | No/No | Ausente en creación y enviadas. |
+| Solicitud detalle/acción | `donante` / `solicitante` | `otherUser` | objetos PublicUser; propiedades TS opcionales | RequestUserSummary | C por actor | No/No | Flutter exige exactamente uno; incompatibilidad descrita abajo. |
+| Donación resumida | `donacion.id` | `donation.id` | number entero | int | O | No/No | Directa. |
+| Donación resumida | `donacion.titulo` | `donation.title` | string | String | O | No/No | Aquí sí existe titulo → title. |
+| Donación resumida | `donacion.estado` | `donation.status` | EstadoDonacion → string | RequestDonationStatus | O | No/No | Mismos cuatro valores de donación; enum Dart separado. |
+| Donación resumida | `donacion.imagenPrincipal` | `donation.mainImage` | string o null | String? | O | Sí/Sí | Es referencia de imagen, no objeto DonationImage; ausencia → null, string vacío inválido. |
+| Usuario resumido | `donante.id` / `solicitante.id` | `RequestUserSummary.id` | number entero | int | O si existe usuario | No/No | Bajo donor, applicant u otherUser. |
+| Usuario resumido | `donante.nombreVisible` / `solicitante.nombreVisible` | `RequestUserSummary.visibleName` | string | String | O si existe usuario | No/No | nombreVisible → visibleName solo en este modelo. |
+| Usuario resumido | `donante.fotoPerfil` / `solicitante.fotoPerfil` | `RequestUserSummary.profilePhoto` | string o null | String? | O si existe usuario | Sí/Sí | Ausencia → null; string vacío inválido, a diferencia de UserProfile/AuthUser. |
+| Usuario resumido | `donante.ciudad` / `solicitante.ciudad` | `RequestUserSummary.city` | string | String | O si existe usuario | No/No | Renombrado. |
+| Solicitud derivada | No existe | `actor` | — | RequestActor | Derivado local | —/No | donante presente → applicant; solicitante presente → owner. |
+| Solicitud derivada | No existe | `canAcceptOrReject` | — | bool | Getter local | —/No | actor owner, solicitud pendiente y donación publicada. |
+| Solicitud derivada | No existe | `canCancel` | — | bool | Getter local | —/No | actor applicant y solicitud pendiente. |
+
+`CancellationCause` traduce `VOLUNTARIA`, `OTRA_SOLICITUD_ACEPTADA`, `DONACION_RETIRADA` y `USUARIO_INACTIVO` a `voluntaria`, `otraSolicitudAceptada`, `donacionRetirada` y `usuarioInactivo`. Los parsers de enums rechazan valores desconocidos. Los getters `label` producen textos de presentación locales; los getters `apiValue` de estados producen los valores API en mayúsculas.
+
+**Incompatibilidad actual de participantes:** `findRequestDetail` y `mutationDetailSelect` seleccionan siempre `solicitante`. `mapRequest` lo conserva y además agrega `donante` cuando el actor es el solicitante. Por tanto, GET del detalle y PATCH de cancelación como solicitante devuelven ambos objetos. `RequestDetail.fromJson` rechaza ese caso con `FormatException('Actor de solicitud inconsistente.')`, que el servicio convierte en respuesta inesperada. Como propietario, detalle/aceptación/rechazo contienen solo `solicitante`. Esta tabla registra la implementación actual; no presupone que la exclusividad esperada por Flutter esté garantizada ni corrige el contrato.
+
+### Colecciones y paginación
+
+En esta tabla las rutas son relativas a `data`. Cada fila de paginación aplica tanto a donaciones como a solicitudes.
+
+| Entidad/modelo | Campo JSON backend | Campo Dart | Tipo backend → JSON | Tipo Dart | Presencia | Null B/D | Transformación / observación |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| DonationPage | `donaciones` | `donations` | array de OwnDonationListItem | List<DonationListItem> | O | No/No | Mapea elementos; admite lista vacía. |
+| RequestPage<T> | `solicitudes` | `requests` | array de SafeRequest | List<T> | O | No/No | T es SentRequestListItem o ReceivedRequestListItem. |
+| DonationPage / RequestPage | `pagination` | `pagination` | objeto | DonationPagination / RequestPagination | O | No/No | Modelo anidado. |
+| Paginación | `pagination.page` | `pagination.page` | number entero | int | O | No/No | Directa. |
+| Paginación | `pagination.limit` | `pagination.limit` | number entero | int | O | No/No | Directa. |
+| Paginación | `pagination.total` | `pagination.total` | number entero | int | O | No/No | Conteo backend. |
+| Paginación | `pagination.totalPages` | `pagination.totalPages` | number entero | int | O | No/No | Backend: Math.ceil(total / limit). |
+| Paginación derivada | No existe | `pagination.hasNextPage` | — | bool | Getter local | —/No | page < totalPages. |
+
+### Entradas de creación de donaciones y solicitudes
+
+Estos nombres Dart son **parámetros de servicios**, no atributos de los modelos de respuesta. La obligatoriedad aquí corresponde al cuerpo de la petición.
+
+| Entidad/operación | Campo JSON backend | Parámetro Dart | Tipo backend | Tipo Dart | Presencia | Null B/D | Transformación / observación |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Crear donación | `clientId` | `clientId` | string UUID | String? | Opcional | No/Sí | Si es null se omite la clave; backend acepta ausencia, no null. |
+| Crear donación | `titulo` | `title` | string | String | O | No/No | Backend recorta y colapsa espacios; 5–100 caracteres. |
+| Crear donación | `descripcion` | `description` | string | String | O | No/No | Backend recorta; 20–1000 caracteres, texto plano validado. |
+| Crear donación | `categoriaId` | `categoryId` | number entero positivo | int | O | No/No | Identificador; respuesta usa categoria.id. |
+| Crear donación | `imagenes` | `imageReferences` | string[] | List<String> | O | No/No | 1–5 referencias, recortadas y sin duplicados; respuesta devuelve objetos. |
+| Crear solicitud | `donacionId` | `donationId` | number entero positivo | int | O | No/No | Cuerpo único; identidad del solicitante procede de autenticación. |
+
+Los filtros son parámetros de URL, no campos JSON: `categoryId` → `categoriaId` en disponibles; `status` → `estado` en propias y solicitudes, mediante `apiValue`. Son opcionales y se omiten cuando valen null en Dart. `page` y `limit` se envían como strings; Zod los convierte a enteros, admite ausencia con valores 1 y 20 y limita `limit` a 100. Las acciones de solicitud envían un objeto vacío.
+
+### Campos no consumidos y límites de la correspondencia
+
+- Todos los campos de la proyección de perfil y del usuario de login tienen correspondencia. El endpoint independiente de perfil público no es invocado por `ProfileService`; los resúmenes públicos sí se consumen dentro de solicitudes.
+- La respuesta de creación de donación devuelve `clientId` y `procesamientoAsincrono.estado`, que no se incorporan a modelos Flutter. `clientId` sí se utiliza como entrada de creación y en sincronización local; no es un campo completamente ajeno al cliente.
+- En creación de solicitud, Flutter ignora `causaCancelacion`, `aceptadaAt`, `rechazadaAt`, `canceladaAt`, `createdAt` y `updatedAt`. En listados/detalle sí los modela.
+- Otros contratos de donación del backend, no invocados por `DonationService`, exponen `retiradaAt` (retirada, Date no nullable → string ISO), y `donanteConfirmoAt`, `receptorConfirmoAt`, `entregadaAt` (confirmación de entrega, Date nullable → string ISO o null). Son claves obligatorias en esas respuestas, sin atributo Dart en los modelos actuales.
+- Campos persistidos como `Usuario.rolId`, `Donacion.propietarioId`, `Donacion.solicitudAceptadaId` y `Solicitud.solicitanteId` no son campos JSON de las proyecciones consumidas. `Solicitud.donacionId` es entrada de creación; en respuestas el identificador se recibe dentro de `donacion.id`. Los hashes de autenticación tampoco forman parte del contrato público.
+- Esta referencia cubre las tres entidades principales, sus proyecciones y paginación. No pretende inventariar tokens, categorías independientes, subida de imágenes, errores ni endpoints administrativos.
+
+### Fuentes verificables
+
+Los enlaces al backend suponen los repositorios hermanos `donapp-frontend` y `donapp`.
+
+- Perfil: [modelo Dart](../lib/models/user_profile.dart), [servicio Flutter](../lib/services/profile_service.dart), [contrato backend](../../donapp/src/lib/services/usuario-service.ts), [selector seguro](../../donapp/database/usuarios/index.ts), [ruta de perfil](../../donapp/src/pages/api/usuarios/perfil.ts).
+- Usuario de login: [AuthUser/AuthRole](../lib/models/auth_session.dart), [AuthService](../lib/services/auth_service.dart), [LoginResult](../../donapp/src/lib/services/auth-service.ts).
+- Donación: [modelos Dart](../lib/models/donation.dart), [DonationService](../lib/services/donation_service.dart), [contratos y mapeos backend](../../donapp/src/lib/services/donacion-service.ts), [ruta de creación/listado](../../donapp/src/pages/api/donaciones/index.ts), [validaciones](../../donapp/src/lib/validations/donaciones.ts).
+- Solicitud: [modelos Dart](../lib/models/request.dart), [RequestService](../lib/services/request_service.dart), [SafeRequest y mapeos](../../donapp/src/lib/services/solicitud-service.ts), [selectores de participantes](../../donapp/database/solicitudes/index.ts), [validaciones](../../donapp/src/lib/validations/solicitudes.ts).
+- Tipos persistidos y serialización: [Prisma](../../donapp/prisma/schema.prisma), [respuestas JSON](../../donapp/src/lib/api/responses.ts).
+
 ## Capturas recomendadas
 
 1. Login completo.
