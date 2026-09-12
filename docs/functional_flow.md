@@ -277,3 +277,11 @@ Los enlaces al backend suponen los repositorios hermanos `donapp-frontend` y `do
 4. Detalle de una donaciÃ³n.
 5. Formulario de publicaciÃ³n completo con categorÃ­a e imÃ¡genes.
 6. Detalle de la donaciÃ³n reciÃ©n creada.
+
+## Inyección del access token
+
+ApiClient obtiene el access token mediante TokenStorage.readAccessToken (FlutterSecureStorage) antes de cada petición con contexto protectedSession y almacenamiento configurado. SessionCoordinator configura esta dependencia en protectedApiClient; no mantiene una copia global del token. Sin token disponible, la petición protegida falla localmente con authentication/401 antes de enviarse. withTokenStorage conserva transporte, timeout, URL y recuperación, y permite sustituir el almacenamiento en pruebas.
+
+Donaciones, solicitudes y firma de imágenes delegan la lectura y construcción del Bearer al cliente. Sus parámetros de TokenStorage se conservan para inyección independiente. Login, registro, refresh, logout y categorías usan contextos publicos y no reciben access token automáticamente. Perfil conserva un Bearer explícito para consultar la identidad del token recibido durante login/restauración. Un Authorization explícito tiene prioridad, sin distinguir mayúsculas, y no se duplica. Ante 401, el reintento existente reemplaza ese header con el token que devuelve el coordinador; las peticiones siguientes vuelven a leer el almacenamiento.
+
+Cloudinary y RemoteImageCache mantienen transportes externos separados y no usan esta inyección. La firma de imágenes pertenece a la API propia y sí la utiliza.

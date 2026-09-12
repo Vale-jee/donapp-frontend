@@ -79,7 +79,7 @@ class AuthService {
         },
         body: {'refreshToken': refreshToken},
         successStatusCodes: const {200},
-        context: ApiRequestContext.protectedSession,
+        context: ApiRequestContext.general,
       );
       final data = body['data'];
       if (data is! Map<String, dynamic>) {
@@ -102,7 +102,7 @@ class AuthService {
       },
       body: {'refreshToken': refreshToken},
       successStatusCodes: const {200},
-      context: ApiRequestContext.protectedSession,
+      context: ApiRequestContext.general,
     );
   }
 }

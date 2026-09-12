@@ -6,11 +6,11 @@ import 'token_storage.dart';
 
 class DonationService {
   DonationService({ApiClient? apiClient, TokenStorage? tokenStorage})
-    : _apiClient = apiClient ?? ApiClient(),
-      _tokenStorage = tokenStorage ?? TokenStorage();
+    : _apiClient = tokenStorage != null
+          ? (apiClient ?? ApiClient()).withTokenStorage(tokenStorage)
+          : apiClient ?? ApiClient(tokenStorage: TokenStorage());
 
   final ApiClient _apiClient;
-  final TokenStorage _tokenStorage;
 
   Future<DonationDetail> createDonation({
     String? clientId,
@@ -19,11 +19,10 @@ class DonationService {
     required int categoryId,
     required List<String> imageReferences,
   }) async {
-    final accessToken = await _accessToken();
     try {
       final body = await _apiClient.post(
         '/api/donaciones',
-        headers: {..._headers(accessToken), 'Content-Type': 'application/json'},
+        headers: {..._headers, 'Content-Type': 'application/json'},
         body: {
           'clientId': ?clientId,
           'titulo': title,
@@ -55,11 +54,10 @@ class DonationService {
         'La donación solicitada no es válida.',
       );
     }
-    final accessToken = await _accessToken();
     try {
       final body = await _apiClient.get(
         '/api/donaciones/$id',
-        headers: _headers(accessToken),
+        headers: _headers,
         successStatusCodes: const {200},
         context: ApiRequestContext.protectedSession,
       );
@@ -81,11 +79,10 @@ class DonationService {
     int limit = 20,
     int? categoryId,
   }) async {
-    final accessToken = await _accessToken();
     try {
       final body = await _apiClient.get(
         '/api/donaciones',
-        headers: _headers(accessToken),
+        headers: _headers,
         queryParameters: {
           'page': '$page',
           'limit': '$limit',
@@ -111,11 +108,10 @@ class DonationService {
     int limit = 20,
     DonationStatus? status,
   }) async {
-    final accessToken = await _accessToken();
     try {
       final body = await _apiClient.get(
         '/api/donaciones/mias',
-        headers: _headers(accessToken),
+        headers: _headers,
         queryParameters: {
           'page': '$page',
           'limit': '$limit',
@@ -136,20 +132,5 @@ class DonationService {
     }
   }
 
-  Future<String> _accessToken() async {
-    final accessToken = await _tokenStorage.readAccessToken();
-    if (accessToken == null || accessToken.isEmpty) {
-      throw const ApiException(
-        ApiErrorType.authentication,
-        'Tu sesión ya no es válida. Inicia sesión nuevamente.',
-        statusCode: 401,
-      );
-    }
-    return accessToken;
-  }
-
-  Map<String, String> _headers(String accessToken) => {
-    'Accept': 'application/json',
-    'Authorization': 'Bearer $accessToken',
-  };
+  static const _headers = {'Accept': 'application/json'};
 }

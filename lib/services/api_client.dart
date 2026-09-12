@@ -7,6 +7,7 @@ import '../config/api_config.dart';
 import '../config/network_timeouts.dart';
 import 'api_error_mapper.dart';
 import 'api_exception.dart';
+import 'token_storage.dart';
 
 typedef ApiEndpointBuilder = Uri Function(String path);
 
@@ -22,16 +23,19 @@ class ApiClient {
     Duration timeout = NetworkTimeouts.apiResponse,
     ApiEndpointBuilder endpointBuilder = ApiConfig.endpoint,
     SessionRecovery? sessionRecovery,
+    TokenStorage? tokenStorage,
   }) : _client = client ?? http.Client() {
     _timeout = timeout;
     _endpointBuilder = endpointBuilder;
     _sessionRecovery = sessionRecovery;
+    _tokenStorage = tokenStorage;
   }
 
   final http.Client _client;
   late final Duration _timeout;
   late final ApiEndpointBuilder _endpointBuilder;
   late final SessionRecovery? _sessionRecovery;
+  late final TokenStorage? _tokenStorage;
 
   /// Shares transport and configuration while isolating session recovery policy.
   ApiClient withSessionRecovery(SessionRecovery sessionRecovery) => ApiClient(
@@ -39,6 +43,16 @@ class ApiClient {
     timeout: _timeout,
     endpointBuilder: _endpointBuilder,
     sessionRecovery: sessionRecovery,
+    tokenStorage: _tokenStorage,
+  );
+
+  /// Shares transport and recovery while selecting the encrypted token source.
+  ApiClient withTokenStorage(TokenStorage tokenStorage) => ApiClient(
+    client: _client,
+    timeout: _timeout,
+    endpointBuilder: _endpointBuilder,
+    sessionRecovery: _sessionRecovery,
+    tokenStorage: tokenStorage,
   );
 
   Future<Map<String, dynamic>> get(
@@ -116,19 +130,37 @@ class ApiClient {
       final uri = queryParameters == null || queryParameters.isEmpty
           ? endpoint
           : endpoint.replace(queryParameters: queryParameters);
-      var response = await send(uri, headers).timeout(_timeout);
+      final requestHeaders = Map<String, String>.of(headers ?? const {});
+      final storage = _tokenStorage;
+      if (context == ApiRequestContext.protectedSession &&
+          storage != null &&
+          !requestHeaders.keys.any(
+            (key) => key.toLowerCase() == 'authorization',
+          )) {
+        final token = await storage.readAccessToken();
+        if (token == null || token.isEmpty) {
+          throw const ApiException(
+            ApiErrorType.authentication,
+            'Tu sesión ya no es válida. Inicia sesión nuevamente.',
+            statusCode: 401,
+          );
+        }
+        requestHeaders['Authorization'] = 'Bearer $token';
+      }
+      var response = await send(uri, requestHeaders).timeout(_timeout);
       final sessionRecovery = _sessionRecovery;
       var retriedAfterUnauthorized = false;
 
       if (response.statusCode == 401 &&
           context == ApiRequestContext.protectedSession &&
           sessionRecovery != null) {
-        final failedAccessToken = _bearerToken(headers);
+        final failedAccessToken = _bearerToken(requestHeaders);
         if (failedAccessToken != null) {
           final accessToken = await sessionRecovery.recoverAfterUnauthorized(
             failedAccessToken,
           );
-          final retryHeaders = Map<String, String>.of(headers ?? const {})
+          final retryHeaders = Map<String, String>.of(requestHeaders)
+            ..removeWhere((key, _) => key.toLowerCase() == 'authorization')
             ..['Authorization'] = 'Bearer $accessToken';
           response = await send(uri, retryHeaders).timeout(_timeout);
           retriedAfterUnauthorized = true;
@@ -192,7 +224,10 @@ class ApiClient {
   }
 
   String? _bearerToken(Map<String, String>? headers) {
-    final authorization = headers?['Authorization'];
+    final authorization = headers?.entries
+        .where((entry) => entry.key.toLowerCase() == 'authorization')
+        .map((entry) => entry.value)
+        .firstOrNull;
     if (authorization == null || !authorization.startsWith('Bearer ')) {
       return null;
     }

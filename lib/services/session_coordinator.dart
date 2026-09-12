@@ -46,9 +46,9 @@ class SessionCoordinator implements SessionRecovery {
   final ApiClient _apiClient;
   late final AuthService _authService;
   late final ProfileService _profileService;
-  late final ApiClient protectedApiClient = _apiClient.withSessionRecovery(
-    this,
-  );
+  late final ApiClient protectedApiClient = _apiClient
+      .withTokenStorage(_tokenStorage)
+      .withSessionRecovery(this);
 
   AuthService get authService => _authService;
   final TokenStorage _tokenStorage;

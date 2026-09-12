@@ -96,29 +96,20 @@ class ImageUploadService {
     ApiClient? apiClient,
     TokenStorage? tokenStorage,
     http.Client? uploadClient,
-  }) : _apiClient = apiClient ?? ApiClient(),
-       _tokenStorage = tokenStorage ?? TokenStorage(),
+  }) : _apiClient = tokenStorage != null
+           ? (apiClient ?? ApiClient()).withTokenStorage(tokenStorage)
+           : apiClient ?? ApiClient(tokenStorage: TokenStorage()),
        _uploadClient = uploadClient ?? http.Client();
 
   final ApiClient _apiClient;
-  final TokenStorage _tokenStorage;
   final http.Client _uploadClient;
 
   Future<CloudinaryUploadAuthorization> requestAuthorization() async {
-    final token = await _tokenStorage.readAccessToken();
-    if (token == null || token.isEmpty) {
-      throw const ApiException(
-        ApiErrorType.authentication,
-        'Tu sesión ya no es válida. Inicia sesión nuevamente.',
-        statusCode: 401,
-      );
-    }
     try {
       final body = await _apiClient.post(
         '/api/imagenes/firma',
         headers: {
           'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
         successStatusCodes: const {200},

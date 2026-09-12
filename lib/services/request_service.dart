@@ -6,19 +6,18 @@ import 'token_storage.dart';
 
 class RequestService {
   RequestService({ApiClient? apiClient, TokenStorage? tokenStorage})
-    : _apiClient = apiClient ?? ApiClient(),
-      _tokenStorage = tokenStorage ?? TokenStorage();
+    : _apiClient = tokenStorage != null
+          ? (apiClient ?? ApiClient()).withTokenStorage(tokenStorage)
+          : apiClient ?? ApiClient(tokenStorage: TokenStorage());
 
   final ApiClient _apiClient;
-  final TokenStorage _tokenStorage;
 
   Future<CreatedRequest> createRequest(int donationId) async {
     if (donationId <= 0) throw _invalidDonationId;
-    final token = await _accessToken();
     try {
       final body = await _apiClient.post(
         '/api/solicitudes',
-        headers: {..._headers(token), 'Content-Type': 'application/json'},
+        headers: {..._headers, 'Content-Type': 'application/json'},
         body: {'donacionId': donationId},
         successStatusCodes: const {201},
         context: ApiRequestContext.protectedSession,
@@ -67,11 +66,10 @@ class RequestService {
     required RequestStatus? status,
     required T Function(Map<String, dynamic>) parse,
   }) async {
-    final token = await _accessToken();
     try {
       final body = await _apiClient.get(
         path,
-        headers: _headers(token),
+        headers: _headers,
         queryParameters: {
           'page': '$page',
           'limit': '$limit',
@@ -106,18 +104,17 @@ class RequestService {
   }
 
   Future<RequestDetail> _detailRequest(String method, String path) async {
-    final token = await _accessToken();
     try {
       final body = method == 'GET'
           ? await _apiClient.get(
               path,
-              headers: _headers(token),
+              headers: _headers,
               successStatusCodes: const {200},
               context: ApiRequestContext.protectedSession,
             )
           : await _apiClient.patch(
               path,
-              headers: {..._headers(token), 'Content-Type': 'application/json'},
+              headers: {..._headers, 'Content-Type': 'application/json'},
               body: const {},
               successStatusCodes: const {200},
               context: ApiRequestContext.protectedSession,
@@ -141,22 +138,7 @@ class RequestService {
     return data;
   }
 
-  Future<String> _accessToken() async {
-    final token = await _tokenStorage.readAccessToken();
-    if (token == null || token.isEmpty) {
-      throw const ApiException(
-        ApiErrorType.authentication,
-        'Tu sesión ya no es válida. Inicia sesión nuevamente.',
-        statusCode: 401,
-      );
-    }
-    return token;
-  }
-
-  Map<String, String> _headers(String token) => {
-    'Accept': 'application/json',
-    'Authorization': 'Bearer $token',
-  };
+  static const _headers = {'Accept': 'application/json'};
 
   static const _invalidId = ApiException(
     ApiErrorType.validation,
