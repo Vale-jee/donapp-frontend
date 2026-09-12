@@ -2,15 +2,39 @@ class ApiConfig {
   ApiConfig._();
 
   static const String _apiBaseUrl = String.fromEnvironment('API_BASE_URL');
+  static const String environment = String.fromEnvironment(
+    'APP_ENV',
+    defaultValue: 'dev',
+  );
 
   static Uri endpoint(String path) {
-    if (_apiBaseUrl.trim().isEmpty) {
+    final baseUri = validateBaseUrl(
+      environment: environment,
+      baseUrl: _apiBaseUrl,
+    );
+    final normalizedPath = path.startsWith('/') ? path : '/$path';
+    return baseUri.replace(
+      path: '${baseUri.path.replaceFirst(RegExp(r'/$'), '')}$normalizedPath',
+      query: null,
+      fragment: null,
+    );
+  }
+
+  /// Pure validation also used by tests without contacting a backend.
+  static Uri validateBaseUrl({
+    required String environment,
+    required String baseUrl,
+  }) {
+    if (!const {'dev', 'test', 'prod'}.contains(environment)) {
+      throw const ApiConfigException('APP_ENV debe ser dev, test o prod.');
+    }
+    if (baseUrl.trim().isEmpty) {
       throw const ApiConfigException(
         'Falta configurar API_BASE_URL. Ejecute la aplicacion con '
         '--dart-define=API_BASE_URL=<url-del-backend>.',
       );
     }
-    final baseUri = Uri.tryParse(_apiBaseUrl);
+    final baseUri = Uri.tryParse(baseUrl);
     if (baseUri == null ||
         !baseUri.hasScheme ||
         baseUri.host.isEmpty ||
@@ -19,12 +43,12 @@ class ApiConfig {
         'API_BASE_URL no contiene una URL HTTP valida.',
       );
     }
-    final normalizedPath = path.startsWith('/') ? path : '/$path';
-    return baseUri.replace(
-      path: '${baseUri.path.replaceFirst(RegExp(r'/$'), '')}$normalizedPath',
-      query: null,
-      fragment: null,
-    );
+    if (environment == 'prod' && baseUri.scheme != 'https') {
+      throw const ApiConfigException(
+        'API_BASE_URL debe usar HTTPS cuando APP_ENV=prod.',
+      );
+    }
+    return baseUri;
   }
 
   static Uri? resolveImageReference(String reference, {Uri? baseUri}) {

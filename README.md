@@ -86,7 +86,23 @@ flutter analyze
 flutter test
 ```
 
-La URL del backend se proporciona mediante `API_BASE_URL`, sin agregar `/api` al final:
+### Configuración por ambiente
+
+`APP_ENV` y `API_BASE_URL` son constantes de compilación suministradas con `--dart-define`. Los únicos ambientes válidos son `dev`, `test` y `prod`. Si se omite `APP_ENV`, se utiliza `dev` para conservar compatibilidad con los comandos existentes y la tarea de VS Code. No hay URL predeterminada: `API_BASE_URL` es obligatoria al consumir la API, sin agregar `/api` al final.
+
+| Ambiente | Configuración | Uso |
+| --- | --- | --- |
+| `dev` | URL HTTP o HTTPS; Android permite HTTP solo hacia localhost | Desarrollo local con backend propio |
+| `test` | URL ficticia e inyección de clientes simulados | Pruebas automatizadas sin backend real |
+| `prod` | URL HTTPS obligatoria | Ejecución o compilación para producción |
+
+Desarrollo explícito:
+
+```powershell
+flutter run --dart-define=APP_ENV=dev --dart-define=API_BASE_URL=http://localhost:3000
+```
+
+El comando anterior de desarrollo también sigue siendo válido:
 
 ```powershell
 flutter run --dart-define=API_BASE_URL=http://localhost:3000
@@ -101,7 +117,26 @@ flutter run --dart-define=API_BASE_URL=http://localhost:3000
 
 Para comprobar una desconexión real, retire temporalmente el reverse con `adb reverse --remove tcp:3000`: el túnel USB puede mantener accesible el backend incluso con modo avión. Esta es una consideración exclusiva de desarrollo y depuración.
 
-La configuración Android permite HTTP únicamente para `localhost` durante el desarrollo; no habilita tráfico sin cifrar de forma global.
+Pruebas automatizadas:
+
+```powershell
+flutter test --dart-define=APP_ENV=test --dart-define=API_BASE_URL=https://donapp.test
+```
+
+`donapp.test` es una dirección ficticia. Las pruebas inyectan `MockClient`, servicios simulados o constructores de URL; no necesitan un servidor escuchando allí. Seleccionar `test` no simula por sí solo el transporte ni impide conexiones: el aislamiento lo proporcionan los dobles de prueba. `flutter test` sin defines también sigue permitido; las pruebas no requieren una URL real y verifican explícitamente la ausencia de configuración.
+
+Producción (reemplace el dominio de ejemplo por la dirección pública de su despliegue):
+
+```powershell
+flutter run --release --dart-define=APP_ENV=prod --dart-define=API_BASE_URL=https://api.example.com
+flutter build apk --release --dart-define=APP_ENV=prod --dart-define=API_BASE_URL=https://api.example.com
+```
+
+El modo `--release` no selecciona el ambiente automáticamente: producción debe indicar `APP_ENV=prod`. `ApiConfig` valida al construir cada endpoint, antes de enviar la petición. Rechaza ambientes desconocidos o vacíos, URL ausente o inválida y cualquier URL base HTTP en `prod`, incluso localhost. Lanza `ApiConfigException` con el motivo; `ApiClient` conserva su traducción a error de configuración para la interfaz. No se agrega validación nueva al arranque sin peticiones.
+
+La configuración Android común (`android/app/src/main/res/xml/network_security_config.xml`) bloquea tráfico sin cifrar salvo para `localhost`; no cambia según `APP_ENV`. La validación Dart impide usar esa excepción como URL base de la API en `prod`. Esta regla se limita a la URL base de la API y no cambia las políticas de imágenes o de otros transportes.
+
+Los valores `dart-define` se incorporan al artefacto compilado y **no son secretos**. No deben contener contraseñas, tokens ni credenciales; la URL debe ser una dirección pública de configuración.
 
 ## Inicio rápido desde VS Code
 
