@@ -65,6 +65,35 @@ Ante una autenticación definitivamente inválida:
 - Las imágenes se validan por cantidad, formato y tamaño antes de subirlas.
 - Una navegación temporal realizada con `push` mantiene montado el formulario y conserva texto, categoría e imágenes. Si el usuario abandona la ruta y abre un formulario nuevo, comienza limpio.
 
+## Cliente HTTP y justificación técnica
+
+DonApp mantiene **package:http** (`http: ^1.6.0`, versión resuelta 1.6.0). La funcionalidad transversal de la API se centraliza en `ApiClient`, `ApiErrorMapper` y coordinadores propios: `SessionCoordinator` administra recuperación y rotación de sesión; `SyncCoordinator` define reintentos de operaciones persistidas. Esta separación permite completar las necesidades HTTP identificadas sin trasladar políticas de red a las pantallas ni cambiar la arquitectura. No se identifica una necesidad técnica de migrar ahora a Dio.
+
+### Alcance real
+
+Se consumen **18 operaciones método+ruta sobre 17 rutas de la API**: autenticación (4: registro, login, refresh y logout), perfil (1), categorías (1), donaciones (4: crear, disponibles, propias y detalle), solicitudes (7: crear, enviadas, recibidas, detalle, aceptar, rechazar y cancelar) y firma de imágenes (1). Además, se realiza POST multipart a la URL firmada de Cloudinary y GET de imágenes con URL variable para caché; estas transferencias no se cuentan como endpoints adicionales del backend.
+
+| Aspecto | Implementación actual con package:http | Aporte concreto de Dio |
+| --- | --- | --- |
+| Bearer y configuración | Los servicios agregan Authorization; ApiConfig centraliza API_BASE_URL. El router comparte un ApiClient con SessionRecovery entre servicios protegidos. | BaseOptions e interceptores facilitarían headers y opciones comunes; no son necesarios para centralizar estas políticas. |
+| Renovación y 401 | ApiClient repite una vez después de recuperar el token. SessionCoordinator comparte el refresh entre 401 concurrentes, reutiliza el token ya rotado y guarda ambos tokens. Login no dispara recuperación; un segundo 401 invalida la sesión. | Interceptores y QueuedInterceptor ofrecen mecanismos de coordinación; las reglas de rotación, exclusión de login/refresh e invalidación seguirían siendo propias. |
+| Multipart | ImageUploadService solicita firma mediante ApiClient y sube 1–5 imágenes secuencialmente con AbortableMultipartRequest y un cliente separado, sin Bearer de DonApp. | FormData, MultipartFile y callbacks de progreso simplificarían transferencias con progreso; multipart ya está implementado. |
+| Timeouts y cancelación | API: 15 s por intento mediante Future.timeout, sin abortar el transporte. Upload: 120 s por imagen incluyendo cuerpo de respuesta y con señal de aborto. RemoteImageCache no configura timeout explícito. No hay cancelación HTTP expuesta a la interfaz. | Timeouts de conexión/envío/recepción y CancelToken reducen código de control. Sus plazos por fase no equivalen automáticamente a un límite total de operación. |
+| Errores y logging | ApiErrorMapper traduce estados, validaciones, red y timeout a ApiException. Cloudinary tiene clasificación propia. No existe logging HTTP transversal; lastErrorCode de sincronización no es un log de peticiones. | DioException y LogInterceptor aportan mecanismos, pero requieren adaptar clasificación y ocultar credenciales, firmas y datos privados. |
+| Pruebas | Client inyectable, MockClient y clientes simulados de streaming; existen pruebas de servicios, sesión, errores y subida. | También permite pruebas mediante adaptadores; migrar obliga a adaptar los dobles de transporte y verificar equivalencia. |
+
+### Trabajo propio y costo de cambio
+
+Con package:http ya se implementan manualmente serialización y validación del sobre JSON, headers Bearer, recuperación tras 401, rotación concurrente, traducción de errores y política de reintentos de sincronización. No hay reintento genérico de todos los errores HTTP. El refresh automático depende de inyectar SessionRecovery; construir ApiClient() por separado no lo habilita. La restauración inicial de sesión tiene su propio flujo en SessionCoordinator.
+
+Si se requieren cancelación desde la interfaz, progreso o logging, habrá que incorporar propagación de señales Abortable mediante Client.send, seguimiento de bytes y registros sanitizados en las capas de transporte. También queda por definir el timeout de RemoteImageCache y el cierre de los clientes propios: los wrappers actuales no exponen close. Son mejoras pendientes, no limitaciones que obliguen a cambiar de biblioteca. Actualmente ApiClient decodifica JSON antes de evaluar el estado: un error HTTP con cuerpo no JSON se clasifica como respuesta inesperada y no entra en recuperación de 401.
+
+Migrar ahora tendría un costo moderado y riesgo de regresión en sesión, errores y subida: habría que sustituir transporte, adaptar excepciones y pruebas, conservar el reintento único, evitar rotaciones duplicadas y mantener los plazos y la separación de credenciales de Cloudinary. Los modelos y repositorios podrían conservarse detrás de ApiClient, pero Dio no reemplazaría la cola persistida, la idempotencia ni las reglas de sesión. Se reconsiderará si el producto necesita de forma extensa progreso, cancelación y políticas de transferencia por fase; el número actual de endpoints no justifica por sí solo una migración.
+
+Evidencia local: [ApiClient](../lib/services/api_client.dart), [configuración](../lib/config/api_config.dart), [inyección en router](../lib/navigation/app_router.dart), [sesión](../lib/services/session_coordinator.dart), [subida](../lib/services/image_upload_service.dart), [caché de imágenes](../lib/services/remote_image_cache.dart) y [sincronización](../lib/services/sync_coordinator.dart). Las pruebas existentes cubren [401 y errores de transporte](../test/services/api_client_test.dart), [rotación concurrente y restauración](../test/services/session_coordinator_test.dart), [multipart, errores y aborto por timeout](../test/services/image_upload_service_test.dart) y [política de errores](../test/services/service_error_policy_test.dart). Esta evaluación revisa el código y las pruebas; no constituye una nueva ejecución de la suite.
+
+Referencias de capacidades: [documentación de package:http](https://pub.dev/packages/http) y [documentación de Dio](https://pub.dev/packages/dio).
+
 ## Correspondencia entre JSON del servidor y modelos Dart
 
 Esta referencia describe el código actual de usuario/perfil, donación y solicitud. Las rutas de campo son relativas a `data.usuario`, `data.donacion` o `data.solicitud`, salvo que se indique `data` explícitamente. Los servicios extraen estos contenedores antes de invocar `fromJson`; no son atributos adicionales de las entidades.
