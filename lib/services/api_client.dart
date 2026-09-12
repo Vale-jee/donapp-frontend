@@ -117,7 +117,6 @@ class ApiClient {
           ? endpoint
           : endpoint.replace(queryParameters: queryParameters);
       var response = await send(uri, headers).timeout(_timeout);
-      var body = _decode(response.body);
       final sessionRecovery = _sessionRecovery;
       var retriedAfterUnauthorized = false;
 
@@ -132,11 +131,13 @@ class ApiClient {
           final retryHeaders = Map<String, String>.of(headers ?? const {})
             ..['Authorization'] = 'Bearer $accessToken';
           response = await send(uri, retryHeaders).timeout(_timeout);
-          body = _decode(response.body);
           retriedAfterUnauthorized = true;
         }
       }
 
+      // HTTP status remains authoritative even when a proxy returns HTML or
+      // no body. Decoding supplies optional error details, never the status.
+      final body = _decode(response.body);
       if (!successStatusCodes.contains(response.statusCode)) {
         final error = ApiErrorMapper.fromHttp(
           statusCode: response.statusCode,
@@ -157,8 +158,14 @@ class ApiClient {
         throw error;
       }
 
-      if (body['success'] != true || !body.containsKey('data')) {
-        throw ApiErrorMapper.unexpectedResponse;
+      if (body == null ||
+          body['success'] != true ||
+          !body.containsKey('data')) {
+        throw ApiException(
+          ApiErrorType.unexpectedResponse,
+          ApiErrorMapper.unexpectedResponse.message,
+          statusCode: response.statusCode,
+        );
       }
       return body;
     } on ApiException {
@@ -174,11 +181,14 @@ class ApiClient {
     }
   }
 
-  Map<String, dynamic> _decode(String source) {
-    if (source.trim().isEmpty) throw const FormatException();
-    final decoded = jsonDecode(source);
-    if (decoded is! Map<String, dynamic>) throw const FormatException();
-    return decoded;
+  Map<String, dynamic>? _decode(String source) {
+    if (source.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(source);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } on FormatException {
+      return null;
+    }
   }
 
   String? _bearerToken(Map<String, String>? headers) {

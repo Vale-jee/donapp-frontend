@@ -10,6 +10,189 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  group('Clasificación HTTP independiente del body', () {
+    for (final status in [400, 422]) {
+      test(
+        '$status JSON conserva mensaje seguro, errores y status real',
+        () async {
+          final client = ApiClient(
+            client: MockClient(
+              (_) async => http.Response(
+                jsonEncode({
+                  'success': false,
+                  'status': 999,
+                  'message': 'Revisa los datos.',
+                  'data': null,
+                  'errors': [
+                    {'field': 'titulo', 'message': 'El título es obligatorio.'},
+                  ],
+                }),
+                status,
+              ),
+            ),
+            endpointBuilder: _endpoint,
+          );
+          final error = await _capture(
+            client.post(
+              '/test',
+              successStatusCodes: const {201},
+              allowSafeBackendMessage: true,
+            ),
+          );
+          expect(error.type, ApiErrorType.validation);
+          expect(error.statusCode, status);
+          expect(error.message, 'El título es obligatorio.');
+          expect(error.fieldErrors.single.field, 'titulo');
+          expect(error.fieldErrors.single.message, 'El título es obligatorio.');
+        },
+      );
+    }
+
+    for (final scenario in [
+      (400, '', ApiErrorType.validation),
+      (
+        401,
+        '{"success":false,"message":"Sesión inválida."}',
+        ApiErrorType.authentication,
+      ),
+      (403, '<html>private</html>', ApiErrorType.forbidden),
+      (404, '<html>private</html>', ApiErrorType.notFound),
+      (500, '<html>private</html>', ApiErrorType.server),
+      (500, '', ApiErrorType.server),
+      (502, '{broken', ApiErrorType.server),
+      (503, '[]', ApiErrorType.server),
+      (599, 'null', ApiErrorType.server),
+      (418, 'private', ApiErrorType.unexpectedResponse),
+      (302, 'private', ApiErrorType.unexpectedResponse),
+      (204, '', ApiErrorType.unexpectedResponse),
+    ]) {
+      test(
+        '${scenario.$1} conserva clasificación con body ${scenario.$2}',
+        () async {
+          final client = ApiClient(
+            client: MockClient(
+              (_) async => http.Response(scenario.$2, scenario.$1),
+            ),
+            endpointBuilder: _endpoint,
+          );
+          final error = await _capture(
+            client.get(
+              '/test',
+              successStatusCodes: const {200},
+              allowSafeBackendMessage: true,
+            ),
+          );
+          expect(error.type, scenario.$3);
+          expect(error.statusCode, scenario.$1);
+          expect(error.message, isNot(contains('private')));
+          expect(error.message, isNotEmpty);
+        },
+      );
+    }
+
+    test(
+      'mensaje JSON seguro sin errores conserva la política existente',
+      () async {
+        final client = ApiClient(
+          client: MockClient(
+            (_) async => http.Response(
+              '{"success":false,"message":"Completa los datos solicitados."}',
+              400,
+            ),
+          ),
+          endpointBuilder: _endpoint,
+        );
+        final error = await _capture(
+          client.get(
+            '/test',
+            successStatusCodes: const {200},
+            allowSafeBackendMessage: true,
+          ),
+        );
+        expect(error.message, 'Completa los datos solicitados.');
+        expect(error.statusCode, 400);
+      },
+    );
+
+    for (final status in [200, 201]) {
+      test('$status JSON válido mantiene el sobre exitoso', () async {
+        final client = ApiClient(
+          client: MockClient(
+            (_) async =>
+                http.Response('{"success":true,"data":{"id":1}}', status),
+          ),
+          endpointBuilder: _endpoint,
+        );
+        expect(await client.get('/test', successStatusCodes: {status}), {
+          'success': true,
+          'data': {'id': 1},
+        });
+      });
+    }
+
+    for (final body in ['', '<html>private</html>', '[]', '{"data":{}}']) {
+      test('200 inválido conserva status sin aceptar el body: $body', () async {
+        final client = ApiClient(
+          client: MockClient((_) async => http.Response(body, 200)),
+          endpointBuilder: _endpoint,
+        );
+        final error = await _capture(
+          client.get('/test', successStatusCodes: const {200}),
+        );
+        expect(error.type, ApiErrorType.unexpectedResponse);
+        expect(error.statusCode, 200);
+      });
+    }
+
+    for (final retryStatus in [200, 401, 500]) {
+      test(
+        '401 sin JSON mantiene recuperación única y status final $retryStatus',
+        () async {
+          final recovery = _FakeSessionRecovery();
+          final sentHeaders = <String?>[];
+          final client = ApiClient(
+            client: MockClient((request) async {
+              sentHeaders.add(request.headers['Authorization']);
+              if (sentHeaders.length == 1) {
+                return http.Response('<html>expired</html>', 401);
+              }
+              return http.Response(
+                retryStatus == 200 ? '{"success":true,"data":null}' : '',
+                retryStatus,
+              );
+            }),
+            endpointBuilder: _endpoint,
+            sessionRecovery: recovery,
+          );
+          final result = client.get(
+            '/test',
+            successStatusCodes: const {200},
+            headers: const {'Authorization': 'Bearer old-access'},
+            context: ApiRequestContext.protectedSession,
+          );
+          if (retryStatus == 200) {
+            expect((await result)['success'], isTrue);
+          } else {
+            final error = await _capture(result);
+            expect(error.statusCode, retryStatus);
+            expect(
+              error.type,
+              retryStatus == 401
+                  ? ApiErrorType.authentication
+                  : ApiErrorType.server,
+            );
+          }
+          expect(sentHeaders, ['Bearer old-access', 'Bearer new-access']);
+          expect(recovery.calls, ['old-access']);
+          expect(
+            recovery.authenticationInvalidations,
+            retryStatus == 401 ? 1 : 0,
+          );
+        },
+      );
+    }
+  });
+
   testWidgets('el plazo API incluye body aunque ya llegaron cabeceras', (
     tester,
   ) async {
