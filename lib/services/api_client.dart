@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import '../config/network_timeouts.dart';
 import 'api_error_mapper.dart';
 import 'api_exception.dart';
 
@@ -18,7 +19,7 @@ abstract interface class SessionRecovery {
 class ApiClient {
   ApiClient({
     http.Client? client,
-    Duration timeout = const Duration(seconds: 15),
+    Duration timeout = NetworkTimeouts.apiResponse,
     ApiEndpointBuilder endpointBuilder = ApiConfig.endpoint,
     SessionRecovery? sessionRecovery,
   }) : _client = client ?? http.Client() {

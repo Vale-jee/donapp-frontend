@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
@@ -5,16 +6,20 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../config/api_config.dart';
+import '../config/network_timeouts.dart';
+import 'api_exception.dart';
 
 class RemoteImageCache {
   RemoteImageCache({
     http.Client? client,
+    this.timeout = NetworkTimeouts.imageDownload,
     Future<Directory> Function()? cacheDirectory,
   }) : _client = client ?? http.Client(),
        _cacheDirectory = cacheDirectory ?? defaultDirectory;
 
   static const directoryName = 'remote_donation_images';
   final http.Client _client;
+  final Duration timeout;
   final Future<Directory> Function() _cacheDirectory;
 
   static Future<Directory> defaultDirectory() async {
@@ -42,7 +47,8 @@ class RemoteImageCache {
 
     final temporary = File('${target.path}.download');
     try {
-      final response = await _client.get(uri);
+      // Client.get completes only after the full body has been collected.
+      final response = await _client.get(uri).timeout(timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw HttpException('No se pudo descargar la imagen.');
       }
@@ -52,8 +58,15 @@ class RemoteImageCache {
       await temporary.writeAsBytes(response.bodyBytes, flush: true);
       if (await target.exists()) await target.delete();
       return (await temporary.rename(target.path)).path;
-    } on Object {
+    } on Object catch (error) {
       if (await temporary.exists()) await temporary.delete();
+      if (error is TimeoutException) {
+        throw const ApiException(
+          ApiErrorType.timeout,
+          'La descarga de la imagen está tardando más de lo esperado. '
+          'Verifica tu conexión e intenta nuevamente.',
+        );
+      }
       rethrow;
     }
   }

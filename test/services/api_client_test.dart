@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:donapp_mobile/config/api_config.dart';
 import 'package:donapp_mobile/services/api_client.dart';
 import 'package:donapp_mobile/services/api_error_mapper.dart';
@@ -7,6 +10,49 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  testWidgets('el plazo API incluye body aunque ya llegaron cabeceras', (
+    tester,
+  ) async {
+    final body = StreamController<List<int>>();
+    final client = ApiClient(
+      client: _BodyClient(body.stream),
+      endpointBuilder: _endpoint,
+    );
+    final expectation = expectLater(
+      client.get('/test', successStatusCodes: const {200}),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.type,
+          'type',
+          ApiErrorType.timeout,
+        ),
+      ),
+    );
+    await tester.pump();
+    body.add(utf8.encode('{"success":true,'));
+    await tester.pump(const Duration(seconds: 14));
+    body.add(utf8.encode('"data":'));
+    await tester.pump(const Duration(seconds: 2));
+    await expectation;
+    // Incoming chunks must not reset the total deadline.
+    body.add(utf8.encode('null}'));
+    await body.close();
+  });
+
+  testWidgets('API completa cuerpo dentro de 15 segundos', (tester) async {
+    final body = StreamController<List<int>>();
+    final client = ApiClient(
+      client: _BodyClient(body.stream),
+      endpointBuilder: _endpoint,
+    );
+    final result = client.get('/test', successStatusCodes: const {200});
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 14));
+    body.add(utf8.encode('{"success":true,"data":{"ok":true}}'));
+    await body.close();
+    expect((await result)['data'], {'ok': true});
+  });
+
   group('ApiClient', () {
     test(
       '401 protegido renueva y repite una sola vez con token nuevo',
@@ -265,6 +311,14 @@ void main() {
       expect(ApiConfig.resolveImageReference('file:///imagen.jpg'), isNull);
     });
   });
+}
+
+class _BodyClient extends http.BaseClient {
+  _BodyClient(this.body);
+  final Stream<List<int>> body;
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async =>
+      http.StreamedResponse(body, 200);
 }
 
 class _FakeSessionRecovery implements SessionRecovery {

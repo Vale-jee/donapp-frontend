@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
+import '../config/network_timeouts.dart';
+
 import 'api_client.dart';
 import 'api_error_mapper.dart';
 import 'api_exception.dart';
@@ -202,7 +204,7 @@ class ImageUploadService {
       // A real mobile upload exceeded 30 seconds. Bound the entire exchange,
       // including the response body, without changing the backend timeouts.
       final response = await _sendUpload(request).timeout(
-        const Duration(seconds: 120),
+        NetworkTimeouts.imageUpload,
         onTimeout: () {
           abort.complete();
           throw TimeoutException('Image upload');
