@@ -301,3 +301,21 @@ HttpRequestLogger centraliza la salida de ApiClient mediante debugPrint y permit
 Cada intento HTTP produce una sola línea con método, ruta permitida, status y duración aproximada en milisegundos, incluyendo espera y lectura del cuerpo. Un fallo de transporte muestra status=sin_respuesta, sin imprimir la excepción. Un 401, su refresh y el reintento son intentos distintos. Las vistas del cliente comparten el logger.
 
 Se omiten todos los headers y cuerpos de petición/respuesta, incluidos Authorization, cookies, access token, refresh token, contraseñas y datos de registro. Tampoco se registran host, credenciales de URL, query ni fragmento. Solo se muestran rutas conocidas; los identificadores se sustituyen por :id y cualquier ruta desconocida por [ruta omitida]. Las rutas nuevas deben incorporarse explícitamente a la lista permitida. Los transportes externos de imágenes no se modifican.
+
+
+## Orden de las capas del cliente protegido
+
+La composición usa ApiClient y colaboradores propios sobre package:http. El orden real es:
+
+1. El servicio selecciona método, ruta, headers, cuerpo, contexto y successStatusCodes. La composición ya aporta transporte, timeout, almacenamiento, recuperación y logger compartidos.
+2. ApiClient resuelve la URL mediante ApiConfig (APP_ENV, API_BASE_URL y HTTPS obligatorio en prod), agrega los parámetros de consulta y copia los headers.
+3. Con protectedSession y TokenStorage configurado, obtiene el access token de FlutterSecureStorage y agrega Bearer, salvo Authorization explícito. Sin token, termina antes del envío y sin log de intento HTTP.
+4. _sendLogged inicia Stopwatch y ejecuta el envío con su timeout. POST/PATCH codifican el cuerpo al invocar send. La espera incluye la respuesta completa.
+5. El finally detiene la medición y registra exactamente una línea por intento en dev; test/prod no emiten logs. Solo entrega metadatos sanitizados al logger. Red/timeout se registran como sin_respuesta antes de propagarse al mapeo de errores.
+6. Tras el primer 401 protegido, y con SessionRecovery y Bearer disponibles, solicita recoverAfterUnauthorized. El coordinador comparte la renovación en curso o reutiliza el token ya rotado. Si requiere POST /api/auth/refresh, este usa el cliente base sin inyección ni recuperación automática, con su propia medición y log. Ambos tokens se guardan antes de devolver el nuevo access token.
+7. Repite una sola vez mediante send, conservando método, URL, cuerpo y headers salvo Authorization, sustituido por el token nuevo. El segundo intento tiene medición y log propios; no vuelve a entrar al bloque de refresh.
+8. Decodifica de forma tolerante el cuerpo final y clasifica el status real mediante ApiErrorMapper. Un segundo 401 invalida la sesión. Un status esperado exige el sobre success/data; los errores de transporte se traducen a ApiException.
+
+Solo las peticiones protegidas aplican inyección y recuperación de sesión cuando sus dependencias están configuradas. Login, registro, refresh, logout y categorías mantienen contextos públicos. La restauración de perfil usa Bearer explícito y coordina su recuperación fuera del cliente base. Cloudinary y RemoteImageCache permanecen fuera de estas capas; la solicitud de firma de imagen sí pertenece a la API protegida.
+
+La cobertura existente en api_token_injection_test, http_request_logger_test, api_client_test y session_coordinator_test verifica estas responsabilidades y la ausencia de renovaciones/logs duplicados.
