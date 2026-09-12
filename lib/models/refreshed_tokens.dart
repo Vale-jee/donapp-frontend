@@ -1,3 +1,10 @@
+import 'package:json_annotation/json_annotation.dart';
+
+import 'api_json.dart';
+
+part 'refreshed_tokens.g.dart';
+
+@JsonSerializable(explicitToJson: true)
 class RefreshedTokens {
   const RefreshedTokens({
     required this.accessToken,
@@ -6,33 +13,16 @@ class RefreshedTokens {
     required this.refreshTokenExpiresIn,
   });
 
+  @JsonKey(fromJson: nonEmptyString)
   final String accessToken;
+  @JsonKey(fromJson: nonEmptyString)
   final String refreshToken;
+  @JsonKey(fromJson: strictInt)
   final int accessTokenExpiresIn;
+  @JsonKey(fromJson: strictInt)
   final int refreshTokenExpiresIn;
 
-  factory RefreshedTokens.fromJson(Map<String, dynamic> json) {
-    return RefreshedTokens(
-      accessToken: _requiredString(json, 'accessToken'),
-      refreshToken: _requiredString(json, 'refreshToken'),
-      accessTokenExpiresIn: _requiredInt(json, 'accessTokenExpiresIn'),
-      refreshTokenExpiresIn: _requiredInt(json, 'refreshTokenExpiresIn'),
-    );
-  }
-}
-
-String _requiredString(Map<String, dynamic> json, String key) {
-  final value = json[key];
-  if (value is! String || value.isEmpty) {
-    throw FormatException('$key tiene un formato inválido.');
-  }
-  return value;
-}
-
-int _requiredInt(Map<String, dynamic> json, String key) {
-  final value = json[key];
-  if (value is! int) {
-    throw FormatException('$key tiene un formato inválido.');
-  }
-  return value;
+  factory RefreshedTokens.fromJson(Map<String, dynamic> json) =>
+      apiDecode(() => _$RefreshedTokensFromJson(json));
+  Map<String, dynamic> toJson() => _$RefreshedTokensToJson(this);
 }

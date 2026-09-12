@@ -146,7 +146,7 @@ Los tipos backend corresponden a TypeScript y su representación JSON: `number` 
 | Perfil | `telefono` | `telefono` | string o null | String? | O | Sí/Sí | Ausencia → null; admite string vacío. |
 | Perfil | `fotoPerfil` | `fotoPerfil` | string o null | String? | O | Sí/Sí | Ausencia → null; admite string vacío. |
 | Perfil | `activo` | `activo` | boolean | bool | O | No/No | Sin coerción. |
-| Perfil | `createdAt` | `createdAt` | Date → string ISO | DateTime | O | No/No | DateTime.tryParse; sin toUtc explícito. |
+| Perfil | `createdAt` | `createdAt` | Date → string ISO | DateTime | O | No/No | DateTime.parse; sin toUtc explícito. |
 | Perfil | `updatedAt` | `updatedAt` | Date → string ISO | DateTime | O | No/No | Igual que createdAt. |
 | Perfil | `rol` | `rol` | objeto | ProfileRole | O | No/No | Objeto anidado. |
 | Rol de perfil | `rol.codigo` | `rol.codigo` | Role → string: ADMIN/USUARIO | String | O | No/No | Dart valida string no vacío, no enum. |
@@ -188,7 +188,7 @@ Los tipos backend corresponden a TypeScript y su representación JSON: `number` 
 
 ### Solicitud y resúmenes anidados
 
-Los campos comunes se leen mediante `_RequestFields` en `SentRequestListItem`, `ReceivedRequestListItem` y `RequestDetail`. `CreatedRequest` solo conserva `id`, `status` y `donation`, aunque POST devuelve más campos. Los listados usan GET `/api/solicitudes/enviadas` y `/recibidas`; detalle y acciones usan GET por id y PATCH `aceptar`, `rechazar`, `cancelar`.
+Los campos comunes se declaran en `RequestListItem`; json_serializable los incluye en los decodificadores de `SentRequestListItem`, `ReceivedRequestListItem` y `RequestDetail`. `CreatedRequest` conserva solo id, status y donation.
 
 | Entidad/modelo | Campo JSON backend | Campo Dart | Tipo backend → JSON | Tipo Dart | Presencia | Null B/D | Transformación / observación |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -203,7 +203,9 @@ Los campos comunes se leen mediante `_RequestFields` en `SentRequestListItem`, `
 | Solicitud | `donacion` | `donation` | objeto RequestDonation | RequestDonationSummary | O | No/No | También CreatedRequest. |
 | Solicitud enviada | `donante` | `donor` | objeto PublicUser | RequestUserSummary | O en enviadas | No/No | Ausente en creación y recibidas. |
 | Solicitud recibida | `solicitante` | `applicant` | objeto PublicUser | RequestUserSummary | O en recibidas | No/No | Ausente en creación y enviadas. |
-| Solicitud detalle/acción | `donante` / `solicitante` | `otherUser` | objetos PublicUser; propiedades TS opcionales | RequestUserSummary | C por actor | No/No | Flutter exige exactamente uno; incompatibilidad descrita abajo. |
+| Solicitud detalle/acción | `donante` / `solicitante` | `otherUser` | objetos PublicUser; propiedades TS opcionales | RequestUserSummary | C por actor | No/No | Conserva donor/applicant opcionales; otherUser se deriva del participante contrario, incluso si llegan ambos. |
+| Solicitud detalle | `donante` | `RequestDetail.donor` | objeto PublicUser opcional | RequestUserSummary? | C | No/Sí | JsonKey(name: donante); null/ausencia tolerados; se omite null al codificar. |
+| Solicitud detalle | `solicitante` | `RequestDetail.applicant` | objeto PublicUser opcional | RequestUserSummary? | C | No/Sí | JsonKey(name: solicitante); puede coexistir con donor. |
 | Donación resumida | `donacion.id` | `donation.id` | number entero | int | O | No/No | Directa. |
 | Donación resumida | `donacion.titulo` | `donation.title` | string | String | O | No/No | Aquí sí existe titulo → title. |
 | Donación resumida | `donacion.estado` | `donation.status` | EstadoDonacion → string | RequestDonationStatus | O | No/No | Mismos cuatro valores de donación; enum Dart separado. |
@@ -212,13 +214,13 @@ Los campos comunes se leen mediante `_RequestFields` en `SentRequestListItem`, `
 | Usuario resumido | `donante.nombreVisible` / `solicitante.nombreVisible` | `RequestUserSummary.visibleName` | string | String | O si existe usuario | No/No | nombreVisible → visibleName solo en este modelo. |
 | Usuario resumido | `donante.fotoPerfil` / `solicitante.fotoPerfil` | `RequestUserSummary.profilePhoto` | string o null | String? | O si existe usuario | Sí/Sí | Ausencia → null; string vacío inválido, a diferencia de UserProfile/AuthUser. |
 | Usuario resumido | `donante.ciudad` / `solicitante.ciudad` | `RequestUserSummary.city` | string | String | O si existe usuario | No/No | Renombrado. |
-| Solicitud derivada | No existe | `actor` | — | RequestActor | Derivado local | —/No | donante presente → applicant; solicitante presente → owner. |
+| Solicitud derivada | No existe | `actor` | — | RequestActor | Derivado local | —/No | donante presente → applicant; solo solicitante presente → owner. |
 | Solicitud derivada | No existe | `canAcceptOrReject` | — | bool | Getter local | —/No | actor owner, solicitud pendiente y donación publicada. |
 | Solicitud derivada | No existe | `canCancel` | — | bool | Getter local | —/No | actor applicant y solicitud pendiente. |
 
 `CancellationCause` traduce `VOLUNTARIA`, `OTRA_SOLICITUD_ACEPTADA`, `DONACION_RETIRADA` y `USUARIO_INACTIVO` a `voluntaria`, `otraSolicitudAceptada`, `donacionRetirada` y `usuarioInactivo`. Los parsers de enums rechazan valores desconocidos. Los getters `label` producen textos de presentación locales; los getters `apiValue` de estados producen los valores API en mayúsculas.
 
-**Incompatibilidad actual de participantes:** `findRequestDetail` y `mutationDetailSelect` seleccionan siempre `solicitante`. `mapRequest` lo conserva y además agrega `donante` cuando el actor es el solicitante. Por tanto, GET del detalle y PATCH de cancelación como solicitante devuelven ambos objetos. `RequestDetail.fromJson` rechaza ese caso con `FormatException('Actor de solicitud inconsistente.')`, que el servicio convierte en respuesta inesperada. Como propietario, detalle/aceptación/rechazo contienen solo `solicitante`. Esta tabla registra la implementación actual; no presupone que la exclusividad esperada por Flutter esté garantizada ni corrige el contrato.
+**Participantes del detalle:** `findRequestDetail` y `mutationDetailSelect` seleccionan solicitante; `mapRequest` agrega donante en la vista del solicitante. GET del detalle y PATCH de cancelación pueden devolver ambos. RequestDetail conserva ambos y usa donante como otherUser con actor applicant; sin donante usa solicitante con actor owner. Se rechaza la ausencia de ambos y los tipos incorrectos. Esta regla reproduce el contrato actual, no una exclusividad entre participantes.
 
 ### Colecciones y paginación
 
@@ -319,3 +321,30 @@ La composición usa ApiClient y colaboradores propios sobre package:http. El ord
 Solo las peticiones protegidas aplican inyección y recuperación de sesión cuando sus dependencias están configuradas. Login, registro, refresh, logout y categorías mantienen contextos públicos. La restauración de perfil usa Bearer explícito y coordina su recuperación fuera del cliente base. Cloudinary y RemoteImageCache permanecen fuera de estas capas; la solicitud de firma de imagen sí pertenece a la API protegida.
 
 La cobertura existente en api_token_injection_test, http_request_logger_test, api_client_test y session_coordinator_test verifica estas responsabilidades y la ausencia de renovaciones/logs duplicados.
+
+
+## Serialización generada de modelos de API
+
+Se usa json_annotation 4.12 y json_serializable 6.14 con build_runner ya existente. Los 21 modelos concretos actuales disponen de fromJson/toJson generados; no se agregan DTOs para flujos inexistentes.
+
+| Archivo | Modelos de API |
+| --- | --- |
+| auth_session.dart | AuthSession, AuthUser, AuthRole |
+| refreshed_tokens.dart | RefreshedTokens |
+| user_profile.dart | UserProfile, ProfileRole |
+| category.dart | Category |
+| donation.dart | DonationImage, DonationDetail, DonationListItem, DonationPagination, DonationPage |
+| request.dart | RequestDonationSummary, RequestUserSummary, SentRequestListItem, ReceivedRequestListItem, CreatedRequest, RequestDetail, RequestPagination, RequestPage<T> |
+| services/image_upload_service.dart | CloudinaryUploadAuthorization: respuesta de /api/imagenes/firma, aunque autorice una subida externa |
+
+RequestListItem permanece como base abstracta de campos de API, sin instancia ni codec propio. Los cuatro enums de estados/causas usan JsonEnum con screamingSnake y mapas generados, conservando sus extensiones públicas y etiquetas de UI. RequestActor, actor, otherUser y permisos son derivados locales y no se serializan. RequestDetail mantiene el constructor público anterior y usa un constructor fromWire para derivar el participante contrario tras la decodificación generada; conserva donor y applicant y omite participantes null al codificar. La incompatibilidad anterior con ambos participantes queda corregida y cubierta en modelo y servicio.
+
+JsonKey conserva los renombrados: titulo/title, estado/status, imagenPrincipal/mainImage, nombreVisible/visibleName, fotoPerfil/profilePhoto, ciudad/city, causaCancelacion/cancellationCause, aceptadaAt/acceptedAt, rechazadaAt/rejectedAt, canceladaAt/cancelledAt, donacion/donation, donante/donor, solicitante/applicant, donaciones/donations y solicitudes/requests. En donaciones categoria.id y categoria.nombre se leen con readValue hacia categoriaId/categoriaNombre; toJson recompone categoria. Los campos que ya usan el nombre del servidor mantienen ese nombre.
+
+Se conservan fotoPerfil, telefono, descripcion de categoría, imagenPrincipal, referencias de imagen y fechas de transición nullable, incluida la tolerancia previa a claves ausentes. Las cadenas nullable de perfil/login/categoría admiten vacío; las de solicitudes lo rechazan como antes. Los campos extra se ignoran. Las listas y objetos anidados se generan, con factorías genéricas para RequestPage y salida JSON explícita para objetos anidados. Las imágenes de DonationDetail mantienen orden e inmutabilidad.
+
+api_json.dart conserva validaciones de dominio: enteros sin convertir decimales, cadenas obligatorias no vacías y timestamps de donaciones con zona explícita convertidos a UTC sin perder microsegundos. Perfil y solicitudes mantienen DateTime.parse sin conversión UTC adicional. Los enums desconocidos se rechazan. Los errores de tipo/valor se normalizan a FormatException para mantener el manejo actual de los servicios. fromMutationJson conserva puedeSolicitar=false; fromJson del detalle exige el booleano. La firma de subida mantiene sus restricciones de HTTPS, host, ruta, carpeta y formatos.
+
+Quedan fuera Drift y sus codecs de persistencia, entidades/estados locales, StoredTokens, SessionRestoreResult, excepciones, estados de UI y sincronización, y cachedLocalPath (excluido en ambas direcciones con JsonKey). No hay modelos de red implementados de chats/calificaciones; sus pantallas no consumen contratos adicionales. Los cuerpos de petición construidos como mapas en servicios y el sobre success/data no son clases de modelo; permanecen sin cambios. Tampoco se migra el parsing de respuesta externa de Cloudinary. No quedan casos dudosos pendientes dentro del inventario actual.
+
+Generación: `dart run build_runner build --delete-conflicting-outputs`. La versión instalada advierte que ese flag ya se ignora; genera correctamente los siete archivos .g.dart. Se versionan los generados y no se editan manualmente. La generación mantiene sin cambios los archivos de Drift y no requiere modificar repositories/data sources.

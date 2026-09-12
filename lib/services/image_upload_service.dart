@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:json_annotation/json_annotation.dart';
+
+import '../models/api_json.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
@@ -10,6 +14,8 @@ import 'api_client.dart';
 import 'api_error_mapper.dart';
 import 'api_exception.dart';
 import 'token_storage.dart';
+
+part 'image_upload_service.g.dart';
 
 const maxDonationImages = 5;
 const maxDonationImageBytes = 5 * 1024 * 1024;
@@ -43,6 +49,7 @@ const _uploadTimeout = CloudinaryUploadException(
   failure: CloudinaryFailure.timeout,
 );
 
+@JsonSerializable()
 class CloudinaryUploadAuthorization {
   const CloudinaryUploadAuthorization({
     required this.uploadUrl,
@@ -55,40 +62,27 @@ class CloudinaryUploadAuthorization {
 
   final Uri uploadUrl;
   final String apiKey;
+  @JsonKey(fromJson: strictInt)
   final int timestamp;
   final String signature;
   final String folder;
   final String allowedFormats;
 
-  factory CloudinaryUploadAuthorization.fromJson(Map<String, dynamic> json) {
-    final uploadUrl = Uri.tryParse(json['uploadUrl'] as String? ?? '');
-    final apiKey = json['apiKey'];
-    final timestamp = json['timestamp'];
-    final signature = json['signature'];
-    final folder = json['folder'];
-    final allowedFormats = json['allowedFormats'];
-    if (uploadUrl == null ||
-        uploadUrl.scheme != 'https' ||
-        uploadUrl.host != 'api.cloudinary.com' ||
-        !uploadUrl.path.endsWith('/image/upload') ||
-        apiKey is! String ||
-        apiKey.isEmpty ||
-        timestamp is! int ||
-        signature is! String ||
-        signature.isEmpty ||
-        folder != 'donapp/donaciones' ||
-        allowedFormats != 'jpg,jpeg,png,webp') {
-      throw const FormatException();
-    }
-    return CloudinaryUploadAuthorization(
-      uploadUrl: uploadUrl,
-      apiKey: apiKey,
-      timestamp: timestamp,
-      signature: signature,
-      folder: folder as String,
-      allowedFormats: allowedFormats as String,
-    );
-  }
+  factory CloudinaryUploadAuthorization.fromJson(Map<String, dynamic> json) =>
+      apiDecode(() {
+        final value = _$CloudinaryUploadAuthorizationFromJson(json);
+        if (value.uploadUrl.scheme != 'https' ||
+            value.uploadUrl.host != 'api.cloudinary.com' ||
+            !value.uploadUrl.path.endsWith('/image/upload') ||
+            value.apiKey.isEmpty ||
+            value.signature.isEmpty ||
+            value.folder != 'donapp/donaciones' ||
+            value.allowedFormats != 'jpg,jpeg,png,webp') {
+          throw const FormatException('Invalid image upload authorization.');
+        }
+        return value;
+      });
+  Map<String, dynamic> toJson() => _$CloudinaryUploadAuthorizationToJson(this);
 }
 
 class ImageUploadService {

@@ -1,15 +1,15 @@
+import 'package:json_annotation/json_annotation.dart';
+
+import 'api_json.dart';
+
+part 'donation.g.dart';
+
+@JsonEnum(fieldRename: FieldRename.screamingSnake)
 enum DonationStatus { publicada, reservada, entregada, retirada }
 
 extension DonationStatusJson on DonationStatus {
-  static DonationStatus fromJson(Object? value) {
-    return switch (value) {
-      'PUBLICADA' => DonationStatus.publicada,
-      'RESERVADA' => DonationStatus.reservada,
-      'ENTREGADA' => DonationStatus.entregada,
-      'RETIRADA' => DonationStatus.retirada,
-      _ => throw const FormatException('Estado de donación inválido.'),
-    };
-  }
+  static DonationStatus fromJson(Object? value) =>
+      apiDecode(() => $enumDecode(_$DonationStatusEnumMap, value));
 
   String get label => switch (this) {
     DonationStatus.publicada => 'Publicada',
@@ -18,14 +18,10 @@ extension DonationStatusJson on DonationStatus {
     DonationStatus.retirada => 'Retirada',
   };
 
-  String get apiValue => switch (this) {
-    DonationStatus.publicada => 'PUBLICADA',
-    DonationStatus.reservada => 'RESERVADA',
-    DonationStatus.entregada => 'ENTREGADA',
-    DonationStatus.retirada => 'RETIRADA',
-  };
+  String get apiValue => _$DonationStatusEnumMap[this]!;
 }
 
+@JsonSerializable(explicitToJson: true)
 class DonationImage {
   const DonationImage({
     required this.id,
@@ -34,18 +30,21 @@ class DonationImage {
     this.cachedLocalPath,
   });
 
+  @JsonKey(fromJson: strictInt)
   final int id;
+  @JsonKey(fromJson: nonEmptyString)
   final String referencia;
+  @JsonKey(fromJson: strictInt)
   final int orden;
+  @JsonKey(includeFromJson: false, includeToJson: false)
   final String? cachedLocalPath;
 
-  factory DonationImage.fromJson(Map<String, dynamic> json) => DonationImage(
-    id: _int(json, 'id'),
-    referencia: _string(json, 'referencia'),
-    orden: _int(json, 'orden'),
-  );
+  factory DonationImage.fromJson(Map<String, dynamic> json) =>
+      apiDecode(() => _$DonationImageFromJson(json));
+  Map<String, dynamic> toJson() => _$DonationImageToJson(this);
 }
 
+@JsonSerializable(explicitToJson: true)
 class DonationDetail {
   DonationDetail({
     required this.id,
@@ -64,66 +63,49 @@ class DonationDetail {
            ..sort((first, second) => first.orden.compareTo(second.orden)),
        );
 
+  @JsonKey(fromJson: strictInt)
   final int id;
+  @JsonKey(fromJson: nonEmptyString)
   final String titulo;
+  @JsonKey(fromJson: nonEmptyString)
   final String descripcion;
+  @JsonKey(fromJson: nonEmptyString)
   final String ciudad;
   final DonationStatus estado;
+  @JsonKey(fromJson: serverInstant)
   final DateTime createdAt;
+  @JsonKey(fromJson: serverInstant)
   final DateTime updatedAt;
+  @JsonKey(fromJson: strictInt, readValue: categoryId, includeToJson: false)
   final int categoriaId;
+  @JsonKey(
+    fromJson: nonEmptyString,
+    readValue: categoryName,
+    includeToJson: false,
+  )
   final String categoriaNombre;
   final List<DonationImage> imagenes;
   final bool puedeSolicitar;
 
-  factory DonationDetail.fromJson(Map<String, dynamic> json) =>
-      DonationDetail._fromJson(json, requireRequestPermission: true);
-
-  factory DonationDetail.fromMutationJson(Map<String, dynamic> json) =>
-      DonationDetail._fromJson(json, requireRequestPermission: false);
-
-  factory DonationDetail._fromJson(
-    Map<String, dynamic> json, {
-    required bool requireRequestPermission,
-  }) {
-    final category = json['categoria'];
-    final images = json['imagenes'];
-    if (category is! Map<String, dynamic> || images is! List) {
-      throw const FormatException('Detalle de donación con formato inválido.');
+  factory DonationDetail.fromJson(Map<String, dynamic> json) => apiDecode(() {
+    if (json['puedeSolicitar'] is! bool) {
+      throw const FormatException('Expected puedeSolicitar.');
     }
-    return DonationDetail(
-      id: _int(json, 'id'),
-      titulo: _string(json, 'titulo'),
-      descripcion: _string(json, 'descripcion'),
-      ciudad: _string(json, 'ciudad'),
-      estado: DonationStatusJson.fromJson(json['estado']),
-      createdAt: _date(json, 'createdAt'),
-      updatedAt: _date(json, 'updatedAt'),
-      categoriaId: _int(category, 'id'),
-      categoriaNombre: _string(category, 'nombre'),
-      puedeSolicitar: requireRequestPermission
-          ? _bool(json, 'puedeSolicitar')
-          : false,
-      imagenes: images
-          .map((image) {
-            if (image is! Map<String, dynamic>) {
-              throw const FormatException(
-                'Imagen de donación con formato inválido.',
-              );
-            }
-            return DonationImage.fromJson(image);
-          })
-          .toList(growable: false),
-    );
-  }
+    return _$DonationDetailFromJson(json);
+  });
+  factory DonationDetail.fromMutationJson(Map<String, dynamic> json) =>
+      apiDecode(
+        () => _$DonationDetailFromJson({...json, 'puedeSolicitar': false}),
+      );
+  Map<String, dynamic> toJson() => _$DonationDetailToJson(this);
+  @JsonKey(includeFromJson: false, includeToJson: true)
+  Map<String, dynamic> get categoria => {
+    'id': categoriaId,
+    'nombre': categoriaNombre,
+  };
 }
 
-bool _bool(Map<String, dynamic> json, String key) {
-  final value = json[key];
-  if (value is! bool) throw FormatException('$key inválido.');
-  return value;
-}
-
+@JsonSerializable(explicitToJson: true)
 class DonationListItem {
   const DonationListItem({
     required this.id,
@@ -138,41 +120,40 @@ class DonationListItem {
     required this.cantidadImagenes,
   });
 
+  @JsonKey(fromJson: strictInt)
   final int id;
+  @JsonKey(fromJson: nonEmptyString)
   final String titulo;
+  @JsonKey(fromJson: nonEmptyString)
   final String ciudad;
   final DonationStatus estado;
+  @JsonKey(fromJson: serverInstant)
   final DateTime createdAt;
+  @JsonKey(fromJson: serverInstant)
   final DateTime updatedAt;
+  @JsonKey(fromJson: strictInt, readValue: categoryId, includeToJson: false)
   final int categoriaId;
+  @JsonKey(
+    fromJson: nonEmptyString,
+    readValue: categoryName,
+    includeToJson: false,
+  )
   final String categoriaNombre;
   final DonationImage? imagenPrincipal;
+  @JsonKey(fromJson: strictInt)
   final int cantidadImagenes;
 
-  factory DonationListItem.fromJson(Map<String, dynamic> json) {
-    final category = json['categoria'];
-    final image = json['imagenPrincipal'];
-    if (category is! Map<String, dynamic> ||
-        (image != null && image is! Map<String, dynamic>)) {
-      throw const FormatException('Donación con formato inválido.');
-    }
-    return DonationListItem(
-      id: _int(json, 'id'),
-      titulo: _string(json, 'titulo'),
-      ciudad: _string(json, 'ciudad'),
-      estado: DonationStatusJson.fromJson(json['estado']),
-      createdAt: _date(json, 'createdAt'),
-      updatedAt: _date(json, 'updatedAt'),
-      categoriaId: _int(category, 'id'),
-      categoriaNombre: _string(category, 'nombre'),
-      imagenPrincipal: image == null
-          ? null
-          : DonationImage.fromJson(image as Map<String, dynamic>),
-      cantidadImagenes: _int(json, 'cantidadImagenes'),
-    );
-  }
+  factory DonationListItem.fromJson(Map<String, dynamic> json) =>
+      apiDecode(() => _$DonationListItemFromJson(json));
+  Map<String, dynamic> toJson() => _$DonationListItemToJson(this);
+  @JsonKey(includeFromJson: false, includeToJson: true)
+  Map<String, dynamic> get categoria => {
+    'id': categoriaId,
+    'nombre': categoriaNombre,
+  };
 }
 
+@JsonSerializable(explicitToJson: true)
 class DonationPagination {
   const DonationPagination({
     required this.page,
@@ -181,70 +162,31 @@ class DonationPagination {
     required this.totalPages,
   });
 
+  @JsonKey(fromJson: strictInt)
   final int page;
+  @JsonKey(fromJson: strictInt)
   final int limit;
+  @JsonKey(fromJson: strictInt)
   final int total;
+  @JsonKey(fromJson: strictInt)
   final int totalPages;
 
   bool get hasNextPage => page < totalPages;
 
   factory DonationPagination.fromJson(Map<String, dynamic> json) =>
-      DonationPagination(
-        page: _int(json, 'page'),
-        limit: _int(json, 'limit'),
-        total: _int(json, 'total'),
-        totalPages: _int(json, 'totalPages'),
-      );
+      apiDecode(() => _$DonationPaginationFromJson(json));
+  Map<String, dynamic> toJson() => _$DonationPaginationToJson(this);
 }
 
+@JsonSerializable(explicitToJson: true)
 class DonationPage {
   const DonationPage({required this.donations, required this.pagination});
 
+  @JsonKey(name: 'donaciones')
   final List<DonationListItem> donations;
   final DonationPagination pagination;
 
-  factory DonationPage.fromJson(Map<String, dynamic> json) {
-    final donations = json['donaciones'];
-    final pagination = json['pagination'];
-    if (donations is! List || pagination is! Map<String, dynamic>) {
-      throw const FormatException('Listado de donaciones inválido.');
-    }
-    return DonationPage(
-      donations: donations
-          .map((item) {
-            if (item is! Map<String, dynamic>) {
-              throw const FormatException('Donación con formato inválido.');
-            }
-            return DonationListItem.fromJson(item);
-          })
-          .toList(growable: false),
-      pagination: DonationPagination.fromJson(pagination),
-    );
-  }
-}
-
-int _int(Map<String, dynamic> json, String key) {
-  final value = json[key];
-  if (value is! int) throw FormatException('$key tiene un formato inválido.');
-  return value;
-}
-
-String _string(Map<String, dynamic> json, String key) {
-  final value = json[key];
-  if (value is! String || value.isEmpty) {
-    throw FormatException('$key tiene un formato inválido.');
-  }
-  return value;
-}
-
-DateTime _date(Map<String, dynamic> json, String key) {
-  final value = json[key];
-  // Business timestamps must identify an unambiguous server instant. Requiring
-  // an ISO-8601 offset prevents the device locale/time zone from becoming part
-  // of reconciliation or conflict resolution.
-  final hasExplicitZone =
-      value is String && RegExp(r'(?:Z|[+-]\d{2}:\d{2})$').hasMatch(value);
-  final parsed = hasExplicitZone ? DateTime.tryParse(value) : null;
-  if (parsed == null) throw FormatException('$key tiene un formato inválido.');
-  return parsed.toUtc();
+  factory DonationPage.fromJson(Map<String, dynamic> json) =>
+      apiDecode(() => _$DonationPageFromJson(json));
+  Map<String, dynamic> toJson() => _$DonationPageToJson(this);
 }

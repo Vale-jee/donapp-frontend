@@ -59,17 +59,9 @@ void main() {
     expect(detail.canAcceptOrReject, isTrue);
   });
 
-  test('rechaza detalle con ambos actores o sin actor', () {
+  test('rechaza detalle sin participantes', () {
     expect(
       () => RequestDetail.fromJson(_request),
-      throwsA(isA<FormatException>()),
-    );
-    expect(
-      () => RequestDetail.fromJson({
-        ..._request,
-        'donante': _user,
-        'solicitante': _user,
-      }),
       throwsA(isA<FormatException>()),
     );
   });

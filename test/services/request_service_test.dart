@@ -10,6 +10,38 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  for (final cancel in [false, true]) {
+    test(
+      'detalle/cancelacion conserva ambos participantes ($cancel)',
+      () async {
+        final service = _service(
+          (request) async => http.Response(
+            jsonEncode({
+              'success': true,
+              'data': {
+                'solicitud': {
+                  ..._request,
+                  'estado': cancel ? 'CANCELADA' : 'PENDIENTE',
+                  'donante': {..._user, 'id': 10},
+                  'solicitante': {..._user, 'id': 20},
+                },
+              },
+            }),
+            200,
+          ),
+        );
+        final result = cancel
+            ? await service.cancelRequest(7)
+            : await service.getRequestById(7);
+        expect(result.actor, RequestActor.applicant);
+        expect(result.otherUser.id, 10);
+        expect(result.donor?.id, 10);
+        expect(result.applicant?.id, 20);
+        expect(result.canCancel, !cancel);
+        expect(result.canAcceptOrReject, isFalse);
+      },
+    );
+  }
   test('crear usa POST, bearer, body exacto y respuesta sin actor', () async {
     late http.Request captured;
     final service = _service((request) async {
