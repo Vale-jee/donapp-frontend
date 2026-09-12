@@ -8,6 +8,7 @@ import '../config/network_timeouts.dart';
 import 'api_error_mapper.dart';
 import 'api_exception.dart';
 import 'token_storage.dart';
+import 'http_request_logger.dart';
 
 typedef ApiEndpointBuilder = Uri Function(String path);
 
@@ -24,11 +25,13 @@ class ApiClient {
     ApiEndpointBuilder endpointBuilder = ApiConfig.endpoint,
     SessionRecovery? sessionRecovery,
     TokenStorage? tokenStorage,
+    HttpRequestLogger logger = const HttpRequestLogger(),
   }) : _client = client ?? http.Client() {
     _timeout = timeout;
     _endpointBuilder = endpointBuilder;
     _sessionRecovery = sessionRecovery;
     _tokenStorage = tokenStorage;
+    _logger = logger;
   }
 
   final http.Client _client;
@@ -36,6 +39,7 @@ class ApiClient {
   late final ApiEndpointBuilder _endpointBuilder;
   late final SessionRecovery? _sessionRecovery;
   late final TokenStorage? _tokenStorage;
+  late final HttpRequestLogger _logger;
 
   /// Shares transport and configuration while isolating session recovery policy.
   ApiClient withSessionRecovery(SessionRecovery sessionRecovery) => ApiClient(
@@ -44,6 +48,7 @@ class ApiClient {
     endpointBuilder: _endpointBuilder,
     sessionRecovery: sessionRecovery,
     tokenStorage: _tokenStorage,
+    logger: _logger,
   );
 
   /// Shares transport and recovery while selecting the encrypted token source.
@@ -53,6 +58,7 @@ class ApiClient {
     endpointBuilder: _endpointBuilder,
     sessionRecovery: _sessionRecovery,
     tokenStorage: tokenStorage,
+    logger: _logger,
   );
 
   Future<Map<String, dynamic>> get(
@@ -64,6 +70,7 @@ class ApiClient {
     bool allowSafeBackendMessage = false,
   }) {
     return _request(
+      method: 'GET',
       path: path,
       queryParameters: queryParameters,
       headers: headers,
@@ -83,6 +90,7 @@ class ApiClient {
     bool allowSafeBackendMessage = false,
   }) {
     return _request(
+      method: 'POST',
       path: path,
       headers: headers,
       send: (uri, requestHeaders) =>
@@ -102,6 +110,7 @@ class ApiClient {
     bool allowSafeBackendMessage = false,
   }) {
     return _request(
+      method: 'PATCH',
       path: path,
       headers: headers,
       send: (uri, requestHeaders) =>
@@ -113,6 +122,7 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> _request({
+    required String method,
     required String path,
     Map<String, String>? queryParameters,
     Map<String, String>? headers,
@@ -147,7 +157,11 @@ class ApiClient {
         }
         requestHeaders['Authorization'] = 'Bearer $token';
       }
-      var response = await send(uri, requestHeaders).timeout(_timeout);
+      var response = await _sendLogged(
+        method,
+        path,
+        () => send(uri, requestHeaders),
+      );
       final sessionRecovery = _sessionRecovery;
       var retriedAfterUnauthorized = false;
 
@@ -162,7 +176,11 @@ class ApiClient {
           final retryHeaders = Map<String, String>.of(requestHeaders)
             ..removeWhere((key, _) => key.toLowerCase() == 'authorization')
             ..['Authorization'] = 'Bearer $accessToken';
-          response = await send(uri, retryHeaders).timeout(_timeout);
+          response = await _sendLogged(
+            method,
+            path,
+            () => send(uri, retryHeaders),
+          );
           retriedAfterUnauthorized = true;
         }
       }
@@ -210,6 +228,28 @@ class ApiClient {
       throw ApiErrorMapper.network;
     } on FormatException {
       throw ApiErrorMapper.unexpectedResponse;
+    }
+  }
+
+  Future<http.Response> _sendLogged(
+    String method,
+    String path,
+    Future<http.Response> Function() send,
+  ) async {
+    final timer = Stopwatch()..start();
+    int? statusCode;
+    try {
+      final response = await send().timeout(_timeout);
+      statusCode = response.statusCode;
+      return response;
+    } finally {
+      timer.stop();
+      _logger.record(
+        method: method,
+        path: path,
+        statusCode: statusCode,
+        elapsed: timer.elapsed,
+      );
     }
   }
 
