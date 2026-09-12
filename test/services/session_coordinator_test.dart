@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:donapp_mobile/models/refreshed_tokens.dart';
 import 'package:donapp_mobile/models/user_profile.dart';
 import 'package:donapp_mobile/services/api_exception.dart';
+import 'package:donapp_mobile/services/api_client.dart';
+import 'package:donapp_mobile/services/api_error_mapper.dart';
 import 'package:donapp_mobile/services/auth_state_controller.dart';
 import 'package:donapp_mobile/services/auth_service.dart';
 import 'package:donapp_mobile/services/local_session_cleanup.dart';
@@ -10,8 +13,135 @@ import 'package:donapp_mobile/services/profile_service.dart';
 import 'package:donapp_mobile/services/session_coordinator.dart';
 import 'package:donapp_mobile/services/token_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
+  group('Composición de la API', () {
+    for (final restore in [true, false]) {
+      test('comparte transporte y limita refresh (restore=$restore)', () async {
+        final paths = <String>[];
+        final storage = _completeStorage();
+        final transport = MockClient((request) async {
+          expect(request.url.host, 'shared.test');
+          paths.add(request.url.path);
+          if (request.url.path == '/api/auth/register') {
+            return http.Response('{"success":true,"data":null}', 201);
+          }
+          if (request.url.path == '/api/auth/refresh') {
+            expect(jsonDecode(request.body), {'refreshToken': 'old-refresh'});
+            return http.Response(
+              jsonEncode({
+                'success': true,
+                'data': {
+                  'accessToken': 'new-access',
+                  'refreshToken': 'new-refresh',
+                  'accessTokenExpiresIn': 900,
+                  'refreshTokenExpiresIn': 604800,
+                },
+              }),
+              200,
+            );
+          }
+          expect(request.url.path, '/api/usuarios/perfil');
+          // A second 401 must not recursively refresh in either policy.
+          return http.Response('{"success":false,"data":null}', 401);
+        });
+        addTearDown(transport.close);
+        final coordinator = SessionCoordinator(
+          apiClient: ApiClient(
+            client: transport,
+            endpointBuilder: (path) => Uri.https('shared.test', path),
+          ),
+          tokenStorage: storage,
+        );
+        await coordinator.authService.register(
+          nombreCompleto: 'Ana Pérez',
+          nombreVisible: 'ana',
+          email: 'ana@example.test',
+          password: 'test-password',
+          ciudad: 'Bogotá',
+        );
+        if (restore) {
+          expect(
+            (await coordinator.restoreSession()).status,
+            SessionRestoreStatus.invalid,
+          );
+        } else {
+          await expectLater(
+            ProfileService(apiClient: coordinator.protectedApiClient)
+                .getProfile('old-access'),
+            throwsA(
+              isA<ApiException>().having(
+                (error) => error.type,
+                'type',
+                ApiErrorType.authentication,
+              ),
+            ),
+          );
+        }
+        expect(paths, [
+          '/api/auth/register',
+          '/api/usuarios/perfil',
+          '/api/auth/refresh',
+          '/api/usuarios/perfil',
+        ]);
+        expect(storage.clearCount, 1);
+        expect(storage.savedPairs, [('new-access', 'new-refresh')]);
+      });
+    }
+
+    test('refresh rechazado termina sin recuperación recursiva', () async {
+      final paths = <String>[];
+      final transport = MockClient((request) async {
+        paths.add(request.url.path);
+        return http.Response('{"success":false,"data":null}', 401);
+      });
+      addTearDown(transport.close);
+      final coordinator = SessionCoordinator(
+        apiClient: ApiClient(
+          client: transport,
+          endpointBuilder: (path) => Uri.https('shared.test', path),
+        ),
+        tokenStorage: _completeStorage(),
+      );
+      await expectLater(
+        ProfileService(apiClient: coordinator.protectedApiClient)
+            .getProfile('old-access'),
+        throwsA(isA<ApiException>()),
+      );
+      expect(paths, ['/api/usuarios/perfil', '/api/auth/refresh']);
+    });
+
+    test('vista protegida conserva el timeout de la configuración', () async {
+      final response = Completer<http.Response>();
+      final transport = MockClient((_) => response.future);
+      addTearDown(transport.close);
+      final coordinator = SessionCoordinator(
+        apiClient: ApiClient(
+          client: transport,
+          timeout: const Duration(milliseconds: 1),
+          endpointBuilder: (path) => Uri.https('shared.test', path),
+        ),
+      );
+      await expectLater(
+        coordinator.protectedApiClient.get(
+          '/test',
+          successStatusCodes: const {200},
+          context: ApiRequestContext.general,
+        ),
+        throwsA(
+          isA<ApiException>().having(
+            (error) => error.type,
+            'type',
+            ApiErrorType.timeout,
+          ),
+        ),
+      );
+      response.complete(http.Response('{"success":true,"data":null}', 200));
+    });
+  });
+
   group('SessionCoordinator.recoverAfterUnauthorized', () {
     test('rota y guarda ambos tokens', () async {
       final storage = _completeStorage();

@@ -29,17 +29,28 @@ class SessionRestoreResult {
 
 class SessionCoordinator implements SessionRecovery {
   SessionCoordinator({
+    ApiClient? apiClient,
     AuthService? authService,
     ProfileService? profileService,
     TokenStorage? tokenStorage,
     LocalSessionCleanup? localSessionCleanup,
-  }) : _authService = authService ?? AuthService(),
-       _profileService = profileService ?? ProfileService(),
+  }) : _apiClient = apiClient ?? ApiClient(),
        _tokenStorage = tokenStorage ?? TokenStorage(),
-       _localSessionCleanup = localSessionCleanup ?? LocalSessionCleanup();
+       _localSessionCleanup = localSessionCleanup ?? LocalSessionCleanup() {
+    _authService = authService ?? AuthService(apiClient: _apiClient);
+    _profileService = profileService ?? ProfileService(apiClient: _apiClient);
+  }
 
-  final AuthService _authService;
-  final ProfileService _profileService;
+  // Authentication and initial restoration intentionally do not use recovery:
+  // this coordinator already handles their 401 responses itself.
+  final ApiClient _apiClient;
+  late final AuthService _authService;
+  late final ProfileService _profileService;
+  late final ApiClient protectedApiClient = _apiClient.withSessionRecovery(
+    this,
+  );
+
+  AuthService get authService => _authService;
   final TokenStorage _tokenStorage;
   final LocalSessionCleanup _localSessionCleanup;
   Future<SessionRestoreResult>? _restoreInProgress;

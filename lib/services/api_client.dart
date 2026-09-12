@@ -32,6 +32,14 @@ class ApiClient {
   late final ApiEndpointBuilder _endpointBuilder;
   late final SessionRecovery? _sessionRecovery;
 
+  /// Shares transport and configuration while isolating session recovery policy.
+  ApiClient withSessionRecovery(SessionRecovery sessionRecovery) => ApiClient(
+    client: _client,
+    timeout: _timeout,
+    endpointBuilder: _endpointBuilder,
+    sessionRecovery: sessionRecovery,
+  );
+
   Future<Map<String, dynamic>> get(
     String path, {
     Map<String, String>? headers,

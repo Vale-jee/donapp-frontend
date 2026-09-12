@@ -15,7 +15,6 @@ import '../screens/welcome_screen.dart';
 import '../repositories/donation_repository.dart';
 import '../services/auth_service.dart';
 import '../services/auth_state_controller.dart';
-import '../services/api_client.dart';
 import '../services/category_service.dart';
 import '../services/donation_service.dart';
 import '../services/image_upload_service.dart';
@@ -94,10 +93,9 @@ GoRouter createAppRouter({
 }) {
   final effectiveTokenStorage =
       tokenStorage ?? authState.sessionCoordinator.tokenStorage;
-  final protectedApiClient = ApiClient(
-    sessionRecovery: authState.sessionCoordinator,
-  );
-  final effectiveAuthService = authService ?? AuthService();
+  final protectedApiClient = authState.sessionCoordinator.protectedApiClient;
+  final effectiveAuthService =
+      authService ?? authState.sessionCoordinator.authService;
   final effectiveProfileService =
       profileService ?? ProfileService(apiClient: protectedApiClient);
   final effectiveDonationService =
