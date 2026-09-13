@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
@@ -225,6 +226,8 @@ class ApiClient {
     } on TimeoutException {
       throw ApiErrorMapper.timeout;
     } on http.ClientException {
+      throw ApiErrorMapper.network;
+    } on SocketException {
       throw ApiErrorMapper.network;
     } on FormatException {
       throw ApiErrorMapper.unexpectedResponse;

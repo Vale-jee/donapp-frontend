@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:donapp_mobile/services/api_client.dart';
@@ -12,6 +13,22 @@ import 'package:http/testing.dart';
 import 'package:image_picker/image_picker.dart';
 
 void main() {
+  test(
+    'SocketException de subida se clasifica como red sin detalles internos',
+    () async {
+      final service = _service(
+        uploadHandler: (_) async => throw const SocketException('private host'),
+      );
+      await expectLater(
+        service.uploadImages([_image('a.jpg')]),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.type, 'type', ApiErrorType.network)
+              .having((e) => e.message, 'message', isNot(contains('private'))),
+        ),
+      );
+    },
+  );
   testWidgets('una subida móvil de 60 segundos termina correctamente', (
     tester,
   ) async {
@@ -57,6 +74,8 @@ void main() {
     ),
     (403, 'Forbidden', ApiErrorType.configuration, CloudinaryFailure.rejected),
     (408, '', ApiErrorType.timeout, CloudinaryFailure.timeout),
+    (409, '', ApiErrorType.conflict, CloudinaryFailure.rejected),
+    (422, '', ApiErrorType.validation, CloudinaryFailure.rejected),
     (429, '', ApiErrorType.rateLimited, CloudinaryFailure.rateLimited),
     (500, '', ApiErrorType.server, CloudinaryFailure.unavailable),
     (503, '', ApiErrorType.server, CloudinaryFailure.unavailable),

@@ -3,6 +3,48 @@ import 'package:donapp_mobile/services/api_exception.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  for (final message in [
+    'TypeError: Cannot read properties of undefined',
+    'SocketException: private host',
+    'SQL constraint failed',
+    'SELECT password FROM usuarios',
+    'at handler (/app/server.js:42:8)',
+    'Error\n at private (/srv/server.js:42:8)',
+    '<html>internal failure</html>',
+  ]) {
+    test(
+      'oculta detalle tecnico general y conserva campo con fallback: $message',
+      () {
+        for (final status in [400, 409, 422]) {
+          final error = ApiErrorMapper.fromHttp(
+            statusCode: status,
+            body: {'message': message},
+            allowSafeBackendMessage: true,
+          );
+          expect(error.message, isNot(contains(message)));
+        }
+        final error = ApiErrorMapper.fromHttp(
+          statusCode: 400,
+          body: {
+            'errors': [
+              {'field': 'titulo', 'message': message},
+              {'field': 'descripcion', 'message': 'Completa la descripcion.'},
+            ],
+          },
+          allowSafeBackendMessage: true,
+        );
+        expect(error.fieldErrors.map((e) => e.field), [
+          'titulo',
+          'descripcion',
+        ]);
+        expect(
+          error.fieldErrors.first.message,
+          'Revisa los datos ingresados e intenta nuevamente.',
+        );
+        expect(error.fieldErrors.last.message, 'Completa la descripcion.');
+      },
+    );
+  }
   group('ApiErrorMapper', () {
     test('traduce los códigos comunes con mensajes aprobados', () {
       final cases = <int, (ApiErrorType, String)>{

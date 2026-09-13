@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../config/api_config.dart';
 import '../config/network_timeouts.dart';
 import 'api_exception.dart';
+import 'api_error_mapper.dart';
 
 class RemoteImageCache {
   RemoteImageCache({
@@ -35,7 +36,10 @@ class RemoteImageCache {
   }) async {
     final uri = ApiConfig.resolveImageReference(reference);
     if (uri == null) {
-      throw const FormatException('Referencia de imagen inválida.');
+      throw const ApiException(
+        ApiErrorType.validation,
+        'La referencia de la imagen no es válida.',
+      );
     }
 
     final directory = await _cacheDirectory();
@@ -50,10 +54,17 @@ class RemoteImageCache {
       // Client.get completes only after the full body has been collected.
       final response = await _client.get(uri).timeout(timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw HttpException('No se pudo descargar la imagen.');
+        throw ApiErrorMapper.fromHttp(
+          statusCode: response.statusCode,
+          body: null,
+        );
       }
       if (response.bodyBytes.isEmpty) {
-        throw const FormatException('La imagen descargada está vacía.');
+        throw ApiException(
+          ApiErrorType.unexpectedResponse,
+          ApiErrorMapper.unexpectedResponse.message,
+          statusCode: response.statusCode,
+        );
       }
       await temporary.writeAsBytes(response.bodyBytes, flush: true);
       if (await target.exists()) await target.delete();
@@ -66,6 +77,9 @@ class RemoteImageCache {
           'La descarga de la imagen está tardando más de lo esperado. '
           'Verifica tu conexión e intenta nuevamente.',
         );
+      }
+      if (error is http.ClientException || error is SocketException) {
+        throw ApiErrorMapper.network;
       }
       rethrow;
     }

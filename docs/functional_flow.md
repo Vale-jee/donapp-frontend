@@ -447,3 +447,72 @@ Validación ejecutada el 12 de septiembre de 2026:
 No se detectaron clases nuevas sin consumidores ni implementaciones duplicadas
 en esta separación. No se eliminaron archivos, no se añadieron capas adicionales
 durante el cierre y no se realizó commit ni push.
+
+## Clasificación de errores de datos (requisito 18)
+
+La validación normal del backend usa **400**. Se admite **422** por
+compatibilidad; el formulario de donación funciona con ambos.
+
+| Origen / status | Tipo interno | Comportamiento esperado |
+| --- | --- | --- |
+| 400 / 422 | `validation` | Revisar datos; conservar los errores por campo recibidos en `errors[]`. |
+| 401 en Login | `invalidCredentials` | Mostrar credenciales incorrectas; no intentar refresh. |
+| 401 en una operación protegida | `authentication` | Mantener la recuperación de sesión existente y su único reintento; invalidar si el 401 es definitivo. |
+| 403 | `forbidden` | Mostrar falta de permisos, sin tratarlo como 401. |
+| 403 con cuenta inactiva | `inactiveAccount` | Mantener la invalidación de cuenta y sesión existente. |
+| 404 | `notFound` | Mostrar que el recurso no está disponible. |
+| 409 | `conflict` | Mostrar la regla de negocio segura; conservar campos si el backend los incluye. |
+| 429 | `rateLimited` | Indicar que espere antes de volver a intentarlo; no añadir reintentos automáticos. |
+| 500, 502, 503, 504 y demás 5xx | `server` | Mostrar indisponibilidad temporal, sin detalles del servidor. |
+| `SocketException` / `http.ClientException`, sin respuesta | `network` | Pedir revisar la conexión; no inventar un status HTTP. |
+| `TimeoutException` / vencimiento del plazo | `timeout` | Indicar que la operación tardó demasiado; distinguirlo de red. |
+| JSON inválido o sobre inesperado en respuesta exitosa | `unexpectedResponse` | Mostrar mensaje seguro; ApiClient conserva el status recibido. |
+| Datos JSON que no cumplen el modelo | `unexpectedResponse` | El servicio convierte el error de lectura del contrato; no se presenta como fallo de conexión. |
+| Status no reconocido | `unexpectedResponse` | Conservar el status y usar un mensaje local. |
+| Configuración local inválida | `configuration` | Mostrar un mensaje de soporte, sin configuración ni credenciales. |
+
+El status real manda aunque el cuerpo sea HTML, vacío, JSON inválido o incluya
+otro número en `status`. No se cambia el comportamiento del requisito 6.
+Las fuentes remotas y los repositories conservan ApiException, su tipo,
+statusCode y fieldErrors; no la envuelven en Exception genérico.
+
+Los mensajes generales del backend solo se usan en validación o conflicto
+cuando la operación lo permite y el texto pasa el filtro. Los detalles SQL,
+excepciones, rutas internas, HTML y stack traces se sustituyen por mensajes
+locales. Un mensaje técnico por campo no elimina el campo: se conserva su
+nombre y se usa una indicación segura para corregirlo. Las entradas de errors[]
+sin nombre de campo o sin mensaje de texto se ignoran.
+
+Crear donación muestra los errores de titulo, descripcion, categoriaId e
+imagenes (incluido imagenes.0) en los controles existentes. Los campos
+desconocidos se muestran como error general. Login y Registro mantienen su
+mensaje general seguro, que puede tomar el primer error de campo recibido.
+Las listas y acciones muestran el mensaje seguro; los detalles conservan el
+tratamiento de no encontrado y las solicitudes conservan el de conflicto.
+No se modifica el diseño de las pantallas.
+
+La subida y descarga de imágenes también distinguen red de timeout. La caché
+de imágenes conserva los status HTTP; una referencia inválida es validation y
+una descarga exitosa vacía es unexpectedResponse. Se mantiene la limpieza de
+temporales y el comportamiento de DonationRepository: un fallo al descargar
+una imagen auxiliar no invalida los datos de donaciones ya guardados.
+
+Cloudinary conserva su clasificación adicional CloudinaryFailure. Sus errores
+de firma/clave y sus 401/403/404 siguen siendo configuration: corresponden al
+servicio externo, no a la sesión de DonApp, y no deben provocar refresh de esa
+sesión. Sus 409 son conflict, 429 rateLimited, 5xx server y 408 timeout. Nunca se
+muestra el cuerpo de error de Cloudinary. No se cambian reintentos, cancelación,
+sincronización/outbox ni backend.
+
+Pruebas: `error_classification_test.dart` recorre los once status de la tabla
+con cuerpos JSON, HTML y vacíos a través de servicios, fuentes y repositories;
+también cubre transporte, timeout y contratos inválidos. Las pruebas de
+publicación recorren HTTP → Repository → formulario con 400 y 422, incluidos
+errores por campo y mensajes técnicos. Se amplían las pruebas del mapper,
+subida y caché de imágenes; se mantienen las pruebas de refresh y sesión.
+
+Validación del requisito 18: formato comprobado en los nueve archivos Dart
+afectados, sin cambios pendientes; `flutter analyze` sin incidencias;
+`flutter test test/services test/repositories test/screens --reporter compact`
+con 424 pruebas aprobadas; `flutter test --reporter compact` con 577 aprobadas;
+`git diff --check` sin errores. No se realizó commit ni push.

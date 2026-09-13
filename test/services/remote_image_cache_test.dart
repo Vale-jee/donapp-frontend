@@ -21,6 +21,89 @@ void main() {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
+  for (final scenario in [
+    (400, ApiErrorType.validation),
+    (401, ApiErrorType.authentication),
+    (403, ApiErrorType.forbidden),
+    (404, ApiErrorType.notFound),
+    (409, ApiErrorType.conflict),
+    (422, ApiErrorType.validation),
+    (429, ApiErrorType.rateLimited),
+    (500, ApiErrorType.server),
+    (502, ApiErrorType.server),
+    (503, ApiErrorType.server),
+    (504, ApiErrorType.server),
+    (200, ApiErrorType.unexpectedResponse),
+  ]) {
+    test(
+      'descarga ${scenario.$1} conserva status y tipo sin body JSON',
+      () async {
+        final cache = RemoteImageCache(
+          client: MockClient((_) async => http.Response('', scenario.$1)),
+          cacheDirectory: () async => directory,
+        );
+        await expectLater(
+          cache.cache(
+            cacheUserId: 1,
+            donationId: 2,
+            imageId: 3,
+            reference: 'https://images.test/photo.jpg',
+          ),
+          throwsA(
+            isA<ApiException>()
+                .having((e) => e.type, 'type', scenario.$2)
+                .having((e) => e.statusCode, 'status', scenario.$1),
+          ),
+        );
+        expect(await directory.list().toList(), isEmpty);
+      },
+    );
+  }
+
+  for (final error in [
+    const SocketException('private host'),
+    http.ClientException('private host'),
+  ]) {
+    test('descarga clasifica ${error.runtimeType} como red', () async {
+      final cache = RemoteImageCache(
+        client: MockClient((_) async => throw error),
+        cacheDirectory: () async => directory,
+      );
+      await expectLater(
+        cache.cache(
+          cacheUserId: 1,
+          donationId: 2,
+          imageId: 3,
+          reference: 'https://images.test/photo.jpg',
+        ),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.type, 'type', ApiErrorType.network)
+              .having((e) => e.message, 'message', isNot(contains('private'))),
+        ),
+      );
+    });
+  }
+
+  test('referencia invalida se clasifica antes de descargar', () async {
+    final cache = RemoteImageCache(
+      client: MockClient((_) async {
+        fail('No debe descargar una referencia invalida');
+      }),
+      cacheDirectory: () async => directory,
+    );
+    await expectLater(
+      cache.cache(cacheUserId: 1, donationId: 2, imageId: 3, reference: ''),
+      throwsA(
+        isA<ApiException>().having(
+          (e) => e.type,
+          'type',
+          ApiErrorType.validation,
+        ),
+      ),
+    );
+  });
+
   for (final headersReceived in [false, true]) {
     test(
       'timeout de descarga limpia temporal (cabeceras=$headersReceived)',

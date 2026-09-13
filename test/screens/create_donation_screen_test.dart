@@ -24,6 +24,55 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  for (final status in [400, 422]) {
+    testWidgets(
+      '$status HTTP propaga campos hasta el formulario mediante repository',
+      (tester) async {
+        final donation = DonationService(
+          apiClient: ApiClient(
+            endpointBuilder: (path) => Uri.parse('https://donapp.test$path'),
+            client: MockClient((request) async {
+              expect(request.url.path, '/api/donaciones');
+              return http.Response(
+                jsonEncode({
+                  'message': 'TypeError: private stack',
+                  'errors': [
+                    {'field': 'titulo', 'message': 'Corrige el titulo.'},
+                    {
+                      'field': 'descripcion',
+                      'message': 'Completa la descripcion.',
+                    },
+                    {
+                      'field': 'categoriaId',
+                      'message': 'Selecciona otra categoria.',
+                    },
+                    {'field': 'imagenes.0', 'message': 'SQL private stack'},
+                  ],
+                }),
+                status,
+              );
+            }),
+          ),
+        );
+        await tester.pumpWidget(
+          _app(picker: _Picker([_image('one.jpg')]), donation: donation),
+        );
+        await tester.pumpAndSettle();
+        await _completeForm(tester);
+        await tester.tap(find.byKey(const Key('publishDonationButton')));
+        await tester.pumpAndSettle();
+        expect(find.text('Corrige el titulo.'), findsOneWidget);
+        expect(find.text('Completa la descripcion.'), findsOneWidget);
+        expect(find.text('Selecciona otra categoria.'), findsOneWidget);
+        expect(
+          find.text('Revisa los datos ingresados e intenta nuevamente.'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('private stack'), findsNothing);
+        expect(find.byKey(const Key('createDonationError')), findsNothing);
+      },
+    );
+  }
   for (final outcome in ['success', 'timeout', '400', '401', '429', '503']) {
     testWidgets('flujo HTTP real de publicación: $outcome', (tester) async {
       final stages = <String>[];

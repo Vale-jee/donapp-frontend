@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 export 'donation_gallery_picker.dart';
 
@@ -213,6 +214,8 @@ class ImageUploadService {
       rethrow;
     } on http.ClientException {
       throw ApiErrorMapper.network;
+    } on SocketException {
+      throw ApiErrorMapper.network;
     } on TimeoutException {
       throw _uploadTimeout;
     } on FormatException {
@@ -239,7 +242,7 @@ class ImageUploadService {
     final failure = switch (status) {
       408 => CloudinaryFailure.timeout,
       429 => CloudinaryFailure.rateLimited,
-      >= 500 => CloudinaryFailure.unavailable,
+      >= 500 && <= 599 => CloudinaryFailure.unavailable,
       _ when message.contains('invalid signature') =>
         CloudinaryFailure.invalidSignature,
       _
@@ -260,6 +263,7 @@ class ImageUploadService {
       CloudinaryFailure.invalidApiKey => ApiErrorType.configuration,
       _ when status == 401 || status == 403 || status == 404 =>
         ApiErrorType.configuration,
+      _ when status == 409 => ApiErrorType.conflict,
       _ when status >= 400 && status < 500 => ApiErrorType.validation,
       _ => ApiErrorType.unexpectedResponse,
     };

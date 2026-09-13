@@ -32,7 +32,11 @@ abstract final class ApiErrorMapper {
       'DonApp no está configurada correctamente. Comunícate con soporte.';
 
   static final RegExp _technicalTerms = RegExp(
-    r'\b(http|api|backend|json|token|status code|adb reverse|api_base_url|dart-define)\b',
+    r'\b(http|https|api|backend|json|token|status code|adb reverse|api_base_url|dart-define|sql|sqlite|postgres(?:ql)?|prisma|stack\s*trace|traceback|exception|\w*Exception|TypeError|ReferenceError|SyntaxError|RangeError|ECONN\w*|ENOTFOUND|ENOENT)\b'
+    r'|\b(?:SELECT|INSERT|UPDATE|DELETE)\b.+\b(?:FROM|INTO|SET|WHERE)\b'
+    r'|\bat\s+\S+\s*\([^)]*:\d+'
+    r'|[<>\x00-\x1f\x7f]'
+    r'|(?:[A-Za-z]:\\|/(?:var|usr|home|app)/)',
     caseSensitive: false,
   );
 
@@ -90,6 +94,7 @@ abstract final class ApiErrorMapper {
         ApiErrorType.conflict,
         safeMessage ?? _conflictMessage,
         statusCode: statusCode,
+        fieldErrors: fieldErrors,
       );
     }
 
@@ -145,10 +150,13 @@ abstract final class ApiErrorMapper {
         .map((error) {
           final field = error['field'];
           final message = error['message'];
-          if (field is! String || message is! String || !_isSafe(message)) {
+          if (field is! String || field.trim().isEmpty || message is! String) {
             return null;
           }
-          return ApiFieldError(field: field, message: message.trim());
+          return ApiFieldError(
+            field: field.trim(),
+            message: _isSafe(message) ? message.trim() : _validationMessage,
+          );
         })
         .whereType<ApiFieldError>()
         .toList(growable: false);
