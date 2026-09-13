@@ -264,7 +264,7 @@ void main() {
           ),
           tokenStorage: storage,
         );
-        await coordinator.authService.register(
+        await coordinator.authRepository.register(
           nombreCompleto: 'Ana Pérez',
           nombreVisible: 'ana',
           email: 'ana@example.test',

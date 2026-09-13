@@ -1,3 +1,5 @@
+import 'package:donapp_mobile/repositories/category_repository.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -268,8 +270,10 @@ Widget _app(DonationRepository repository) => MaterialApp(
   home: ExploreDonationsScreen(
     cacheUserId: 77,
     repository: repository,
-    donationService: _DonationService(success: true),
-    categoryService: _CategoryService(),
+    donationRepository: DonationRepository.fromService(
+      _DonationService(success: true),
+    ),
+    categoryRepository: CategoryRepository.fromService(_CategoryService()),
   ),
 );
 

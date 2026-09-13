@@ -8,9 +8,10 @@ import '../models/category.dart';
 import '../models/donation.dart';
 import '../navigation/app_router.dart';
 import '../services/api_exception.dart';
-import '../services/category_service.dart';
-import '../services/donation_service.dart';
-import '../services/image_upload_service.dart';
+import '../repositories/category_repository.dart';
+import '../repositories/donation_repository.dart';
+import '../repositories/image_upload_repository.dart';
+import '../services/donation_gallery_picker.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_content_state.dart';
 import '../widgets/app_primary_button.dart';
@@ -55,17 +56,17 @@ bool _isPlainDonationDescription(String value) =>
 
 class CreateDonationScreen extends StatefulWidget {
   const CreateDonationScreen({
-    this.donationService,
-    this.categoryService,
-    this.imageUploadService,
+    this.donationRepository,
+    this.categoryRepository,
+    this.imageUploadRepository,
     this.galleryPicker,
     this.onCreated,
     super.key,
   });
 
-  final DonationService? donationService;
-  final CategoryService? categoryService;
-  final ImageUploadService? imageUploadService;
+  final DonationRepository? donationRepository;
+  final CategoryRepository? categoryRepository;
+  final ImageUploadRepository? imageUploadRepository;
   final DonationGalleryPicker? galleryPicker;
   final ValueChanged<DonationDetail>? onCreated;
 
@@ -77,9 +78,9 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  late final DonationService _donationService;
-  late final CategoryService _categoryService;
-  late final ImageUploadService _imageUploadService;
+  late final DonationRepository _donationRepository;
+  late final CategoryRepository _categoryRepository;
+  late final ImageUploadRepository _imageUploadRepository;
   late final DonationGalleryPicker _galleryPicker;
   List<Category> _categories = const [];
   List<XFile> _images = const [];
@@ -131,9 +132,12 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
   @override
   void initState() {
     super.initState();
-    _donationService = widget.donationService ?? DonationService();
-    _categoryService = widget.categoryService ?? const CategoryService();
-    _imageUploadService = widget.imageUploadService ?? ImageUploadService();
+    _donationRepository =
+        widget.donationRepository ?? DonationRepository.remote();
+    _categoryRepository =
+        widget.categoryRepository ?? const CategoryRepository();
+    _imageUploadRepository =
+        widget.imageUploadRepository ?? ImageUploadRepository();
     _galleryPicker = widget.galleryPicker ?? ImagePickerGallery();
     _load();
   }
@@ -152,14 +156,16 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
     });
     try {
       final results = await Future.wait<Object>([
-        _categoryService.getCategories(),
+        _categoryRepository.getCategories(),
         _galleryPicker.retrieveLostImages(),
       ]);
       if (!mounted) return;
       final recovered = results[1] as List<XFile>;
       setState(() {
         _categories = results[0] as List<Category>;
-        _images = recovered.take(maxDonationImages).toList(growable: false);
+        _images = recovered
+            .take(ImageUploadRepository.maxImages)
+            .toList(growable: false);
         _loadingCategories = false;
       });
     } on ApiException catch (error) {
@@ -184,12 +190,12 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
       final selected = await _galleryPicker.pickImages();
       if (!mounted || selected.isEmpty) return;
       final combined = [..._images, ...selected];
-      if (combined.length > maxDonationImages) {
+      if (combined.length > ImageUploadRepository.maxImages) {
         setState(() => _submitError = 'Puedes seleccionar máximo 5 imágenes.');
         return;
       }
       for (final image in selected) {
-        await _imageUploadService.validateImage(image);
+        await _imageUploadRepository.validateImage(image);
       }
       if (mounted) {
         setState(() {
@@ -232,8 +238,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
       _submitError = null;
     });
     try {
-      final references = await _imageUploadService.uploadImages(_images);
-      final donation = await _donationService.createDonation(
+      final references = await _imageUploadRepository.uploadImages(_images);
+      final donation = await _donationRepository.createDonation(
         title: _titleController.text,
         description: _descriptionController.text,
         categoryId: _categoryId!,
@@ -393,7 +399,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                             key: const Key('pickDonationImagesButton'),
                             onPressed:
                                 _submitting ||
-                                    _images.length >= maxDonationImages
+                                    _images.length >=
+                                        ImageUploadRepository.maxImages
                                 ? null
                                 : _pickImages,
                             child: Padding(

@@ -1,3 +1,4 @@
+import 'package:donapp_mobile/repositories/auth_repository.dart';
 import 'package:donapp_mobile/models/auth_session.dart';
 import 'package:donapp_mobile/screens/login_screen.dart';
 import 'package:donapp_mobile/screens/register_screen.dart';
@@ -74,7 +75,9 @@ void main() {
     tester,
   ) async {
     final service = _SuccessfulRegisterService();
-    await tester.pumpWidget(_app(WelcomeScreen(authService: service)));
+    await tester.pumpWidget(
+      _app(WelcomeScreen(authRepository: AuthRepository.fromService(service))),
+    );
 
     await tester.tap(find.byKey(const Key('welcomeRegisterButton')));
     await tester.pumpAndSettle();

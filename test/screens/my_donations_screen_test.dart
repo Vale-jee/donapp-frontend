@@ -1,3 +1,5 @@
+import 'package:donapp_mobile/repositories/donation_repository.dart';
+
 import 'dart:async';
 
 import 'package:donapp_mobile/models/donation.dart';
@@ -10,6 +12,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 void main() {
+  testWidgets('UI usa el repository inyectado y presenta su error', (
+    tester,
+  ) async {
+    final repository = _RepositorySpy();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: MyDonationsScreen(donationRepository: repository),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(repository.calls, 1);
+    expect(find.text('Error del repository'), findsOneWidget);
+    await tester.tap(find.text('Reintentar'));
+    await tester.pumpAndSettle();
+    expect(repository.calls, 2);
+    expect(find.byKey(const Key('myDonationsEmpty')), findsOneWidget);
+    expect(find.text('Error del repository'), findsNothing);
+  });
   testWidgets('muestra carga inicial y luego datos con estados reales', (
     tester,
   ) async {
@@ -117,7 +138,9 @@ void main() {
       routes: [
         GoRoute(
           path: '/donaciones/mias',
-          builder: (_, _) => MyDonationsScreen(donationService: service),
+          builder: (_, _) => MyDonationsScreen(
+            donationRepository: DonationRepository.fromService(service),
+          ),
         ),
         GoRoute(
           path: '/donaciones/:id',
@@ -160,9 +183,33 @@ void main() {
   }
 }
 
+class _RepositorySpy implements DonationRepository {
+  int calls = 0;
+  @override
+  Future<DonationPage> getOwnDonations({
+    int page = 1,
+    int limit = 20,
+    DonationStatus? status,
+  }) async {
+    expect(page, 1);
+    expect(limit, 20);
+    expect(status, isNull);
+    if (++calls == 1) {
+      throw const ApiException(ApiErrorType.network, 'Error del repository');
+    }
+    return _page([]);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('Unexpected repository call: ${invocation.memberName}');
+}
+
 Widget _app(DonationService service) => MaterialApp(
   theme: AppTheme.light,
-  home: MyDonationsScreen(donationService: service),
+  home: MyDonationsScreen(
+    donationRepository: DonationRepository.fromService(service),
+  ),
 );
 
 class _FakeService extends DonationService {

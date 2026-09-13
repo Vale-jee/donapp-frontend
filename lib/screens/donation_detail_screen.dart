@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../config/api_config.dart';
 import '../models/donation.dart';
 import '../services/api_exception.dart';
-import '../services/donation_service.dart';
-import '../services/request_service.dart';
+import '../repositories/donation_repository.dart';
+import '../repositories/request_repository.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
@@ -14,22 +14,22 @@ import '../widgets/app_content_state.dart';
 class DonationDetailScreen extends StatefulWidget {
   const DonationDetailScreen({
     required this.donationId,
-    this.donationService,
-    this.requestService,
+    this.donationRepository,
+    this.requestRepository,
     super.key,
   });
 
   final int donationId;
-  final DonationService? donationService;
-  final RequestService? requestService;
+  final DonationRepository? donationRepository;
+  final RequestRepository? requestRepository;
 
   @override
   State<DonationDetailScreen> createState() => _DonationDetailScreenState();
 }
 
 class _DonationDetailScreenState extends State<DonationDetailScreen> {
-  late final DonationService _service;
-  late final RequestService _requestService;
+  late final DonationRepository _service;
+  late final RequestRepository _requestRepository;
   DonationDetail? _donation;
   ApiException? _error;
   bool _isSubmitting = false;
@@ -38,8 +38,8 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _service = widget.donationService ?? DonationService();
-    _requestService = widget.requestService ?? RequestService();
+    _service = widget.donationRepository ?? DonationRepository.remote();
+    _requestRepository = widget.requestRepository ?? RequestRepository();
     _load();
   }
 
@@ -159,7 +159,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     if (_isSubmitting || _requestCreated) return;
     setState(() => _isSubmitting = true);
     try {
-      await _requestService.createRequest(widget.donationId);
+      await _requestRepository.createRequest(widget.donationId);
       if (!mounted) return;
       setState(() {
         _requestCreated = true;
@@ -177,9 +177,8 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
       if (error.type == ApiErrorType.conflict ||
           error.type == ApiErrorType.notFound) {
         await _load();
@@ -241,7 +240,9 @@ class _DonationDetailContent extends StatelessWidget {
                           )
                         : const Icon(Icons.volunteer_activism_outlined),
                     label: Text(
-                      isSubmitting ? 'Enviando solicitud…' : 'Solicitar donación',
+                      isSubmitting
+                          ? 'Enviando solicitud…'
+                          : 'Solicitar donación',
                     ),
                   ),
                 ),

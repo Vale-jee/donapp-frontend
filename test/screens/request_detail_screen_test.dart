@@ -1,3 +1,5 @@
+import 'package:donapp_mobile/repositories/request_repository.dart';
+
 import 'dart:async';
 
 import 'package:donapp_mobile/models/request.dart';
@@ -130,7 +132,10 @@ void main() {
 
 Widget _app(RequestService service) => MaterialApp(
   theme: AppTheme.light,
-  home: RequestDetailScreen(requestId: 7, requestService: service),
+  home: RequestDetailScreen(
+    requestId: 7,
+    requestRepository: RequestRepository.fromService(service),
+  ),
 );
 
 class _DetailService extends RequestService {

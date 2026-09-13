@@ -20,4 +20,28 @@ class DonationRemoteDataSource {
   );
 
   Future<List<Category>> getCategories() => _categoryService.getCategories();
+  Future<DonationDetail> getDonationById(int id) =>
+      _donationService.getDonationById(id);
+  Future<DonationPage> getOwnDonations({
+    int page = 1,
+    int limit = 20,
+    DonationStatus? status,
+  }) => _donationService.getOwnDonations(
+    page: page,
+    limit: limit,
+    status: status,
+  );
+  Future<DonationDetail> createDonation({
+    String? clientId,
+    required String title,
+    required String description,
+    required int categoryId,
+    required List<String> imageReferences,
+  }) => _donationService.createDonation(
+    clientId: clientId,
+    title: title,
+    description: description,
+    categoryId: categoryId,
+    imageReferences: imageReferences,
+  );
 }

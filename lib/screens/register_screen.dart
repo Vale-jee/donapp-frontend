@@ -5,14 +5,14 @@ import 'package:go_router/go_router.dart';
 
 import '../navigation/app_router.dart';
 import '../services/api_exception.dart';
-import '../services/auth_service.dart';
+import '../repositories/auth_repository.dart';
 import '../widgets/app_password_field.dart';
 import '../widgets/app_primary_button.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({this.authService, this.redirectLocation, super.key});
+  const RegisterScreen({this.authRepository, this.redirectLocation, super.key});
 
-  final AuthService? authService;
+  final AuthRepository? authRepository;
   final String? redirectLocation;
 
   @override
@@ -27,14 +27,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _ciudadController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  late final AuthService _authService;
+  late final AuthRepository _authRepository;
   bool _isLoading = false;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _authService = widget.authService ?? AuthService();
+    _authRepository = widget.authRepository ?? AuthRepository();
   }
 
   @override
@@ -120,7 +120,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      await _authService.register(
+      await _authRepository.register(
         nombreCompleto: _nombreCompletoController.text,
         nombreVisible: _nombreVisibleController.text,
         email: _emailController.text,

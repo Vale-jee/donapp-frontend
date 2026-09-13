@@ -1,3 +1,6 @@
+import 'package:donapp_mobile/repositories/donation_repository.dart';
+import 'package:donapp_mobile/repositories/category_repository.dart';
+
 import 'dart:async';
 
 import 'package:donapp_mobile/models/category.dart';
@@ -242,8 +245,8 @@ Widget _app({
   MediaQueryData? mediaQuery,
 }) {
   final screen = ExploreDonationsScreen(
-    donationService: donationService,
-    categoryService: categoryService,
+    donationRepository: DonationRepository.fromService(donationService),
+    categoryRepository: CategoryRepository.fromService(categoryService),
   );
   return MaterialApp(
     theme: AppTheme.light,

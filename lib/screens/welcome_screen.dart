@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../navigation/app_router.dart';
-import '../services/auth_service.dart';
+import '../repositories/auth_repository.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
@@ -11,9 +11,9 @@ import 'login_screen.dart';
 import 'register_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({this.authService, this.redirectLocation, super.key});
+  const WelcomeScreen({this.authRepository, this.redirectLocation, super.key});
 
-  final AuthService? authService;
+  final AuthRepository? authRepository;
   final String? redirectLocation;
 
   Future<void> _openLogin(BuildContext context, {String? initialEmail}) {
@@ -27,8 +27,10 @@ class WelcomeScreen extends StatelessWidget {
     }
     return Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            LoginScreen(authService: authService, initialEmail: initialEmail),
+        builder: (_) => LoginScreen(
+          authRepository: authRepository,
+          initialEmail: initialEmail,
+        ),
       ),
     );
   }
@@ -41,7 +43,7 @@ class WelcomeScreen extends StatelessWidget {
           )
         : await Navigator.of(context).push<String>(
             MaterialPageRoute<String>(
-              builder: (_) => RegisterScreen(authService: authService),
+              builder: (_) => RegisterScreen(authRepository: authRepository),
             ),
           );
     if (!context.mounted || email == null) return;

@@ -3,10 +3,10 @@ import 'package:go_router/go_router.dart';
 
 import '../navigation/app_router.dart';
 import '../services/api_exception.dart';
-import '../services/auth_service.dart';
+import '../repositories/auth_repository.dart';
 import '../services/auth_state_controller.dart';
-import '../services/profile_service.dart';
-import '../services/token_storage.dart';
+import '../repositories/profile_repository.dart';
+import '../repositories/session_repository.dart';
 import '../widgets/app_password_field.dart';
 import '../widgets/app_primary_button.dart';
 import 'home_screen.dart';
@@ -14,18 +14,18 @@ import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({
-    this.authService,
-    this.profileService,
-    this.tokenStorage,
+    this.authRepository,
+    this.profileRepository,
+    this.sessionRepository,
     this.authState,
     this.initialEmail,
     this.redirectLocation,
     super.key,
   });
 
-  final AuthService? authService;
-  final ProfileService? profileService;
-  final TokenStorage? tokenStorage;
+  final AuthRepository? authRepository;
+  final ProfileRepository? profileRepository;
+  final SessionRepository? sessionRepository;
   final AuthStateController? authState;
   final String? initialEmail;
   final String? redirectLocation;
@@ -38,9 +38,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  late final AuthService _authService;
-  late final ProfileService _profileService;
-  late final TokenStorage _tokenStorage;
+  late final AuthRepository _authRepository;
+  late final ProfileRepository _profileRepository;
+  late final SessionRepository _sessionRepository;
   bool _isLoading = false;
   String? _errorMessage;
   String? _successMessage;
@@ -48,9 +48,9 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _authService = widget.authService ?? AuthService();
-    _profileService = widget.profileService ?? ProfileService();
-    _tokenStorage = widget.tokenStorage ?? TokenStorage();
+    _authRepository = widget.authRepository ?? AuthRepository();
+    _profileRepository = widget.profileRepository ?? ProfileRepository();
+    _sessionRepository = widget.sessionRepository ?? SessionRepository();
     _emailController.text = widget.initialEmail?.trim().toLowerCase() ?? '';
   }
 
@@ -86,15 +86,15 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final session = await _authService.login(
+      final session = await _authRepository.login(
         _emailController.text,
         _passwordController.text,
       );
-      await _tokenStorage.saveTokens(
+      await _sessionRepository.saveTokens(
         accessToken: session.accessToken,
         refreshToken: session.refreshToken,
       );
-      final profile = await _profileService.getProfile(session.accessToken);
+      final profile = await _profileRepository.getProfile(session.accessToken);
       if (!mounted) return;
       if (GoRouter.maybeOf(context) != null && widget.authState != null) {
         widget.authState!.authenticated(profile);
@@ -106,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on ApiException catch (error) {
       if (error.type == ApiErrorType.authentication ||
           error.type == ApiErrorType.inactiveAccount) {
-        await _tokenStorage.clearTokens();
+        await _sessionRepository.clearTokens();
       }
       if (mounted) setState(() => _errorMessage = error.message);
     } catch (_) {
@@ -128,7 +128,7 @@ class _LoginScreenState extends State<LoginScreen> {
           )
         : await Navigator.of(context).push<String>(
             MaterialPageRoute<String>(
-              builder: (_) => RegisterScreen(authService: _authService),
+              builder: (_) => RegisterScreen(authRepository: _authRepository),
             ),
           );
     if (!mounted || email == null) return;

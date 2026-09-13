@@ -1,3 +1,6 @@
+import '../repositories/session_repository.dart';
+import '../repositories/auth_repository.dart';
+import '../repositories/profile_repository.dart';
 import '../models/user_profile.dart';
 import 'api_client.dart';
 import 'api_exception.dart';
@@ -37,20 +40,26 @@ class SessionCoordinator implements SessionRecovery {
   }) : _apiClient = apiClient ?? ApiClient(),
        _tokenStorage = tokenStorage ?? TokenStorage(),
        _localSessionCleanup = localSessionCleanup ?? LocalSessionCleanup() {
-    _authService = authService ?? AuthService(apiClient: _apiClient);
-    _profileService = profileService ?? ProfileService(apiClient: _apiClient);
+    _sessionRepository = SessionRepository.fromStorage(_tokenStorage);
+    _authRepository = AuthRepository.fromService(
+      authService ?? AuthService(apiClient: _apiClient),
+    );
+    _profileRepository = ProfileRepository.fromService(
+      profileService ?? ProfileService(apiClient: _apiClient),
+    );
   }
 
   // Authentication and initial restoration intentionally do not use recovery:
   // this coordinator already handles their 401 responses itself.
   final ApiClient _apiClient;
-  late final AuthService _authService;
-  late final ProfileService _profileService;
+  late final SessionRepository _sessionRepository;
+  late final AuthRepository _authRepository;
+  late final ProfileRepository _profileRepository;
   late final ApiClient protectedApiClient = _apiClient
       .withTokenStorage(_tokenStorage)
       .withSessionRecovery(this);
 
-  AuthService get authService => _authService;
+  AuthRepository get authRepository => _authRepository;
   final TokenStorage _tokenStorage;
   final LocalSessionCleanup _localSessionCleanup;
   Future<SessionRestoreResult>? _restoreInProgress;
@@ -84,7 +93,7 @@ class SessionCoordinator implements SessionRecovery {
   }
 
   Future<String> _recoverAccessToken(String failedAccessToken) async {
-    final currentAccessToken = await _tokenStorage.readAccessToken();
+    final currentAccessToken = await _sessionRepository.readAccessToken();
     if (currentAccessToken != null &&
         currentAccessToken.isNotEmpty &&
         currentAccessToken != failedAccessToken) {
@@ -106,14 +115,14 @@ class SessionCoordinator implements SessionRecovery {
   }
 
   Future<String> _refreshAccessToken() async {
-    final refreshToken = await _tokenStorage.readRefreshToken();
+    final refreshToken = await _sessionRepository.readRefreshToken();
     if (refreshToken == null || refreshToken.isEmpty) {
       return _invalidateSession();
     }
 
     try {
-      final refreshed = await _authService.refresh(refreshToken);
-      await _tokenStorage.saveTokens(
+      final refreshed = await _authRepository.refresh(refreshToken);
+      await _sessionRepository.saveTokens(
         accessToken: refreshed.accessToken,
         refreshToken: refreshed.refreshToken,
       );
@@ -127,7 +136,7 @@ class SessionCoordinator implements SessionRecovery {
   }
 
   Future<String> _invalidateSession([ApiException? cause]) async {
-    await _tokenStorage.clearTokens();
+    await _sessionRepository.clearTokens();
     for (final listener in List.of(_sessionInvalidatedListeners)) {
       listener();
     }
@@ -154,26 +163,26 @@ class SessionCoordinator implements SessionRecovery {
   }
 
   Future<SessionRestoreResult> _restore() async {
-    final accessToken = await _tokenStorage.readAccessToken();
-    final refreshToken = await _tokenStorage.readRefreshToken();
+    final accessToken = await _sessionRepository.readAccessToken();
+    final refreshToken = await _sessionRepository.readRefreshToken();
 
     if (accessToken == null && refreshToken == null) {
       return const SessionRestoreResult.noSession();
     }
     if (accessToken == null || refreshToken == null) {
-      await _tokenStorage.clearTokens();
+      await _sessionRepository.clearTokens();
       return const SessionRestoreResult.invalid();
     }
 
     try {
-      final profile = await _profileService.getProfile(accessToken);
+      final profile = await _profileRepository.getProfile(accessToken);
       return SessionRestoreResult.valid(profile);
     } on ApiException catch (error) {
       if (_isRecoverable(error)) {
         return SessionRestoreResult.recoverableError(error.message);
       }
       if (error.type == ApiErrorType.inactiveAccount) {
-        await _tokenStorage.clearTokens();
+        await _sessionRepository.clearTokens();
         return const SessionRestoreResult.invalid();
       }
       if (error.type != ApiErrorType.authentication) {
@@ -191,7 +200,7 @@ class SessionCoordinator implements SessionRecovery {
       final accessToken = await recoverAfterUnauthorized(failedAccessToken);
 
       try {
-        final profile = await _profileService.getProfile(accessToken);
+        final profile = await _profileRepository.getProfile(accessToken);
         return SessionRestoreResult.valid(profile);
       } on ApiException catch (error) {
         if (_isRecoverable(error)) {
@@ -199,7 +208,7 @@ class SessionCoordinator implements SessionRecovery {
         }
         if (error.type == ApiErrorType.authentication ||
             error.type == ApiErrorType.inactiveAccount) {
-          await _tokenStorage.clearTokens();
+          await _sessionRepository.clearTokens();
           return const SessionRestoreResult.invalid();
         }
         return SessionRestoreResult.recoverableError(error.message);
@@ -210,7 +219,7 @@ class SessionCoordinator implements SessionRecovery {
       }
       return const SessionRestoreResult.invalid();
     } on Object {
-      await _tokenStorage.clearTokens();
+      await _sessionRepository.clearTokens();
       return const SessionRestoreResult.invalid();
     }
   }
@@ -228,19 +237,19 @@ class SessionCoordinator implements SessionRecovery {
   Future<void> _logout() async {
     String? refreshToken;
     try {
-      refreshToken = await _tokenStorage.readRefreshToken();
+      refreshToken = await _sessionRepository.readRefreshToken();
     } on Object {
       // Continue with local destruction even if secure storage cannot be read.
     }
     await _localSessionCleanup.clear();
     try {
-      await _tokenStorage.clearTokens();
+      await _sessionRepository.clearTokens();
     } on Object {
       // Local cleanup is best-effort and never restores already deleted data.
     }
     if (refreshToken != null) {
       try {
-        await _authService.logout(refreshToken);
+        await _authRepository.logout(refreshToken);
       } on Object {
         // Remote revocation is optional; local privacy must work without network.
       }

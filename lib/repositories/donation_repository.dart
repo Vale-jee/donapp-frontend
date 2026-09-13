@@ -29,19 +29,34 @@ class DonationRepository {
     this.imageCache,
   }) : _clock = clock ?? DateTime.now;
 
+  DonationRepository.remote({DonationRemoteDataSource? remote})
+    : _local = null,
+      _remote =
+          remote ??
+          DonationRemoteDataSource(DonationService(), const CategoryService()),
+      _clock = DateTime.now,
+      cachePolicy = const LocalCachePolicy(),
+      imageCache = null;
+  factory DonationRepository.fromService(DonationService service) =>
+      DonationRepository.remote(
+        remote: DonationRemoteDataSource(service, const CategoryService()),
+      );
   factory DonationRepository.create({
-    required DonationService donationService,
-    required CategoryService categoryService,
+    DonationService? donationService,
+    CategoryService? categoryService,
   }) {
     final database = AppDatabase();
     return DonationRepository(
       DonationLocalDataSource(database),
-      DonationRemoteDataSource(donationService, categoryService),
+      DonationRemoteDataSource(
+        donationService ?? DonationService(),
+        categoryService ?? const CategoryService(),
+      ),
       imageCache: RemoteImageCache(),
     ).._ownedDatabase = database;
   }
 
-  final DonationLocalDataSource _local;
+  final DonationLocalDataSource? _local;
   final DonationRemoteDataSource _remote;
   final DateTime Function() _clock;
   final LocalCachePolicy cachePolicy;
@@ -51,11 +66,11 @@ class DonationRepository {
   Stream<List<DonationListItem>> watchExplore({
     required int cacheUserId,
     int? categoryId,
-  }) => _local.watchExplore(cacheUserId: cacheUserId, categoryId: categoryId);
+  }) => _local!.watchExplore(cacheUserId: cacheUserId, categoryId: categoryId);
 
-  Stream<List<Category>> watchCategories() => _local.watchCategories();
+  Stream<List<Category>> watchCategories() => _local!.watchCategories();
 
-  Stream<ExploreCacheStatus?> watchExploreStatus(int cacheUserId) => _local
+  Stream<ExploreCacheStatus?> watchExploreStatus(int cacheUserId) => _local!
       .watchExploreMetadata(cacheUserId)
       .map(
         (metadata) => metadata == null
@@ -71,7 +86,7 @@ class DonationRepository {
       );
 
   Future<bool> needsExploreRefresh(int cacheUserId) =>
-      _local.exploreNeedsRefresh(cacheUserId: cacheUserId, now: _clock());
+      _local!.exploreNeedsRefresh(cacheUserId: cacheUserId, now: _clock());
 
   Future<DonationPage> refreshExplore({
     required int cacheUserId,
@@ -85,7 +100,7 @@ class DonationRepository {
       categoryId: categoryId,
     );
     final now = _clock();
-    await _local.storeExplorePage(
+    await _local!.storeExplorePage(
       cacheUserId: cacheUserId,
       page: result,
       categoryId: categoryId,
@@ -113,7 +128,7 @@ class DonationRepository {
             imageId: image.id,
             reference: image.referencia,
           );
-          await _local.attachRemoteImageCache(
+          await _local!.attachRemoteImageCache(
             cacheUserId: cacheUserId,
             donationRemoteId: donation.id,
             remoteImageId: image.id,
@@ -129,7 +144,7 @@ class DonationRepository {
   Future<void> refreshCategories() async {
     final categories = await _remote.getCategories();
     final now = _clock();
-    await _local.storeCategories(
+    await _local!.storeCategories(
       categories,
       syncedAt: now,
       expiresAt: cachePolicy.expiresAt(now, cachePolicy.categoriesTtl),
@@ -137,4 +152,28 @@ class DonationRepository {
   }
 
   Future<void> close() => _ownedDatabase?.close() ?? Future<void>.value();
+  Future<DonationDetail> getDonationById(int id) => _remote.getDonationById(id);
+  Future<DonationPage> getOwnDonations({
+    int page = 1,
+    int limit = 20,
+    DonationStatus? status,
+  }) => _remote.getOwnDonations(page: page, limit: limit, status: status);
+  Future<DonationDetail> createDonation({
+    String? clientId,
+    required String title,
+    required String description,
+    required int categoryId,
+    required List<String> imageReferences,
+  }) => _remote.createDonation(
+    clientId: clientId,
+    title: title,
+    description: description,
+    categoryId: categoryId,
+    imageReferences: imageReferences,
+  );
+  Future<DonationPage> getAvailableDonations({
+    int page = 1,
+    int limit = 20,
+    int? categoryId,
+  }) => _remote.getExplore(page: page, limit: limit, categoryId: categoryId);
 }

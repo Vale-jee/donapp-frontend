@@ -5,16 +5,16 @@ import '../config/api_config.dart';
 import '../models/donation.dart';
 import '../navigation/app_router.dart';
 import '../services/api_exception.dart';
-import '../services/donation_service.dart';
+import '../repositories/donation_repository.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_content_state.dart';
 import '../widgets/donation_card.dart';
 
 class MyDonationsScreen extends StatefulWidget {
-  const MyDonationsScreen({this.donationService, super.key});
+  const MyDonationsScreen({this.donationRepository, super.key});
 
-  final DonationService? donationService;
+  final DonationRepository? donationRepository;
 
   @override
   State<MyDonationsScreen> createState() => _MyDonationsScreenState();
@@ -22,7 +22,7 @@ class MyDonationsScreen extends StatefulWidget {
 
 class _MyDonationsScreenState extends State<MyDonationsScreen> {
   static const _pageLimit = 20;
-  late final DonationService _service;
+  late final DonationRepository _service;
   late final ScrollController _scrollController;
   List<DonationListItem> _donations = const [];
   DonationPagination? _pagination;
@@ -35,7 +35,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
   @override
   void initState() {
     super.initState();
-    _service = widget.donationService ?? DonationService();
+    _service = widget.donationRepository ?? DonationRepository.remote();
     _scrollController = ScrollController()..addListener(_onScroll);
     _loadInitial();
   }

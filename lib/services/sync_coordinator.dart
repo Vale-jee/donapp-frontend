@@ -1,3 +1,6 @@
+import '../repositories/donation_repository.dart';
+import '../repositories/image_upload_repository.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -26,12 +29,16 @@ Duration syncBackoff(int attempt) => switch (attempt) {
 class SyncCoordinator {
   SyncCoordinator({
     required this.database,
-    required this.donationService,
-    required this.imageUploadService,
+    required DonationService donationService,
+    required ImageUploadService imageUploadService,
     DateTime Function()? clock,
     Future<void> Function(String path)? deleteManagedFile,
     this.conflictResolver = const ConflictResolver(),
-  }) : _clock = clock ?? DateTime.now,
+  }) : donationRepository = DonationRepository.fromService(donationService),
+       imageUploadRepository = ImageUploadRepository.fromService(
+         imageUploadService,
+       ),
+       _clock = clock ?? DateTime.now,
        _deleteManagedFile = deleteManagedFile ?? _deleteFile {
     _instances.add(this);
   }
@@ -39,8 +46,8 @@ class SyncCoordinator {
   static final Set<SyncCoordinator> _instances = {};
 
   final AppDatabase database;
-  final DonationService donationService;
-  final ImageUploadService imageUploadService;
+  final DonationRepository donationRepository;
+  final ImageUploadRepository imageUploadRepository;
   final DateTime Function() _clock;
   final Future<void> Function(String path) _deleteManagedFile;
   final ConflictResolver conflictResolver;
@@ -161,7 +168,7 @@ class SyncCoordinator {
             uploadState: Value(ImageUploadState.uploading),
           ),
         );
-        remoteUrl = (await imageUploadService.uploadImages([
+        remoteUrl = (await imageUploadRepository.uploadImages([
           XFile(path, mimeType: image.mimeType),
         ])).single;
         await (database.update(
@@ -176,7 +183,7 @@ class SyncCoordinator {
       references.add(remoteUrl);
     }
 
-    final remote = await donationService.createDonation(
+    final remote = await donationRepository.createDonation(
       clientId: donation.clientId,
       title: donation.title,
       description: donation.description ?? '',

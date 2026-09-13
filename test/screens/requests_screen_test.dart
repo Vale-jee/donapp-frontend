@@ -1,3 +1,5 @@
+import 'package:donapp_mobile/repositories/request_repository.dart';
+
 import 'dart:async';
 
 import 'package:donapp_mobile/models/request.dart';
@@ -15,7 +17,13 @@ void main() {
   ) async {
     final pending = Completer<RequestPage<SentRequestListItem>>();
     final service = _FakeService(sent: (_, _) => pending.future);
-    await tester.pumpWidget(_app(SentRequestsScreen(requestService: service)));
+    await tester.pumpWidget(
+      _app(
+        SentRequestsScreen(
+          requestRepository: RequestRepository.fromService(service),
+        ),
+      ),
+    );
     expect(find.byKey(const Key('requestsLoading')), findsOneWidget);
     pending.complete(_sentPage([_sent()]));
     await tester.pumpAndSettle();
@@ -26,7 +34,13 @@ void main() {
 
   testWidgets('muestra vacío', (tester) async {
     final service = _FakeService(sent: (_, _) async => _sentPage([]));
-    await tester.pumpWidget(_app(SentRequestsScreen(requestService: service)));
+    await tester.pumpWidget(
+      _app(
+        SentRequestsScreen(
+          requestRepository: RequestRepository.fromService(service),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('requestsEmpty')), findsOneWidget);
   });
@@ -41,7 +55,13 @@ void main() {
         return _sentPage([_sent()]);
       },
     );
-    await tester.pumpWidget(_app(SentRequestsScreen(requestService: service)));
+    await tester.pumpWidget(
+      _app(
+        SentRequestsScreen(
+          requestRepository: RequestRepository.fromService(service),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('requestsError')), findsOneWidget);
     await tester.tap(find.text('Reintentar'));
@@ -53,7 +73,13 @@ void main() {
     tester,
   ) async {
     final service = _FakeService(sent: (_, _) async => _sentPage([_sent()]));
-    await tester.pumpWidget(_app(SentRequestsScreen(requestService: service)));
+    await tester.pumpWidget(
+      _app(
+        SentRequestsScreen(
+          requestRepository: RequestRepository.fromService(service),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('requestStatusFilter')));
     await tester.pumpAndSettle();
@@ -74,7 +100,11 @@ void main() {
           _receivedPage([_received(cause: CancellationCause.donacionRetirada)]),
     );
     await tester.pumpWidget(
-      _app(ReceivedRequestsScreen(requestService: service)),
+      _app(
+        ReceivedRequestsScreen(
+          requestRepository: RequestRepository.fromService(service),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.text('solicitante'), findsOneWidget);
@@ -88,7 +118,9 @@ void main() {
       routes: [
         GoRoute(
           path: '/solicitudes/enviadas',
-          builder: (_, _) => SentRequestsScreen(requestService: service),
+          builder: (_, _) => SentRequestsScreen(
+            requestRepository: RequestRepository.fromService(service),
+          ),
         ),
         GoRoute(
           path: '/solicitudes/:id',
@@ -120,11 +152,15 @@ void main() {
       routes: [
         GoRoute(
           path: '/solicitudes/enviadas',
-          builder: (_, _) => SentRequestsScreen(requestService: service),
+          builder: (_, _) => SentRequestsScreen(
+            requestRepository: RequestRepository.fromService(service),
+          ),
         ),
         GoRoute(
           path: '/solicitudes/recibidas',
-          builder: (_, _) => ReceivedRequestsScreen(requestService: service),
+          builder: (_, _) => ReceivedRequestsScreen(
+            requestRepository: RequestRepository.fromService(service),
+          ),
         ),
       ],
     );
@@ -149,7 +185,13 @@ void main() {
         return _sentPage([_sent()], page: 1, totalPages: 2);
       },
     );
-    await tester.pumpWidget(_app(SentRequestsScreen(requestService: service)));
+    await tester.pumpWidget(
+      _app(
+        SentRequestsScreen(
+          requestRepository: RequestRepository.fromService(service),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.drag(
       find.byKey(const Key('requestsList')),
@@ -174,7 +216,11 @@ void main() {
             size: const Size(240, 800),
             textScaler: TextScaler.linear(scale),
           ),
-          child: _app(SentRequestsScreen(requestService: service)),
+          child: _app(
+            SentRequestsScreen(
+              requestRepository: RequestRepository.fromService(service),
+            ),
+          ),
         ),
       );
       await tester.pumpAndSettle();

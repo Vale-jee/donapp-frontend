@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/api_config.dart';
 import '../models/request.dart';
 import '../services/api_exception.dart';
-import '../services/request_service.dart';
+import '../repositories/request_repository.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_content_state.dart';
@@ -13,17 +13,17 @@ enum _RequestAction { accept, reject, cancel }
 class RequestDetailScreen extends StatefulWidget {
   const RequestDetailScreen({
     required this.requestId,
-    this.requestService,
+    this.requestRepository,
     super.key,
   });
   final int requestId;
-  final RequestService? requestService;
+  final RequestRepository? requestRepository;
   @override
   State<RequestDetailScreen> createState() => _RequestDetailScreenState();
 }
 
 class _RequestDetailScreenState extends State<RequestDetailScreen> {
-  late final RequestService _service;
+  late final RequestRepository _service;
   RequestDetail? _request;
   bool _loading = true;
   bool _acting = false;
@@ -33,7 +33,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _service = widget.requestService ?? RequestService();
+    _service = widget.requestRepository ?? RequestRepository();
     _load();
   }
 

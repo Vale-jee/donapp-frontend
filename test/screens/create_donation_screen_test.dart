@@ -1,3 +1,7 @@
+import 'package:donapp_mobile/repositories/image_upload_repository.dart';
+import 'package:donapp_mobile/repositories/donation_repository.dart';
+import 'package:donapp_mobile/repositories/category_repository.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -758,9 +762,15 @@ void main() {
           path: '/crear',
           builder: (_, _) => CreateDonationScreen(
             galleryPicker: picker,
-            imageUploadService: _UploadService(),
-            donationService: _DonationService(),
-            categoryService: _CategoryService('Muebles'),
+            imageUploadRepository: ImageUploadRepository.fromService(
+              _UploadService(),
+            ),
+            donationRepository: DonationRepository.fromService(
+              _DonationService(),
+            ),
+            categoryRepository: CategoryRepository.fromService(
+              _CategoryService('Muebles'),
+            ),
           ),
         ),
         GoRoute(
@@ -819,9 +829,15 @@ void main() {
           path: '/crear',
           builder: (_, _) => CreateDonationScreen(
             galleryPicker: picker,
-            imageUploadService: _UploadService(),
-            donationService: _DonationService(),
-            categoryService: _CategoryService('Muebles'),
+            imageUploadRepository: ImageUploadRepository.fromService(
+              _UploadService(),
+            ),
+            donationRepository: DonationRepository.fromService(
+              _DonationService(),
+            ),
+            categoryRepository: CategoryRepository.fromService(
+              _CategoryService('Muebles'),
+            ),
           ),
         ),
       ],
@@ -933,9 +949,15 @@ Widget _app({
 }) {
   final screen = CreateDonationScreen(
     galleryPicker: picker,
-    imageUploadService: upload ?? _UploadService(),
-    donationService: donation ?? _DonationService(),
-    categoryService: _CategoryService(categoryName),
+    imageUploadRepository: ImageUploadRepository.fromService(
+      upload ?? _UploadService(),
+    ),
+    donationRepository: DonationRepository.fromService(
+      donation ?? _DonationService(),
+    ),
+    categoryRepository: CategoryRepository.fromService(
+      _CategoryService(categoryName),
+    ),
     onCreated: onCreated,
   );
   return MaterialApp(

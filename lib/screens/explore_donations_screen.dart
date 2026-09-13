@@ -8,10 +8,9 @@ import '../config/api_config.dart';
 import '../models/category.dart';
 import '../models/donation.dart';
 import '../navigation/app_router.dart';
-import '../repositories/donation_repository.dart';
 import '../services/api_exception.dart';
-import '../services/category_service.dart';
-import '../services/donation_service.dart';
+import '../repositories/category_repository.dart';
+import '../repositories/donation_repository.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_radius.dart';
@@ -20,15 +19,15 @@ import '../widgets/donation_card.dart';
 
 class ExploreDonationsScreen extends StatefulWidget {
   const ExploreDonationsScreen({
-    this.donationService,
-    this.categoryService,
+    this.donationRepository,
+    this.categoryRepository,
     this.cacheUserId,
     this.repository,
     super.key,
   });
 
-  final DonationService? donationService;
-  final CategoryService? categoryService;
+  final DonationRepository? donationRepository;
+  final CategoryRepository? categoryRepository;
   final int? cacheUserId;
   final DonationRepository? repository;
 
@@ -39,8 +38,8 @@ class ExploreDonationsScreen extends StatefulWidget {
 class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
   static const _pageLimit = 20;
 
-  late final DonationService _donationService;
-  late final CategoryService _categoryService;
+  late final DonationRepository _donationRepository;
+  late final CategoryRepository _categoryRepository;
   late final ScrollController _scrollController;
   DonationRepository? _repository;
   StreamSubscription<List<DonationListItem>>? _donationsSubscription;
@@ -61,16 +60,13 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
   @override
   void initState() {
     super.initState();
-    _donationService = widget.donationService ?? DonationService();
-    _categoryService = widget.categoryService ?? const CategoryService();
+    _donationRepository =
+        widget.donationRepository ?? DonationRepository.remote();
+    _categoryRepository =
+        widget.categoryRepository ?? const CategoryRepository();
     _scrollController = ScrollController()..addListener(_onScroll);
     if (widget.cacheUserId != null) {
-      _repository =
-          widget.repository ??
-          DonationRepository.create(
-            donationService: _donationService,
-            categoryService: _categoryService,
-          );
+      _repository = widget.repository ?? DonationRepository.create();
       _categoriesSubscription = _repository!.watchCategories().listen((
         categories,
       ) {
@@ -168,8 +164,8 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
     }
     try {
       final results = await Future.wait<Object>([
-        _categoryService.getCategories(),
-        _donationService.getAvailableDonations(
+        _categoryRepository.getCategories(),
+        _donationRepository.getAvailableDonations(
           limit: _pageLimit,
           categoryId: _selectedCategoryId,
         ),
@@ -254,7 +250,7 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
       return;
     }
     try {
-      final page = await _donationService.getAvailableDonations(
+      final page = await _donationRepository.getAvailableDonations(
         limit: _pageLimit,
         categoryId: _selectedCategoryId,
       );
@@ -297,7 +293,7 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
     });
     try {
       final page = _repository == null
-          ? await _donationService.getAvailableDonations(
+          ? await _donationRepository.getAvailableDonations(
               page: pagination.page + 1,
               limit: pagination.limit,
               categoryId: _selectedCategoryId,

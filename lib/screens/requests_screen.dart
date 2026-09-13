@@ -5,7 +5,7 @@ import '../config/api_config.dart';
 import '../models/request.dart';
 import '../navigation/app_router.dart';
 import '../services/api_exception.dart';
-import '../services/request_service.dart';
+import '../repositories/request_repository.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_content_state.dart';
@@ -14,36 +14,36 @@ import '../widgets/request_card.dart';
 enum RequestsListMode { sent, received }
 
 class SentRequestsScreen extends StatelessWidget {
-  const SentRequestsScreen({this.requestService, super.key});
-  final RequestService? requestService;
+  const SentRequestsScreen({this.requestRepository, super.key});
+  final RequestRepository? requestRepository;
   @override
   Widget build(BuildContext context) => RequestsScreen(
     mode: RequestsListMode.sent,
-    requestService: requestService,
+    requestRepository: requestRepository,
   );
 }
 
 class ReceivedRequestsScreen extends StatelessWidget {
-  const ReceivedRequestsScreen({this.requestService, super.key});
-  final RequestService? requestService;
+  const ReceivedRequestsScreen({this.requestRepository, super.key});
+  final RequestRepository? requestRepository;
   @override
   Widget build(BuildContext context) => RequestsScreen(
     mode: RequestsListMode.received,
-    requestService: requestService,
+    requestRepository: requestRepository,
   );
 }
 
 class RequestsScreen extends StatefulWidget {
-  const RequestsScreen({required this.mode, this.requestService, super.key});
+  const RequestsScreen({required this.mode, this.requestRepository, super.key});
   final RequestsListMode mode;
-  final RequestService? requestService;
+  final RequestRepository? requestRepository;
   @override
   State<RequestsScreen> createState() => _RequestsScreenState();
 }
 
 class _RequestsScreenState extends State<RequestsScreen> {
   static const _limit = 20;
-  late final RequestService _service;
+  late final RequestRepository _service;
   late final ScrollController _scrollController;
   List<RequestListItem> _requests = const [];
   RequestPagination? _pagination;
@@ -56,7 +56,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
   @override
   void initState() {
     super.initState();
-    _service = widget.requestService ?? RequestService();
+    _service = widget.requestRepository ?? RequestRepository();
     _scrollController = ScrollController()..addListener(_onScroll);
     _loadInitial();
   }

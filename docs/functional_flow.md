@@ -84,7 +84,7 @@ Se consumen **18 operaciones método+ruta sobre 17 rutas de la API**: autenticac
 
 ### Trabajo propio y costo de cambio
 
-La composición de la API se establece por instancia de `SessionCoordinator`: recibe un `ApiClient` inyectable o crea el cliente base. Autenticación y restauración de perfil comparten ese cliente sin recuperación automática; `protectedApiClient` es una vista estable que reutiliza el mismo transporte, URL y timeout mediante `withSessionRecovery`. El router reutiliza el AuthService del coordinador e inyecta la vista protegida en perfil, categorías, donaciones, solicitudes y firma de imágenes. Así, el arranque normal utiliza dos vistas ApiClient sobre un único http.Client para la API propia, sin singleton global. Los constructores independientes y los reemplazos de servicios se conservan para pruebas; no forman parte de la composición normal de la app.
+La composición de la API se establece por instancia de `SessionCoordinator`: recibe un `ApiClient` inyectable o crea el cliente base. Autenticación y restauración de perfil comparten ese cliente sin recuperación automática; `protectedApiClient` es una vista estable que reutiliza el mismo transporte, URL y timeout mediante `withSessionRecovery`. El router reutiliza el AuthRepository del coordinador e inyecta la vista protegida en perfil, categorías, donaciones, solicitudes y firma de imágenes. Así, el arranque normal utiliza dos vistas ApiClient sobre un único http.Client para la API propia, sin singleton global. Los constructores independientes y los reemplazos de servicios se conservan para pruebas; no forman parte de la composición normal de la app.
 
 La separación de políticas evita que el refresh intente renovarse a sí mismo y conserva la restauración inicial gestionada por SessionCoordinator. Cloudinary mantiene su transporte multipart separado, sin Bearer de DonApp. RemoteImageCache también mantiene un transporte de recursos, incluso cuando una referencia relativa se resuelve contra el host de la API: no consume el sobre JSON ni aplica recuperación de sesión. Esta composición no cambia timeouts, cancelación, serialización, logging ni políticas de cierre existentes.
 
@@ -280,13 +280,13 @@ Los enlaces al backend suponen los repositorios hermanos `donapp-frontend` y `do
 5. Formulario de publicación completo con categoría e imágenes.
 6. Detalle de la donación recién creada.
 
-## Inyecci�n del access token
+## Inyección del access token
 
-ApiClient obtiene el access token mediante TokenStorage.readAccessToken (FlutterSecureStorage) antes de cada petici�n con contexto protectedSession y almacenamiento configurado. SessionCoordinator configura esta dependencia en protectedApiClient; no mantiene una copia global del token. Sin token disponible, la petici�n protegida falla localmente con authentication/401 antes de enviarse. withTokenStorage conserva transporte, timeout, URL y recuperaci�n, y permite sustituir el almacenamiento en pruebas.
+ApiClient obtiene el access token mediante TokenStorage.readAccessToken (FlutterSecureStorage) antes de cada petición con contexto protectedSession y almacenamiento configurado. SessionCoordinator configura esta dependencia en protectedApiClient; no mantiene una copia global del token. Sin token disponible, la petición protegida falla localmente con authentication/401 antes de enviarse. withTokenStorage conserva transporte, timeout, URL y recuperación, y permite sustituir el almacenamiento en pruebas.
 
-Donaciones, solicitudes y firma de im�genes delegan la lectura y construcci�n del Bearer al cliente. Sus par�metros de TokenStorage se conservan para inyecci�n independiente. Login, registro, refresh, logout y categor�as usan contextos publicos y no reciben access token autom�ticamente. Perfil conserva un Bearer expl�cito para consultar la identidad del token recibido durante login/restauraci�n. Un Authorization expl�cito tiene prioridad, sin distinguir may�sculas, y no se duplica. Ante 401, el reintento existente reemplaza ese header con el token que devuelve el coordinador; las peticiones siguientes vuelven a leer el almacenamiento.
+Donaciones, solicitudes y firma de imágenes delegan la lectura y construcción del Bearer al cliente. Sus parámetros de TokenStorage se conservan para inyección independiente. Login, registro, refresh, logout y categorías usan contextos publicos y no reciben access token automáticamente. Perfil conserva un Bearer explícito para consultar la identidad del token recibido durante login/restauración. Un Authorization explícito tiene prioridad, sin distinguir mayúsculas, y no se duplica. Ante 401, el reintento existente reemplaza ese header con el token que devuelve el coordinador; las peticiones siguientes vuelven a leer el almacenamiento.
 
-Cloudinary y RemoteImageCache mantienen transportes externos separados y no usan esta inyecci�n. La firma de im�genes pertenece a la API propia y s� la utiliza.
+Cloudinary y RemoteImageCache mantienen transportes externos separados y no usan esta inyección. La firma de imágenes pertenece a la API propia y sí la utiliza.
 
 
 ## Coordinación de renovaciones concurrentes
@@ -348,3 +348,102 @@ api_json.dart conserva validaciones de dominio: enteros sin convertir decimales,
 Quedan fuera Drift y sus codecs de persistencia, entidades/estados locales, StoredTokens, SessionRestoreResult, excepciones, estados de UI y sincronización, y cachedLocalPath (excluido en ambas direcciones con JsonKey). No hay modelos de red implementados de chats/calificaciones; sus pantallas no consumen contratos adicionales. Los cuerpos de petición construidos como mapas en servicios y el sobre success/data no son clases de modelo; permanecen sin cambios. Tampoco se migra el parsing de respuesta externa de Cloudinary. No quedan casos dudosos pendientes dentro del inventario actual.
 
 Generación: `dart run build_runner build --delete-conflicting-outputs`. La versión instalada advierte que ese flag ya se ignora; genera correctamente los siete archivos .g.dart. Se versionan los generados y no se editan manualmente. La generación mantiene sin cambios los archivos de Drift y no requiere modificar repositories/data sources.
+
+
+## Acceso a datos mediante repositories y data sources
+
+Las pantallas reciben repositories por constructor. Los repositories remotos
+ delegan en un RemoteDataSource, que encapsula el servicio HTTP existente; se
+ conservan los contratos, validaciones y errores de esos servicios. El router
+ compone estas dependencias con el cliente protegido compartido. Los factories
+ `fromService` permiten reutilizar esa composición y los dobles de pruebas;
+ las pantallas no conocen los servicios ni ApiClient.
+
+| Flujo | Repository | Fuente remota | Persistencia local |
+| --- | --- | --- | --- |
+| Explore con caché | DonationRepository | DonationRemoteDataSource | DonationLocalDataSource y Drift: donaciones, categorías, membresía y vigencia; RemoteImageCache conserva imágenes descargadas. |
+| Explore remoto | DonationRepository y CategoryRepository | DonationRemoteDataSource y CategoryRemoteDataSource | Ninguna; conserva la alternativa remota usada con dependencias inyectadas. |
+| Detalle y mis donaciones | DonationRepository | DonationRemoteDataSource | Ninguna. |
+| Crear donación | DonationRepository, CategoryRepository e ImageUploadRepository | DonationRemoteDataSource, CategoryRemoteDataSource e ImageUploadRemoteDataSource | No se añade persistencia al formulario; la selección de galería sigue siendo una dependencia independiente. |
+| Crear solicitud desde detalle | RequestRepository | RequestRemoteDataSource | Ninguna. |
+| Solicitudes enviadas y recibidas | RequestRepository | RequestRemoteDataSource | Ninguna. |
+| Detalle, aceptar, rechazar y cancelar solicitud | RequestRepository | RequestRemoteDataSource | Ninguna. |
+| Login y registro | AuthRepository | AuthRemoteDataSource | Login guarda tokens mediante SessionRepository y SessionLocalDataSource. |
+| Perfil y restauración de sesión | ProfileRepository | ProfileRemoteDataSource | SessionRepository lee los tokens cifrados. El perfil mostrado en inicio sigue siendo el estado de sesión, sin nueva caché. |
+| Renovación y logout | AuthRepository, SessionRepository | AuthRemoteDataSource | SessionLocalDataSource delega en TokenStorage/FlutterSecureStorage. |
+
+Antes de esta separación, solo la variante con caché de Explore utilizaba
+Repository y RemoteDataSource. Su alternativa remota y las demás pantallas
+llamaban servicios directamente. No había pantallas que usaran solo un
+RemoteDataSource sin Repository. No hay flujos de chat o calificaciones con
+acceso remoto implementado que requieran nuevas capas.
+
+SessionCoordinator conserva la coordinación de restauración, renovación y
+logout; sus operaciones remotas y de tokens pasan por los repositories.
+ApiClient mantiene la lectura de TokenStorage como política de transporte,
+sin trasladarla a las pantallas. Cloudinary permanece encapsulado por
+ImageUploadRemoteDataSource/ImageUploadService y separado de la API propia.
+DonationGalleryPicker solo selecciona archivos del dispositivo.
+
+La infraestructura de outbox existente (PendingOperationLocalDataSource,
+Drift y SyncCoordinator) conserva su comportamiento y persistencia. Las llamadas
+remotas de SyncCoordinator ahora pasan por DonationRepository e
+ImageUploadRepository; no se conectan nuevos flujos de UI a la cola ni se
+modifican sus reintentos, conflictos o sincronización.
+
+Las pruebas de pantallas inyectan repositories, las de caché verifican
+RemoteDataSource + LocalDataSource con Drift en memoria, y las de límites de
+capas comprueban delegación, propagación de errores y ausencia de imports de
+acceso HTTP o Drift desde pantallas y el controlador de autenticación.
+
+### Verificación final del requisito 16
+
+`remote_delegation_test.dart` verifica por separado Repository → fuente y
+Repository → fuente → servicio: una llamada por operación, argumentos intactos
+e identidad de la excepción para autenticación, donaciones, perfil, imágenes y
+las siete operaciones de solicitudes. También verifica errores de las cuatro
+operaciones de almacenamiento de sesión. `data_boundaries_test.dart` cubre
+categorías, rutas HTTP con transporte simulado y lectura/escritura/borrado de
+tokens. Su comprobación estática incluye pantallas, widgets y el controlador de
+autenticación. La prueba de Mis donaciones inyecta un doble de Repository sin
+servicios y verifica error visible y recuperación mediante reintento manual.
+Las pruebas de DonationRepository verifican con Drift en memoria la escritura,
+lectura, categorías, aislamiento, TTL y conservación de caché tras fallos remotos.
+
+Las dependencias concretas restantes se justifican así:
+
+| Ubicación | Motivo |
+| --- | --- |
+| `navigation/app_router.dart` | Punto de composición: construye servicios con el cliente protegido y los envuelve en repositories. No ejecuta operaciones HTTP. Conserva la inyección existente. |
+| Factories y constructores de repositories | `fromService`, `fromStorage` y valores predeterminados adaptan dependencias a data sources; las operaciones delegan en las fuentes. |
+| RemoteDataSources | Encapsulan los seis servicios HTTP para conservar contratos, validaciones y errores. |
+| `SessionCoordinator` | Construye AuthRepository, ProfileRepository y SessionRepository; conserva ApiClient/SessionRecovery y TokenStorage para componer la vista protegida compartida. Las operaciones de sesión pasan por repositories. |
+| `SyncCoordinator` | Recibe servicios por compatibilidad de construcción y los envuelve en DonationRepository/ImageUploadRepository. El acceso directo a Drift pertenece a la outbox existente, fuera del alcance de este requisito. |
+| `ApiClient`, servicios HTTP y `SessionLocalDataSource` | Transporte, Bearer y almacenamiento seguro permanecen en infraestructura. |
+| `RemoteImageCache` y limpieza local | Descarga y mantenimiento de archivos de la caché existente; no se añade persistencia. |
+
+En UI permanecen ApiException (presentación de errores), AuthStateController y
+resultados de SessionCoordinator (estado de sesión), ApiConfig (referencias de
+imágenes) y DonationGalleryPicker (selección local). No son servicios HTTP.
+ImageUploadService reexporta DonationGalleryPicker por compatibilidad con
+consumidores existentes; su implementación está únicamente en
+`donation_gallery_picker.dart`.
+
+Explore conserva dos modalidades utilizadas y probadas: local-first en la
+composición normal y remota para la inyección existente. Ambas pasan por
+repositories; no queda la antigua ruta pantalla → servicio. No se eliminan
+estas modalidades ni las rutas existentes. No se modifican refresh, logging,
+cancelación, reintentos, contratos, modelos JSON ni presentación visual.
+
+Validación ejecutada el 12 de septiembre de 2026:
+
+- `dart format`: aplicado a los archivos del requisito; no se conserva ningún
+  cambio incidental de formato del tema visual.
+- `flutter analyze`: sin incidencias.
+- `flutter test test/repositories test/screens test/navigation test/services/session_coordinator_test.dart test/services/sync_coordinator_test.dart test/data --reporter compact`: 319 pruebas aprobadas.
+- `flutter test --reporter compact`: 510 pruebas aprobadas.
+- `git diff --check`: sin errores.
+
+No se detectaron clases nuevas sin consumidores ni implementaciones duplicadas
+en esta separación. No se eliminaron archivos, no se añadieron capas adicionales
+durante el cierre y no se realizó commit ni push.

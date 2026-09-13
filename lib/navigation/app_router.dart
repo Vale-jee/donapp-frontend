@@ -1,3 +1,10 @@
+import '../repositories/auth_repository.dart';
+import '../repositories/profile_repository.dart';
+import '../repositories/category_repository.dart';
+import '../repositories/request_repository.dart';
+import '../repositories/image_upload_repository.dart';
+import '../repositories/session_repository.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -94,8 +101,9 @@ GoRouter createAppRouter({
   final effectiveTokenStorage =
       tokenStorage ?? authState.sessionCoordinator.tokenStorage;
   final protectedApiClient = authState.sessionCoordinator.protectedApiClient;
-  final effectiveAuthService =
-      authService ?? authState.sessionCoordinator.authService;
+  final effectiveAuthService = authService != null
+      ? AuthRepository.fromService(authService)
+      : authState.sessionCoordinator.authRepository;
   final effectiveProfileService =
       profileService ?? ProfileService(apiClient: protectedApiClient);
   final effectiveDonationService =
@@ -167,7 +175,7 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.welcome,
         builder: (context, state) => WelcomeScreen(
-          authService: effectiveAuthService,
+          authRepository: effectiveAuthService,
           redirectLocation: AppRoutes.validPrivateRedirect(
             state.uri.queryParameters['redirect'],
           ),
@@ -176,7 +184,7 @@ GoRouter createAppRouter({
           GoRoute(
             path: 'registro',
             builder: (context, state) => RegisterScreen(
-              authService: effectiveAuthService,
+              authRepository: effectiveAuthService,
               redirectLocation: AppRoutes.validPrivateRedirect(
                 state.uri.queryParameters['redirect'],
               ),
@@ -187,9 +195,13 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.login,
         builder: (context, state) => LoginScreen(
-          authService: effectiveAuthService,
-          profileService: effectiveProfileService,
-          tokenStorage: effectiveTokenStorage,
+          authRepository: effectiveAuthService,
+          profileRepository: ProfileRepository.fromService(
+            effectiveProfileService,
+          ),
+          sessionRepository: SessionRepository.fromStorage(
+            effectiveTokenStorage,
+          ),
           authState: authState,
           initialEmail: state.uri.queryParameters['email'],
           redirectLocation: AppRoutes.validPrivateRedirect(
@@ -200,7 +212,7 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.register,
         builder: (context, state) => RegisterScreen(
-          authService: effectiveAuthService,
+          authRepository: effectiveAuthService,
           redirectLocation: AppRoutes.validPrivateRedirect(
             state.uri.queryParameters['redirect'],
           ),
@@ -214,35 +226,61 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.explore,
         builder: (context, state) => ExploreDonationsScreen(
-          donationService: effectiveDonationService,
-          categoryService: effectiveCategoryService,
+          donationRepository: DonationRepository.fromService(
+            effectiveDonationService,
+          ),
+          categoryRepository: CategoryRepository.fromService(
+            effectiveCategoryService,
+          ),
           cacheUserId: useLocalFirstExplore ? authState.profile!.id : null,
-          repository: donationRepository,
+          repository:
+              donationRepository ??
+              (useLocalFirstExplore
+                  ? DonationRepository.create(
+                      donationService: effectiveDonationService,
+                      categoryService: effectiveCategoryService,
+                    )
+                  : null),
         ),
       ),
       GoRoute(
         path: AppRoutes.createDonation,
         builder: (context, state) => CreateDonationScreen(
-          donationService: effectiveDonationService,
-          categoryService: effectiveCategoryService,
-          imageUploadService: effectiveImageUploadService,
+          donationRepository: DonationRepository.fromService(
+            effectiveDonationService,
+          ),
+          categoryRepository: CategoryRepository.fromService(
+            effectiveCategoryService,
+          ),
+          imageUploadRepository: ImageUploadRepository.fromService(
+            effectiveImageUploadService,
+          ),
           galleryPicker: galleryPicker,
         ),
       ),
       GoRoute(
         path: AppRoutes.myDonations,
-        builder: (context, state) =>
-            MyDonationsScreen(donationService: effectiveDonationService),
+        builder: (context, state) => MyDonationsScreen(
+          donationRepository: DonationRepository.fromService(
+            effectiveDonationService,
+          ),
+        ),
       ),
       GoRoute(
         path: AppRoutes.sentRequests,
-        builder: (context, state) =>
-            SentRequestsScreen(requestService: effectiveRequestService),
+        builder: (context, state) => SentRequestsScreen(
+          requestRepository: RequestRepository.fromService(
+            effectiveRequestService,
+          ),
+        ),
       ),
       GoRoute(
         path: AppRoutes.receivedRequests,
-        builder: (context, state) =>
-            ReceivedRequestsScreen(requestService: effectiveRequestService),
+        builder: (context, state) => ReceivedRequestsScreen(
+          requestRepository: RequestRepository.fromService(
+            effectiveRequestService,
+          ),
+        ),
       ),
       GoRoute(
         path: AppRoutes.requestDetailPattern,
@@ -251,7 +289,9 @@ GoRouter createAppRouter({
           if (id == null || id <= 0) return const _InvalidRequestRoute();
           return RequestDetailScreen(
             requestId: id,
-            requestService: effectiveRequestService,
+            requestRepository: RequestRepository.fromService(
+              effectiveRequestService,
+            ),
           );
         },
       ),
@@ -262,8 +302,12 @@ GoRouter createAppRouter({
           if (id == null || id <= 0) return const _InvalidDonationRoute();
           return DonationDetailScreen(
             donationId: id,
-            donationService: effectiveDonationService,
-            requestService: effectiveRequestService,
+            donationRepository: DonationRepository.fromService(
+              effectiveDonationService,
+            ),
+            requestRepository: RequestRepository.fromService(
+              effectiveRequestService,
+            ),
           );
         },
       ),

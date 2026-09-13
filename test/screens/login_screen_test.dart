@@ -1,3 +1,6 @@
+import 'package:donapp_mobile/repositories/session_repository.dart';
+import 'package:donapp_mobile/repositories/profile_repository.dart';
+import 'package:donapp_mobile/repositories/auth_repository.dart';
 import 'package:donapp_mobile/models/auth_session.dart';
 import 'package:donapp_mobile/models/user_profile.dart';
 import 'package:donapp_mobile/screens/home_screen.dart';
@@ -47,9 +50,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: LoginScreen(
-          authService: _FakeAuthService(),
-          profileService: _FakeProfileService(),
-          tokenStorage: _FakeTokenStorage(),
+          authRepository: AuthRepository.fromService(_FakeAuthService()),
+          profileRepository: ProfileRepository.fromService(
+            _FakeProfileService(),
+          ),
+          sessionRepository: SessionRepository.fromStorage(_FakeTokenStorage()),
         ),
       ),
     );

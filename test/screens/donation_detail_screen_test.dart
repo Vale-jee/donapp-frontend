@@ -1,3 +1,6 @@
+import 'package:donapp_mobile/repositories/request_repository.dart';
+import 'package:donapp_mobile/repositories/donation_repository.dart';
+
 import 'dart:async';
 
 import 'package:donapp_mobile/models/donation.dart';
@@ -52,7 +55,10 @@ void main() {
     await tester.scrollUntilVisible(find.text('Solicitar donación'), 300);
     await tester.tap(find.text('Solicitar donación'));
     await tester.pumpAndSettle();
-    expect(find.text('¿Quieres enviar una solicitud para “Mesa auxiliar”?'), findsOneWidget);
+    expect(
+      find.text('¿Quieres enviar una solicitud para “Mesa auxiliar”?'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Cancelar'));
     await tester.pumpAndSettle();
     expect(requests.calls, 0);
@@ -94,8 +100,8 @@ void main() {
           path: '/donaciones/:id',
           builder: (_, _) => DonationDetailScreen(
             donationId: 4,
-            donationService: details,
-            requestService: requests,
+            donationRepository: DonationRepository.fromService(details),
+            requestRepository: RequestRepository.fromService(requests),
           ),
         ),
         GoRoute(
@@ -118,7 +124,9 @@ void main() {
     expect(find.text('Solicitudes enviadas'), findsOneWidget);
   });
 
-  testWidgets('409 muestra mensaje y vuelve a consultar permiso', (tester) async {
+  testWidgets('409 muestra mensaje y vuelve a consultar permiso', (
+    tester,
+  ) async {
     var detailCalls = 0;
     final details = _DetailService((_) async {
       detailCalls++;
@@ -139,7 +147,10 @@ void main() {
     await tester.tap(find.text('Enviar solicitud'));
     await tester.pumpAndSettle();
     expect(detailCalls, 2);
-    expect(find.textContaining('Ya existe una solicitud activa'), findsOneWidget);
+    expect(
+      find.textContaining('Ya existe una solicitud activa'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('requestDonationButton')), findsNothing);
   });
 
@@ -308,8 +319,10 @@ Widget _app(
 }) {
   final screen = DonationDetailScreen(
     donationId: 4,
-    donationService: service,
-    requestService: requestService,
+    donationRepository: DonationRepository.fromService(service),
+    requestRepository: requestService == null
+        ? null
+        : RequestRepository.fromService(requestService),
   );
   return MaterialApp(
     theme: AppTheme.light,
@@ -352,17 +365,16 @@ CreatedRequest _createdRequest() => CreatedRequest(
 DonationDetail _detail({
   List<DonationImage> images = const [],
   bool canRequest = false,
-}) =>
-    DonationDetail(
-      id: 4,
-      titulo: 'Mesa auxiliar',
-      descripcion: 'En buen estado.',
-      ciudad: 'Bogotá',
-      estado: DonationStatus.publicada,
-      createdAt: DateTime.utc(2026, 8, 20),
-      updatedAt: DateTime.utc(2026, 8, 21),
-      categoriaId: 4,
-      categoriaNombre: 'Muebles',
-      imagenes: images,
-      puedeSolicitar: canRequest,
-    );
+}) => DonationDetail(
+  id: 4,
+  titulo: 'Mesa auxiliar',
+  descripcion: 'En buen estado.',
+  ciudad: 'Bogotá',
+  estado: DonationStatus.publicada,
+  createdAt: DateTime.utc(2026, 8, 20),
+  updatedAt: DateTime.utc(2026, 8, 21),
+  categoriaId: 4,
+  categoriaNombre: 'Muebles',
+  imagenes: images,
+  puedeSolicitar: canRequest,
+);
