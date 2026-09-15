@@ -79,6 +79,7 @@ void main() {
     test('$failure records one safe log without changing error', () async {
       final logs = <String>[];
       final client = ApiClient(
+        retryReads: false,
         logger: HttpRequestLogger(environment: 'dev', write: logs.add),
         endpointBuilder: (path) => Uri.https('example.test', path),
         client: MockClient((_) async {

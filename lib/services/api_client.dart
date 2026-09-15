@@ -27,12 +27,16 @@ class ApiClient {
     SessionRecovery? sessionRecovery,
     TokenStorage? tokenStorage,
     HttpRequestLogger logger = const HttpRequestLogger(),
+    bool retryReads = true,
+    Future<void> Function(Duration)? retryDelay,
   }) : _client = client ?? http.Client() {
     _timeout = timeout;
     _endpointBuilder = endpointBuilder;
     _sessionRecovery = sessionRecovery;
     _tokenStorage = tokenStorage;
     _logger = logger;
+    _retryReads = retryReads;
+    _retryDelay = retryDelay ?? Future<void>.delayed;
   }
 
   final http.Client _client;
@@ -41,6 +45,14 @@ class ApiClient {
   late final SessionRecovery? _sessionRecovery;
   late final TokenStorage? _tokenStorage;
   late final HttpRequestLogger _logger;
+  late final bool _retryReads;
+  late final Future<void> Function(Duration) _retryDelay;
+
+  static const maxReadAttempts = 3;
+  static const _readBackoff = [
+    Duration(milliseconds: 500),
+    Duration(seconds: 1),
+  ];
 
   /// Shares transport and configuration while isolating session recovery policy.
   ApiClient withSessionRecovery(SessionRecovery sessionRecovery) => ApiClient(
@@ -50,6 +62,8 @@ class ApiClient {
     sessionRecovery: sessionRecovery,
     tokenStorage: _tokenStorage,
     logger: _logger,
+    retryReads: _retryReads,
+    retryDelay: _retryDelay,
   );
 
   /// Shares transport and recovery while selecting the encrypted token source.
@@ -60,6 +74,8 @@ class ApiClient {
     sessionRecovery: _sessionRecovery,
     tokenStorage: tokenStorage,
     logger: _logger,
+    retryReads: _retryReads,
+    retryDelay: _retryDelay,
   );
 
   Future<Map<String, dynamic>> get(
@@ -158,7 +174,7 @@ class ApiClient {
         }
         requestHeaders['Authorization'] = 'Bearer $token';
       }
-      var response = await _sendLogged(
+      var response = await _sendWithReadRetry(
         method,
         path,
         () => send(uri, requestHeaders),
@@ -253,6 +269,47 @@ class ApiClient {
         statusCode: statusCode,
         elapsed: timer.elapsed,
       );
+    }
+  }
+
+  // Only the first transport phase can retry. A 401 leaves this loop and uses
+  // the existing single session recovery replay, never another retry budget.
+  Future<http.Response> _sendWithReadRetry(
+    String method,
+    String path,
+    Future<http.Response> Function() send,
+  ) async {
+    final attempts = method == 'GET' && _retryReads ? maxReadAttempts : 1;
+    for (var attempt = 0; ; attempt++) {
+      Duration delay;
+      try {
+        final response = await _sendLogged(method, path, send);
+        if (attempt + 1 >= attempts) return response;
+        delay = _readBackoff[attempt];
+        if (response.statusCode == 429) {
+          // Do not guess a rate-limit window or shorten the server's wait.
+          final retryAfter = response.headers.entries
+              .where((entry) => entry.key.toLowerCase() == 'retry-after')
+              .map((entry) => entry.value)
+              .firstOrNull;
+          final seconds = int.tryParse(retryAfter ?? '');
+          if (seconds == null || seconds < 0 || seconds > 5) return response;
+          final requested = Duration(seconds: seconds);
+          if (requested > delay) delay = requested;
+        } else if (!const {500, 502, 503, 504}.contains(response.statusCode)) {
+          return response;
+        }
+      } on TimeoutException {
+        if (attempt + 1 >= attempts) rethrow;
+        delay = _readBackoff[attempt];
+      } on http.ClientException {
+        if (attempt + 1 >= attempts) rethrow;
+        delay = _readBackoff[attempt];
+      } on SocketException {
+        if (attempt + 1 >= attempts) rethrow;
+        delay = _readBackoff[attempt];
+      }
+      await _retryDelay(delay);
     }
   }
 

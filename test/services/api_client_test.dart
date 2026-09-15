@@ -199,6 +199,7 @@ void main() {
     final body = StreamController<List<int>>();
     final client = ApiClient(
       client: _BodyClient(body.stream),
+      retryReads: false,
       endpointBuilder: _endpoint,
     );
     final expectation = expectLater(

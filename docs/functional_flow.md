@@ -462,7 +462,7 @@ compatibilidad; el formulario de donación funciona con ambos.
 | 403 con cuenta inactiva | `inactiveAccount` | Mantener la invalidación de cuenta y sesión existente. |
 | 404 | `notFound` | Mostrar que el recurso no está disponible. |
 | 409 | `conflict` | Mostrar la regla de negocio segura; conservar campos si el backend los incluye. |
-| 429 | `rateLimited` | Indicar que espere antes de volver a intentarlo; no añadir reintentos automáticos. |
+| 429 | `rateLimited` | Indicar que espere antes de volver a intentarlo; solo GET con Retry-After corto permite el reintento limitado del requisito 19. |
 | 500, 502, 503, 504 y demás 5xx | `server` | Mostrar indisponibilidad temporal, sin detalles del servidor. |
 | `SocketException` / `http.ClientException`, sin respuesta | `network` | Pedir revisar la conexión; no inventar un status HTTP. |
 | `TimeoutException` / vencimiento del plazo | `timeout` | Indicar que la operación tardó demasiado; distinguirlo de red. |
@@ -516,3 +516,64 @@ afectados, sin cambios pendientes; `flutter analyze` sin incidencias;
 `flutter test test/services test/repositories test/screens --reporter compact`
 con 424 pruebas aprobadas; `flutter test --reporter compact` con 577 aprobadas;
 `git diff --check` sin errores. No se realizó commit ni push.
+
+## Reintentos seguros con backoff (requisito 19)
+
+La política vive en ApiClient y solo cubre **GET** de la API propia. El método
+HTTP es el límite: POST y PATCH no pueden entrar en este backoff. Los
+repositories y fuentes remotas no agregan ciclos adicionales. Así se evita
+repetir escrituras o multiplicar los intentos de SyncCoordinator.
+
+| Grupo | Operaciones | Política |
+| --- | --- | --- |
+| A: lecturas seguras | Categorías, perfil, Explore, mis donaciones, detalle de donación, solicitudes enviadas/recibidas y detalle de solicitud | Hasta 3 intentos GET ante fallos recuperables. Incluye consultas de perfil durante restauración de sesión. |
+| B: escritura con protección | Crear donación con clientId estable | ApiClient no la repite. El reenvío controlado existente de SyncCoordinator conserva clientId y las referencias de imágenes confirmadas. La protección del backend evita crear otra donación con esa clave. |
+| C: sin protección demostrada | Crear donación sin clientId, crear/aceptar/rechazar/cancelar solicitudes, login, registro, refresh, logout y firma de imágenes | Sin reintentos por esta política. No se deduce idempotencia de POST/PATCH. |
+| Fuera de esta política | Subida a Cloudinary y descarga auxiliar de RemoteImageCache | Sus transportes no usan el backoff de ApiClient. No se repite una subida sin control. |
+
+Se reintenta SocketException/ClientException (network), TimeoutException
+(timeout) y los status temporales **500, 502, 503 y 504**. Los demás 5xx
+mantienen su clasificación server, pero no se repiten automáticamente.
+400, 401, 403, 404, 409, 422, configuración y contratos/JSON inválidos terminan
+sin backoff. No se permite ninguna excepción automática para 409.
+
+**Límites:** un intento inicial y dos reintentos, con esperas de **500 ms y
+1 s**. En 429 solo se reintenta si Retry-After contiene segundos enteros entre
+0 y 5; se espera el mayor valor entre esa indicación y el backoff. Si falta,
+es inválido, es una fecha HTTP o supera 5 segundos, se devuelve rateLimited
+para que el usuario vuelva a intentarlo después. No se acorta una espera larga
+solicitada por el servidor. La cabecera se lee sin distinguir mayúsculas.
+
+El 401 conserva su tratamiento anterior, separado de este backoff. Una vez que
+se recibe 401 se sale del ciclo; SessionRecovery puede renovar la sesión y
+reenviar una sola vez. Ese reenvío no inicia otro ciclo, aunque falle con 503
+o timeout. Por tanto, una lectura protegida puede llegar a **4 envíos**:
+3 del presupuesto GET y 1 por recuperación de sesión. El intercambio de
+refresh es un POST separado y no recibe esta política. Las escrituras
+conservan únicamente su recuperación de sesión anterior, sin backoff nuevo.
+
+Los plazos existentes no cambian: 15 segundos por intento de API. Tres GET
+agotados por timeout pueden consumir 46,5 segundos con el backoff normal;
+las esperas indicadas por 429 y la recuperación de sesión se contabilizan
+aparte. No se añade cancelación: un GET que agotó su plazo puede terminar
+tarde, pero es una lectura y su resultado tardío no se usa.
+
+La publicación de pantalla sigue sin reintento automático porque no envía
+clientId. No se generan claves nuevas al reenviar una operación protegida.
+La cola existente mantiene su máximo de 5 intentos y su programación de
+5/15/30/60 segundos entre ellos (syncBackoff también define 120 segundos para
+valores posteriores, que el límite normal impide programar). No se modifica
+SyncCoordinator, PendingOperationLocalDataSource ni se conecta la UI a la cola.
+
+ApiClient permite desactivar el backoff de lecturas con retryReads: false.
+La espera retryDelay es inyectable para comprobar duraciones sin dormir en
+pruebas. Ambas opciones se conservan al crear las vistas con TokenStorage y
+SessionRecovery. Cada envío mantiene el logging existente; al agotarse los
+intentos se conserva la clasificación y el mensaje seguro del último error.
+
+Las pruebas cubren recuperación, agotamiento, backoff, Retry-After, errores
+permanentes, contratos inválidos, POST/PATCH sin repetición y combinación con
+401. Una prueba de creación simula una respuesta perdida después de guardar
+la donación: el reenvío explícito atraviesa Repository y conserva exactamente
+el clientId y el cuerpo. La simulación no sustituye la protección del backend;
+comprueba que el cliente no cambia la clave ni añade envíos ocultos.

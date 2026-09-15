@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:async';
+
+import 'package:donapp_mobile/repositories/donation_repository.dart';
 
 import 'package:donapp_mobile/services/api_client.dart';
 import 'package:donapp_mobile/services/api_exception.dart';
@@ -10,6 +13,54 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test(
+    'reenvio controlado conserva clientId y body sin reintentos POST ocultos',
+    () async {
+      final bodies = <String>[];
+      final saved = <String, Map<String, Object?>>{};
+      final repository = DonationRepository.fromService(
+        DonationService(
+          apiClient: ApiClient(
+            endpointBuilder: (path) => Uri.parse('https://donapp.test$path'),
+            retryDelay: (_) async => fail('POST no debe iniciar backoff'),
+            client: MockClient((request) async {
+              bodies.add(request.body);
+              final id = jsonDecode(request.body)['clientId'] as String;
+              // Simulates a committed creation whose first response was lost.
+              saved.putIfAbsent(
+                id,
+                () => Map<String, Object?>.from(_createdBody),
+              );
+              if (bodies.length == 1) throw TimeoutException('lost response');
+              return http.Response(jsonEncode(saved[id]), 201);
+            }),
+          ),
+        ),
+      );
+      Future<DonationDetail> create() => repository.createDonation(
+        clientId: '550e8400-e29b-41d4-a716-446655440000',
+        title: 'Mesa para donar',
+        description: 'Mesa de madera en buen estado.',
+        categoryId: 4,
+        imageReferences: ['https://images.test/a.jpg'],
+      );
+      await expectLater(
+        create(),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.type,
+            'type',
+            ApiErrorType.timeout,
+          ),
+        ),
+      );
+      expect(bodies, hasLength(1));
+      expect((await create()).id, 4);
+      expect(bodies, hasLength(2));
+      expect(bodies[0], bodies[1]);
+      expect(saved, hasLength(1));
+    },
+  );
   test(
     'consulta donaciones propias con token, paginación y estado real',
     () async {

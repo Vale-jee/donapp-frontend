@@ -120,6 +120,7 @@ Map<String, Future<Object?> Function()> _operations(
   Future<http.Response> Function(http.Request) handler,
 ) {
   final client = ApiClient(
+    retryDelay: (_) async {},
     client: MockClient(handler),
     endpointBuilder: (path) => Uri.parse('https://donapp.test$path'),
   );
