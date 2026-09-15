@@ -1,3 +1,5 @@
+import '../services/read_cancellation.dart';
+
 import 'package:flutter/material.dart';
 
 import '../config/api_config.dart';
@@ -23,6 +25,7 @@ class RequestDetailScreen extends StatefulWidget {
 }
 
 class _RequestDetailScreenState extends State<RequestDetailScreen> {
+  final _reads = ReadCancellation();
   late final RequestRepository _service;
   RequestDetail? _request;
   bool _loading = true;
@@ -31,13 +34,20 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   bool _notFound = false;
 
   @override
+  void dispose() {
+    _reads.cancel();
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
     _service = widget.requestRepository ?? RequestRepository();
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load() => _reads.run(() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -50,6 +60,8 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
         _request = request;
         _loading = false;
       });
+    } on RequestCancelled {
+      return;
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -66,7 +78,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
         });
       }
     }
-  }
+  });
 
   Future<void> _perform(_RequestAction action) async {
     if (_acting) return;

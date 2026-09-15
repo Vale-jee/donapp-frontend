@@ -1,3 +1,5 @@
+import '../services/read_cancellation.dart';
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -75,6 +77,7 @@ class CreateDonationScreen extends StatefulWidget {
 }
 
 class _CreateDonationScreenState extends State<CreateDonationScreen> {
+  final _reads = ReadCancellation();
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -144,12 +147,14 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
 
   @override
   void dispose() {
+    _reads.cancel();
     _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load() => _reads.run(() async {
+    if (!mounted) return;
     setState(() {
       _loadingCategories = true;
       _pageError = null;
@@ -168,6 +173,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
             .toList(growable: false);
         _loadingCategories = false;
       });
+    } on RequestCancelled {
+      return;
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -183,7 +190,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
         });
       }
     }
-  }
+  });
 
   Future<void> _pickImages() async {
     try {

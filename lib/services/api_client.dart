@@ -10,6 +10,7 @@ import 'api_error_mapper.dart';
 import 'api_exception.dart';
 import 'token_storage.dart';
 import 'http_request_logger.dart';
+import 'read_cancellation.dart';
 
 typedef ApiEndpointBuilder = Uri Function(String path);
 
@@ -85,13 +86,26 @@ class ApiClient {
     required Set<int> successStatusCodes,
     ApiRequestContext context = ApiRequestContext.general,
     bool allowSafeBackendMessage = false,
+    ReadCancellation? cancellation,
   }) {
+    final reads = cancellation ?? ReadCancellation.current;
     return _request(
       method: 'GET',
       path: path,
       queryParameters: queryParameters,
       headers: headers,
-      send: (uri, requestHeaders) => _client.get(uri, headers: requestHeaders),
+      cancellation: reads,
+      send: (uri, requestHeaders) async {
+        reads?.throwIfCancelled();
+        if (reads == null) return _client.get(uri, headers: requestHeaders);
+        final request = http.AbortableRequest(
+          'GET',
+          uri,
+          abortTrigger: reads.whenCancelled,
+        );
+        request.headers.addAll(requestHeaders ?? const {});
+        return http.Response.fromStream(await _client.send(request));
+      },
       successStatusCodes: successStatusCodes,
       context: context,
       allowSafeBackendMessage: allowSafeBackendMessage,
@@ -139,6 +153,7 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> _request({
+    ReadCancellation? cancellation,
     required String method,
     required String path,
     Map<String, String>? queryParameters,
@@ -153,6 +168,7 @@ class ApiClient {
     required bool allowSafeBackendMessage,
   }) async {
     try {
+      cancellation?.throwIfCancelled();
       final endpoint = _endpointBuilder(path);
       final uri = queryParameters == null || queryParameters.isEmpty
           ? endpoint
@@ -178,7 +194,9 @@ class ApiClient {
         method,
         path,
         () => send(uri, requestHeaders),
+        cancellation,
       );
+      cancellation?.throwIfCancelled();
       final sessionRecovery = _sessionRecovery;
       var retriedAfterUnauthorized = false;
 
@@ -187,9 +205,12 @@ class ApiClient {
           sessionRecovery != null) {
         final failedAccessToken = _bearerToken(requestHeaders);
         if (failedAccessToken != null) {
-          final accessToken = await sessionRecovery.recoverAfterUnauthorized(
+          cancellation?.throwIfCancelled();
+          final recovery = sessionRecovery.recoverAfterUnauthorized(
             failedAccessToken,
           );
+          final accessToken = await (cancellation?.wait(recovery) ?? recovery);
+          cancellation?.throwIfCancelled();
           final retryHeaders = Map<String, String>.of(requestHeaders)
             ..removeWhere((key, _) => key.toLowerCase() == 'authorization')
             ..['Authorization'] = 'Bearer $accessToken';
@@ -201,6 +222,8 @@ class ApiClient {
           retriedAfterUnauthorized = true;
         }
       }
+
+      cancellation?.throwIfCancelled();
 
       // HTTP status remains authoritative even when a proxy returns HTML or
       // no body. Decoding supplies optional error details, never the status.
@@ -235,15 +258,20 @@ class ApiClient {
         );
       }
       return body;
+    } on http.RequestAbortedException {
+      throw const RequestCancelled();
     } on ApiException {
       rethrow;
     } on ApiConfigException {
       throw ApiErrorMapper.configuration;
     } on TimeoutException {
+      cancellation?.throwIfCancelled();
       throw ApiErrorMapper.timeout;
     } on http.ClientException {
+      cancellation?.throwIfCancelled();
       throw ApiErrorMapper.network;
     } on SocketException {
+      cancellation?.throwIfCancelled();
       throw ApiErrorMapper.network;
     } on FormatException {
       throw ApiErrorMapper.unexpectedResponse;
@@ -278,12 +306,15 @@ class ApiClient {
     String method,
     String path,
     Future<http.Response> Function() send,
+    ReadCancellation? cancellation,
   ) async {
     final attempts = method == 'GET' && _retryReads ? maxReadAttempts : 1;
     for (var attempt = 0; ; attempt++) {
+      cancellation?.throwIfCancelled();
       Duration delay;
       try {
         final response = await _sendLogged(method, path, send);
+        cancellation?.throwIfCancelled();
         if (attempt + 1 >= attempts) return response;
         delay = _readBackoff[attempt];
         if (response.statusCode == 429) {
@@ -299,6 +330,8 @@ class ApiClient {
         } else if (!const {500, 502, 503, 504}.contains(response.statusCode)) {
           return response;
         }
+      } on http.RequestAbortedException {
+        rethrow;
       } on TimeoutException {
         if (attempt + 1 >= attempts) rethrow;
         delay = _readBackoff[attempt];
@@ -309,7 +342,9 @@ class ApiClient {
         if (attempt + 1 >= attempts) rethrow;
         delay = _readBackoff[attempt];
       }
-      await _retryDelay(delay);
+      cancellation?.throwIfCancelled();
+      final waiting = _retryDelay(delay);
+      await (cancellation?.wait(waiting) ?? waiting);
     }
   }
 

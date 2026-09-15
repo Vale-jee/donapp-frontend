@@ -9,6 +9,7 @@ import '../config/api_config.dart';
 import '../config/network_timeouts.dart';
 import 'api_exception.dart';
 import 'api_error_mapper.dart';
+import 'read_cancellation.dart';
 
 class RemoteImageCache {
   RemoteImageCache({
@@ -34,6 +35,8 @@ class RemoteImageCache {
     required int imageId,
     required String reference,
   }) async {
+    final cancellation = ReadCancellation.current;
+    cancellation?.throwIfCancelled();
     final uri = ApiConfig.resolveImageReference(reference);
     if (uri == null) {
       throw const ApiException(
@@ -52,7 +55,21 @@ class RemoteImageCache {
     final temporary = File('${target.path}.download');
     try {
       // Client.get completes only after the full body has been collected.
-      final response = await _client.get(uri).timeout(timeout);
+      cancellation?.throwIfCancelled();
+      final response =
+          await (cancellation == null
+                  ? _client.get(uri)
+                  : _client
+                        .send(
+                          http.AbortableRequest(
+                            'GET',
+                            uri,
+                            abortTrigger: cancellation.whenCancelled,
+                          ),
+                        )
+                        .then(http.Response.fromStream))
+              .timeout(timeout);
+      cancellation?.throwIfCancelled();
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiErrorMapper.fromHttp(
           statusCode: response.statusCode,
@@ -71,6 +88,8 @@ class RemoteImageCache {
       return (await temporary.rename(target.path)).path;
     } on Object catch (error) {
       if (await temporary.exists()) await temporary.delete();
+      if (error is http.RequestAbortedException) throw const RequestCancelled();
+      cancellation?.throwIfCancelled();
       if (error is TimeoutException) {
         throw const ApiException(
           ApiErrorType.timeout,

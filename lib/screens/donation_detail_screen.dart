@@ -1,3 +1,5 @@
+import '../services/read_cancellation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -28,12 +30,19 @@ class DonationDetailScreen extends StatefulWidget {
 }
 
 class _DonationDetailScreenState extends State<DonationDetailScreen> {
+  final _reads = ReadCancellation();
   late final DonationRepository _service;
   late final RequestRepository _requestRepository;
   DonationDetail? _donation;
   ApiException? _error;
   bool _isSubmitting = false;
   bool _requestCreated = false;
+
+  @override
+  void dispose() {
+    _reads.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -43,7 +52,8 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load() => _reads.run(() async {
+    if (!mounted) return;
     setState(() {
       _donation = null;
       _error = null;
@@ -51,6 +61,8 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     try {
       final donation = await _service.getDonationById(widget.donationId);
       if (mounted) setState(() => _donation = donation);
+    } on RequestCancelled {
+      return;
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = error);
     } catch (_) {
@@ -63,7 +75,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
         );
       }
     }
-  }
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -1,3 +1,5 @@
+import '../services/read_cancellation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -42,6 +44,7 @@ class RequestsScreen extends StatefulWidget {
 }
 
 class _RequestsScreenState extends State<RequestsScreen> {
+  final _reads = ReadCancellation();
   static const _limit = 20;
   late final RequestRepository _service;
   late final ScrollController _scrollController;
@@ -63,6 +66,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
 
   @override
   void dispose() {
+    _reads.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -89,7 +93,8 @@ class _RequestsScreenState extends State<RequestsScreen> {
     return (requests: result.requests, pagination: result.pagination);
   }
 
-  Future<void> _loadInitial() async {
+  Future<void> _loadInitial() => _reads.run(() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -103,6 +108,8 @@ class _RequestsScreenState extends State<RequestsScreen> {
         _pagination = result.pagination;
         _loading = false;
       });
+    } on RequestCancelled {
+      return;
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -118,9 +125,10 @@ class _RequestsScreenState extends State<RequestsScreen> {
         });
       }
     }
-  }
+  });
 
-  Future<void> _refresh() async {
+  Future<void> _refresh() => _reads.run(() async {
+    if (!mounted) return;
     try {
       final result = await _getPage(1);
       if (!mounted) return;
@@ -129,6 +137,8 @@ class _RequestsScreenState extends State<RequestsScreen> {
         _pagination = result.pagination;
         _pageError = null;
       });
+    } on RequestCancelled {
+      return;
     } on ApiException catch (error) {
       if (mounted) setState(() => _pageError = error.message);
     } catch (_) {
@@ -136,9 +146,10 @@ class _RequestsScreenState extends State<RequestsScreen> {
         setState(() => _pageError = 'No pudimos actualizar las solicitudes.');
       }
     }
-  }
+  });
 
-  Future<void> _loadNextPage() async {
+  Future<void> _loadNextPage() => _reads.run(() async {
+    if (!mounted) return;
     final pagination = _pagination;
     if (_loading ||
         _loadingMore ||
@@ -158,6 +169,8 @@ class _RequestsScreenState extends State<RequestsScreen> {
         _pagination = result.pagination;
         _loadingMore = false;
       });
+    } on RequestCancelled {
+      return;
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -173,7 +186,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
         });
       }
     }
-  }
+  });
 
   Future<void> _selectStatus(RequestStatus? status) async {
     if (_status == status) return;

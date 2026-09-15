@@ -1,3 +1,5 @@
+import '../services/read_cancellation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -21,6 +23,7 @@ class MyDonationsScreen extends StatefulWidget {
 }
 
 class _MyDonationsScreenState extends State<MyDonationsScreen> {
+  final _reads = ReadCancellation();
   static const _pageLimit = 20;
   late final DonationRepository _service;
   late final ScrollController _scrollController;
@@ -42,6 +45,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
 
   @override
   void dispose() {
+    _reads.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -50,7 +54,8 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
     if (_scrollController.position.extentAfter < 240) _loadNextPage();
   }
 
-  Future<void> _loadInitial() async {
+  Future<void> _loadInitial() => _reads.run(() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -67,6 +72,8 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
         _pagination = page.pagination;
         _loading = false;
       });
+    } on RequestCancelled {
+      return;
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -82,9 +89,10 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
         });
       }
     }
-  }
+  });
 
-  Future<void> _refresh() async {
+  Future<void> _refresh() => _reads.run(() async {
+    if (!mounted) return;
     try {
       final page = await _service.getOwnDonations(
         limit: _pageLimit,
@@ -96,6 +104,8 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
         _pagination = page.pagination;
         _pageError = null;
       });
+    } on RequestCancelled {
+      return;
     } on ApiException catch (error) {
       if (mounted) setState(() => _pageError = error.message);
     } catch (_) {
@@ -106,7 +116,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
         );
       }
     }
-  }
+  });
 
   Future<void> _selectStatus(DonationStatus? status) async {
     if (_status == status) return;
@@ -114,7 +124,8 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
     await _loadInitial();
   }
 
-  Future<void> _loadNextPage() async {
+  Future<void> _loadNextPage() => _reads.run(() async {
+    if (!mounted) return;
     final pagination = _pagination;
     if (_loading ||
         _loadingMore ||
@@ -138,6 +149,8 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
         _pagination = page.pagination;
         _loadingMore = false;
       });
+    } on RequestCancelled {
+      return;
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -153,7 +166,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
         });
       }
     }
-  }
+  });
 
   ImageProvider<Object>? _imageFor(DonationListItem donation) {
     final reference = donation.imagenPrincipal?.referencia;

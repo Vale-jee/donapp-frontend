@@ -1,3 +1,5 @@
+import '../services/read_cancellation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -35,6 +37,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _reads = ReadCancellation();
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -56,6 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    _reads.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -76,7 +80,8 @@ class _LoginScreenState extends State<LoginScreen> {
     return null;
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit() => _reads.run(() async {
+    if (!mounted) return;
     if (_isLoading || !_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
     setState(() {
@@ -103,6 +108,8 @@ class _LoginScreenState extends State<LoginScreen> {
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(builder: (_) => HomeScreen(profile: profile)),
       );
+    } on RequestCancelled {
+      return;
     } on ApiException catch (error) {
       if (error.type == ApiErrorType.authentication ||
           error.type == ApiErrorType.inactiveAccount) {
@@ -118,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
+  });
 
   Future<void> _openRegister() async {
     final router = GoRouter.maybeOf(context);

@@ -17,6 +17,7 @@ class AuthStateController extends ChangeNotifier {
   String? _message;
   Future<void>? _restoreInProgress;
   bool _explicitLogoutPending = false;
+  bool _disposed = false;
 
   AuthStatus get status => _status;
   UserProfile? get profile => _profile;
@@ -65,6 +66,7 @@ class AuthStateController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _sessionCoordinator.removeSessionInvalidatedListener(_sessionInvalidated);
     super.dispose();
   }
@@ -86,6 +88,7 @@ class AuthStateController extends ChangeNotifier {
   }
 
   void _setState(AuthStatus status, {UserProfile? profile, String? message}) {
+    if (_disposed) return;
     final nextProfile = status == AuthStatus.authenticated ? profile : null;
     final nextMessage = status == AuthStatus.recoverableError ? message : null;
     if (_status == status &&

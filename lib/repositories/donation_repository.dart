@@ -7,6 +7,7 @@ import '../models/donation.dart';
 import '../services/category_service.dart';
 import '../services/donation_service.dart';
 import '../services/remote_image_cache.dart';
+import '../services/read_cancellation.dart';
 
 class ExploreCacheStatus {
   const ExploreCacheStatus({
@@ -100,6 +101,7 @@ class DonationRepository {
       categoryId: categoryId,
     );
     final now = _clock();
+    ReadCancellation.current?.throwIfCancelled();
     await _local!.storeExplorePage(
       cacheUserId: cacheUserId,
       page: result,
@@ -128,12 +130,15 @@ class DonationRepository {
             imageId: image.id,
             reference: image.referencia,
           );
+          ReadCancellation.current?.throwIfCancelled();
           await _local!.attachRemoteImageCache(
             cacheUserId: cacheUserId,
             donationRemoteId: donation.id,
             remoteImageId: image.id,
             cachedLocalPath: path,
           );
+        } on RequestCancelled {
+          rethrow;
         } on Object {
           // A failed image download must not invalidate cached donation data.
         }
@@ -143,6 +148,7 @@ class DonationRepository {
 
   Future<void> refreshCategories() async {
     final categories = await _remote.getCategories();
+    ReadCancellation.current?.throwIfCancelled();
     final now = _clock();
     await _local!.storeCategories(
       categories,

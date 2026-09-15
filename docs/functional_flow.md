@@ -577,3 +577,59 @@ permanentes, contratos inválidos, POST/PATCH sin repetición y combinación con
 la donación: el reenvío explícito atraviesa Repository y conserva exactamente
 el clientId y el cuerpo. La simulación no sustituye la protección del backend;
 comprueba que el cliente no cambia la clave ni añade envíos ocultos.
+
+## Cancelación de lecturas al descartar la UI (requisito 20)
+
+Se mantiene package:http 1.6.0. El código instalado incluye AbortableRequest
+y RequestAbortedException. IOClient aborta la petición antes de la respuesta;
+si ya llegaron cabeceras, termina la lectura del stream y cancela su
+suscripción. BrowserClient conecta la señal a AbortController. No hace falta
+cerrar el cliente compartido. Un cliente de transporte inyectado debe soportar
+Abortable; descartar un Future por sí solo no equivale a abortar HTTP.
+
+| Grupo | Flujo | Al descartar el propietario |
+| --- | --- | --- |
+| A: lecturas de pantalla | Explore remoto y con caché, detalle de donación, mis donaciones, solicitudes enviadas/recibidas y detalle de solicitud | Se abortan los GET en curso, incluidos listados, filtros, actualización y paginación. |
+| A: lecturas de formulario | Categorías al abrir publicación y perfil después del login | Se aborta la lectura pendiente. La galería local no es una petición HTTP. |
+| B: escrituras | Publicación, solicitudes POST/PATCH, login, registro, logout, firma de imágenes y rotación de tokens | No reciben la señal de cancelación de lecturas. Una escritura ya enviada puede haber sido aplicada; no se presenta un aborto como garantía de que no ocurrió. |
+| B: sesión compartida | Restauración global y refresh de SessionCoordinator | No pertenecen a una pantalla individual. Salir de ella no los aborta ni borra tokens. AuthStateController ignora resultados/notificaciones después de dispose. |
+| C: imágenes de caché | Descargas iniciadas por el refresh de Explore | Usan AbortableRequest dentro del contexto de lectura; al abortar limpian el temporal y no adjuntan una imagen cancelada a la base local. |
+| C: Cloudinary | Subida multipart | Ya usa AbortableMultipartRequest para el timeout de 120 s. No se conecta a dispose ni se cancela por abandonar el formulario: el resultado remoto de una subida enviada puede ser incierto. |
+
+Cada pantalla crea ReadCancellation y ejecuta sus cargas dentro de su contexto
+asíncrono mediante run. Una Zone transporta ese contexto a través de
+Repository → RemoteDataSource → servicio, conservando sus contratos públicos y
+la inyección de pruebas. ApiClient.get consume el contexto; también permite
+recibir una cancelación explícita por petición. Los ámbitos de pantallas
+distintas son independientes. dispose completa la señal de sus lecturas;
+ApiClient la entrega a AbortableRequest.abortTrigger y espera el resultado del
+transporte. Nunca llama a close para cancelar una petición.
+
+RequestCancelled es un resultado separado de ApiException. RequestAbortedException
+se reconoce antes de ClientException porque hereda de ella: no se convierte
+en network ni timeout. Las cargas de UI lo ignoran y mantienen sus guardas
+mounted. El repositorio de Explore comprueba la señal antes de persistir o
+adjuntar resultados y propaga la cancelación, sin cambiar el esquema local.
+Los fallos normales de imagen conservan su manejo anterior.
+
+Una cancelación impide iniciar otro intento GET o comenzar refresh. Si ocurre
+durante el backoff, se deja de esperar y no se envía la siguiente petición.
+Si el refresh compartido ya comenzó, puede terminar y guardar sus tokens,
+pero la lectura cancelada no lo espera ni se reenvía. El reenvío permitido
+tras 401 también usa una petición abortable. Se conservan los límites de
+reintentos y los plazos de 15/30/120 segundos. Future.timeout no se convierte
+en una nueva política de aborto; la cancelación de UI es una señal distinta.
+
+Las descargas realizadas por widgets de imagen de Flutter no se sustituyen
+por este transporte. La cancelación descrita para imágenes corresponde a
+RemoteImageCache, no promete abortar Image.network. Tampoco se cambia la cola,
+sincronización, serialización, logging, backend ni el diseño visual.
+
+Las pruebas de transporte usan un servidor HTTP local real y IOClient:
+cancelan antes de responder y durante el body, y comprueban que otra petición
+con el mismo cliente funciona sin liberar primero la respuesta retenida.
+Las pruebas de pantalla verifican la señal hasta el transporte a través de
+repositories, el descarte de Explore con/sin caché, detalles, listas y perfil
+de login, sin errores visibles ni setState posterior a dispose. También se
+verifican backoff, ausencia de refresh provocado por cancelación, continuación
+segura de POST/PATCH y limpieza de temporales de imágenes.

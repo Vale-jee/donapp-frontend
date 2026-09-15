@@ -1,3 +1,5 @@
+import '../services/read_cancellation.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -36,6 +38,7 @@ class ExploreDonationsScreen extends StatefulWidget {
 }
 
 class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
+  final _reads = ReadCancellation();
   static const _pageLimit = 20;
 
   late final DonationRepository _donationRepository;
@@ -84,6 +87,7 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
 
   @override
   void dispose() {
+    _reads.cancel();
     _donationsSubscription?.cancel();
     _categoriesSubscription?.cancel();
     _cacheStatusSubscription?.cancel();
@@ -96,7 +100,8 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
     if (_scrollController.position.extentAfter < 240) _loadNextPage();
   }
 
-  Future<void> _loadInitial() async {
+  Future<void> _loadInitial() => _reads.run(() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -139,6 +144,8 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
             }
           });
         }
+      } on RequestCancelled {
+        return;
       } on ApiException catch (error) {
         if (!mounted) return;
         setState(() {
@@ -179,6 +186,8 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
         _pagination = page.pagination;
         _isLoading = false;
       });
+    } on RequestCancelled {
+      return;
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -195,9 +204,10 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
         });
       }
     }
-  }
+  });
 
-  Future<void> _refresh() async {
+  Future<void> _refresh() => _reads.run(() async {
+    if (!mounted) return;
     final repository = _repository;
     if (repository != null) {
       final attempt = ++_refreshAttempt;
@@ -235,6 +245,8 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
             }
           });
         }
+      } on RequestCancelled {
+        return;
       } on ApiException catch (error) {
         if (mounted) {
           setState(() {
@@ -260,6 +272,8 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
         _pagination = page.pagination;
         _paginationError = null;
       });
+    } on RequestCancelled {
+      return;
     } on ApiException catch (error) {
       if (mounted) setState(() => _paginationError = error.message);
     } catch (_) {
@@ -270,7 +284,7 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
         });
       }
     }
-  }
+  });
 
   Future<void> _selectCategory(int? categoryId) async {
     if (_selectedCategoryId == categoryId) return;
@@ -279,7 +293,8 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
     await _loadInitial();
   }
 
-  Future<void> _loadNextPage() async {
+  Future<void> _loadNextPage() => _reads.run(() async {
+    if (!mounted) return;
     final pagination = _pagination;
     if (_isLoadingMore ||
         pagination == null ||
@@ -312,6 +327,8 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
         _pagination = page.pagination;
         _isLoadingMore = false;
       });
+    } on RequestCancelled {
+      return;
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -328,7 +345,7 @@ class _ExploreDonationsScreenState extends State<ExploreDonationsScreen> {
         });
       }
     }
-  }
+  });
 
   void _watchLocalDonations() {
     unawaited(_donationsSubscription?.cancel());

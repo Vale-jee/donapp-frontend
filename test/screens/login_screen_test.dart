@@ -1,5 +1,7 @@
 import 'package:donapp_mobile/repositories/session_repository.dart';
 import 'package:donapp_mobile/repositories/profile_repository.dart';
+import 'package:http/http.dart' as http;
+import 'package:donapp_mobile/services/api_client.dart';
 import 'package:donapp_mobile/repositories/auth_repository.dart';
 import 'package:donapp_mobile/models/auth_session.dart';
 import 'package:donapp_mobile/models/user_profile.dart';
@@ -12,6 +14,43 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+    'dispose aborta perfil de login sin borrar tokens ni mostrar error',
+    (tester) async {
+      final transport = _AbortProfileClient();
+      final storage = _FakeTokenStorage();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LoginScreen(
+            authRepository: AuthRepository.fromService(_FakeAuthService()),
+            profileRepository: ProfileRepository.fromService(
+              ProfileService(
+                apiClient: ApiClient(
+                  client: transport,
+                  endpointBuilder: (path) =>
+                      Uri.parse('https://donapp.test$path'),
+                ),
+              ),
+            ),
+            sessionRepository: SessionRepository.fromStorage(storage),
+          ),
+        ),
+      );
+      await tester.enterText(
+        find.byKey(const Key('emailField')),
+        'ana@example.com',
+      );
+      await tester.enterText(find.byKey(const Key('passwordField')), 'secreto');
+      await tester.tap(find.byKey(const Key('loginButton')));
+      await tester.pump();
+      expect(transport.calls, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(transport.aborted, isTrue);
+      expect(storage.clears, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('renderiza los elementos principales del login', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
 
@@ -89,6 +128,21 @@ class _FakeAuthService extends AuthService {
   }
 }
 
+class _AbortProfileClient extends http.BaseClient {
+  int calls = 0;
+  bool aborted = false;
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    calls++;
+    expect(request.url.path, '/api/usuarios/perfil');
+    final abort = request as http.Abortable;
+    return abort.abortTrigger!.then((_) {
+      aborted = true;
+      throw http.RequestAbortedException(request.url);
+    });
+  }
+}
+
 class _FakeProfileService extends ProfileService {
   @override
   Future<UserProfile> getProfile(String accessToken) async {
@@ -109,6 +163,7 @@ class _FakeProfileService extends ProfileService {
 }
 
 class _FakeTokenStorage extends TokenStorage {
+  int clears = 0;
   @override
   Future<void> saveTokens({
     required String accessToken,
@@ -116,5 +171,7 @@ class _FakeTokenStorage extends TokenStorage {
   }) async {}
 
   @override
-  Future<void> clearTokens() async {}
+  Future<void> clearTokens() async {
+    clears++;
+  }
 }

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:donapp_mobile/services/read_cancellation.dart';
+
 import 'package:donapp_mobile/services/api_exception.dart';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -20,6 +22,36 @@ void main() {
   tearDown(() async {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
+
+  test(
+    'descarga aborta transporte y limpia temporal al cancelar propietario',
+    () async {
+      final transport = _AbortCacheClient();
+      final cache = RemoteImageCache(
+        client: transport,
+        cacheDirectory: () async => directory,
+      );
+      final temporary = File(p.join(directory.path, 'u1_d2_i3.image.download'));
+      await temporary.writeAsBytes([9]);
+      final cancellation = ReadCancellation();
+      final expectation = expectLater(
+        cancellation.run(
+          () => cache.cache(
+            cacheUserId: 1,
+            donationId: 2,
+            imageId: 3,
+            reference: 'https://images.test/a.jpg',
+          ),
+        ),
+        throwsA(isA<RequestCancelled>()),
+      );
+      await transport.started.future;
+      cancellation.cancel();
+      await expectation;
+      expect(transport.aborted, isTrue);
+      expect(await directory.list().toList(), isEmpty);
+    },
+  );
 
   for (final scenario in [
     (400, ApiErrorType.validation),
@@ -247,4 +279,17 @@ class _StreamingClient extends http.BaseClient {
   final Future<http.StreamedResponse> Function() response;
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) => response();
+}
+
+class _AbortCacheClient extends http.BaseClient {
+  final started = Completer<void>();
+  bool aborted = false;
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    started.complete();
+    return (request as http.Abortable).abortTrigger!.then((_) {
+      aborted = true;
+      throw http.RequestAbortedException(request.url);
+    });
+  }
 }
