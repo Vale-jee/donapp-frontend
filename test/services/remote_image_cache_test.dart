@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:donapp_mobile/config/api_config.dart';
+
 import 'package:donapp_mobile/services/read_cancellation.dart';
 
 import 'package:donapp_mobile/services/api_exception.dart';
@@ -21,6 +23,40 @@ void main() {
 
   tearDown(() async {
     if (await directory.exists()) await directory.delete(recursive: true);
+  });
+
+  test('HTTP de imágenes no alcanza el transporte en prod', () async {
+    var calls = 0;
+    final cache = RemoteImageCache(
+      client: MockClient((_) async {
+        calls++;
+        return http.Response('image', 200);
+      }),
+      cacheDirectory: () async => directory,
+    );
+    final download = cache.cache(
+      cacheUserId: 1,
+      donationId: 2,
+      imageId: 3,
+      reference: 'http://localhost:3000/image.jpg',
+    );
+    if (ApiConfig.environment == 'prod') {
+      await expectLater(
+        download,
+        throwsA(
+          isA<ApiException>().having(
+            (error) => error.type,
+            'type',
+            ApiErrorType.validation,
+          ),
+        ),
+      );
+      expect(calls, 0);
+      expect(await directory.list().toList(), isEmpty);
+    } else {
+      expect(await File(await download).exists(), isTrue);
+      expect(calls, 1);
+    }
   });
 
   test(

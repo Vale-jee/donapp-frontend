@@ -2,6 +2,41 @@
 
 Este documento resume el recorrido principal del cliente móvil, los endpoints que intervienen y el resultado visible esperado en cada paso.
 
+## Seguridad de red por variante (requisito 23)
+
+La regla existente de ApiConfig se mantiene: `APP_ENV=prod` rechaza una
+`API_BASE_URL` HTTP antes del envío y admite HTTPS. La URL no contiene secretos.
+En prod también se rechazan referencias HTTP de imágenes, incluidas las que
+consume RemoteImageCache. Cloudinary mantiene firma y URL de imagen HTTPS.
+
+| Configuración | Comportamiento |
+| --- | --- |
+| Android debug + dev | Cleartext nativo bloqueado salvo localhost, sin subdominios. ADB reverse permite usar http://localhost:3000 para el backend local. |
+| Android release/profile | Cleartext nativo bloqueado sin excepciones. El permiso local está únicamente en el recurso debug. |
+| APP_ENV=prod | API e imágenes resueltas por ApiConfig requieren HTTPS, incluso en una compilación debug. Logging HTTP deshabilitado. |
+| iOS | Se conserva Info.plist sin excepciones ATS para HTTP; ApiConfig aplica la validación prod compartida. |
+
+No hay `usesCleartextTraffic=true` global, certificados aceptados sin validar ni
+credenciales nuevas. Las firmas Cloudinary se reciben durante la operación y no
+se escriben en configuración ni logs. Los dart-define quedan en el artefacto y
+no deben contener contraseñas ni tokens.
+
+`--release` no selecciona APP_ENV automáticamente: el comando de producción
+debe incluir `--dart-define=APP_ENV=prod` y una API_BASE_URL HTTPS. Los comandos
+completos, incluido ADB reverse, están en README. Las políticas nativas y la
+validación Dart se complementan: Flutter advierte que los sockets propios de
+Dart no quedan protegidos automáticamente por la política nativa.
+Referencias: [configuración Android](https://developer.android.com/privacy-and-security/security-config)
+y [política de red Flutter](https://docs.flutter.dev/release/breaking-changes/network-policy-ios-android).
+
+Verificación del 16 de septiembre de 2026: 69 pruebas focalizadas compiladas
+con APP_ENV=prod y 649 pruebas de la suite completa aprobadas; flutter analyze
+sin incidencias y formato Dart correcto. APK release con prod/HTTPS y APK debug
+con dev/localhost compilados correctamente. Se inspeccionaron sus manifests y
+XML empaquetados con aapt2: release sin excepciones y debug solo localhost.
+Profile e iOS se revisaron en configuración; no se compiló iOS ni se realizó
+una prueba física del túnel ADB reverse.
+
 ## Recorrido principal
 
 | Paso | Acción | Endpoint o servicio | Resultado esperado | Evidencia visual sugerida |

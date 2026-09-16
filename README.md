@@ -92,7 +92,7 @@ flutter test
 
 | Ambiente | Configuración | Uso |
 | --- | --- | --- |
-| `dev` | URL HTTP o HTTPS; Android permite HTTP solo hacia localhost | Desarrollo local con backend propio |
+| `dev` | URL HTTP o HTTPS; la variante Android debug permite HTTP solo hacia localhost | Desarrollo local con backend propio |
 | `test` | URL ficticia e inyección de clientes simulados | Pruebas automatizadas sin backend real |
 | `prod` | URL HTTPS obligatoria | Ejecución o compilación para producción |
 
@@ -134,7 +134,13 @@ flutter build apk --release --dart-define=APP_ENV=prod --dart-define=API_BASE_UR
 
 El modo `--release` no selecciona el ambiente automáticamente: producción debe indicar `APP_ENV=prod`. `ApiConfig` valida al construir cada endpoint, antes de enviar la petición. Rechaza ambientes desconocidos o vacíos, URL ausente o inválida y cualquier URL base HTTP en `prod`, incluso localhost. Lanza `ApiConfigException` con el motivo; `ApiClient` conserva su traducción a error de configuración para la interfaz. No se agrega validación nueva al arranque sin peticiones.
 
-La configuración Android común (`android/app/src/main/res/xml/network_security_config.xml`) bloquea tráfico sin cifrar salvo para `localhost`; no cambia según `APP_ENV`. La validación Dart impide usar esa excepción como URL base de la API en `prod`. Esta regla se limita a la URL base de la API y no cambia las políticas de imágenes o de otros transportes.
+La configuración Android común (`android/app/src/main/res/xml/network_security_config.xml`) bloquea cleartext sin excepciones. El manifest principal declara también `usesCleartextTraffic=false`. Release y profile usan esa configuración. Solo debug sustituye el recurso desde `android/app/src/debug/res/xml/network_security_config.xml` para permitir HTTP hacia `localhost`, sin subdominios. Se mantiene `adb reverse tcp:3000 tcp:3000` con la URL `http://localhost:3000`; no se habilitan direcciones LAN ni dominios externos.
+
+La variante Android y `APP_ENV` son configuraciones distintas: `APP_ENV=dev` no habilita la excepción nativa en release/profile, y debug con `APP_ENV=prod` sigue rechazando una URL base HTTP en Dart. Para medir en profile utilice un backend HTTPS. En producción use siempre ambos: `--release` y `--dart-define=APP_ENV=prod`.
+
+La validación Dart de HTTPS se conserva porque la política nativa no protege por sí sola todos los sockets de Flutter. En `prod`, ApiConfig también rechaza referencias HTTP de imágenes antes de que los widgets o RemoteImageCache las soliciten. Cloudinary conserva su validación de firma HTTPS, host autorizado y respuesta `secure_url` HTTPS. iOS no tiene excepciones ATS para cargas inseguras. No se desactiva la validación de certificados.
+
+HttpRequestLogger sigue sin emitir registros en `prod` ni `test`. En `dev` registra únicamente método, ruta filtrada, status y duración; no cabeceras, cuerpos, tokens ni firmas.
 
 Los valores `dart-define` se incorporan al artefacto compilado y **no son secretos**. No deben contener contraseñas, tokens ni credenciales; la URL debe ser una dirección pública de configuración.
 

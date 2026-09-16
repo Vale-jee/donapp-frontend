@@ -2,6 +2,34 @@ import 'package:donapp_mobile/config/api_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('imágenes HTTPS permitidas; HTTP solo fuera de prod', () {
+    expect(
+      ApiConfig.resolveImageReference('https://images.example.com/a.jpg'),
+      Uri.parse('https://images.example.com/a.jpg'),
+    );
+    expect(
+      ApiConfig.resolveImageReference('http://localhost:3000/a.jpg'),
+      ApiConfig.environment == 'prod'
+          ? isNull
+          : Uri.parse('http://localhost:3000/a.jpg'),
+    );
+    expect(
+      ApiConfig.resolveImageReference(
+        '/a.jpg',
+        baseUri: Uri.parse('http://localhost:3000'),
+      ),
+      ApiConfig.environment == 'prod'
+          ? isNull
+          : Uri.parse('http://localhost:3000/a.jpg'),
+    );
+    expect(
+      ApiConfig.resolveImageReference(
+        '/a.jpg',
+        baseUri: Uri.parse('https://api.example.com'),
+      ),
+      Uri.parse('https://api.example.com/a.jpg'),
+    );
+  });
   test('dev acepta localhost HTTP', () {
     expect(
       ApiConfig.validateBaseUrl(

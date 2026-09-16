@@ -56,13 +56,16 @@ class ApiConfig {
     if (parsed == null) return null;
     if (parsed.hasScheme) {
       return (parsed.scheme == 'http' || parsed.scheme == 'https') &&
-              parsed.host.isNotEmpty
+              parsed.host.isNotEmpty &&
+              (environment != 'prod' || parsed.scheme == 'https')
           ? parsed
           : null;
     }
     if (!reference.startsWith('/')) return null;
     try {
-      return (baseUri ?? endpoint('/')).resolve(reference);
+      final resolved = (baseUri ?? endpoint('/')).resolve(reference);
+      if (environment == 'prod' && resolved.scheme != 'https') return null;
+      return resolved;
     } on ApiConfigException {
       return null;
     }
