@@ -76,7 +76,7 @@ Este flujo se validó en un dispositivo físico con donaciones, una imagen previ
 
 La resolución actual es SERVER-WINS/LWW: `serverUpdatedAt` y los timestamps del servidor son la autoridad para conflictos; el reloj local solo controla caché, reintentos y sincronización. Es una estrategia simple y determinista. Si en el futuro se habilitan ediciones offline concurrentes, podrían perderse cambios porque no existe merge por campo.
 
-La infraestructura local contempla creaciones pendientes, pero la pantalla actual de publicación todavía realiza subida y creación remotas directas. Explore es la lectura local-first integrada; solicitudes, edición y eliminación no tienen un flujo offline completo en la UI.
+La pantalla actual de publicación usa la infraestructura local cuando DonApp se compone con `OfflineDonations`: valida y copia las imágenes, guarda la donación y la operación en Drift, y vuelve a Inicio con el aviso de que se publicará cuando haya conexión. `SyncCoordinator` procesa después la outbox: sube las imágenes pendientes, crea la donación remota con el mismo `clientId` y reconcilia la fila local. La ruta remota directa del repositorio se conserva para la composición sin outbox y para pruebas, pero no es la composición normal de la aplicación. Explore es la lectura local-first integrada; solicitudes, edición y eliminación no tienen un flujo offline completo en la UI.
 
 ## Cierre de sesión
 

@@ -178,7 +178,7 @@ DonApp utiliza almacenamiento local cifrado para soporte offline. Sus políticas
 de minimización, retención, sincronización y limpieza de sesión se documentan en
 la [política de persistencia local](docs/local_persistence.md).
 
-El soporte offline actual se concentra en la lectura local-first de Explore. Otras pantallas, las solicitudes y sus mutaciones aún no tienen integración offline completa; tampoco se admiten edición o eliminación offline. La pantalla de publicación continúa requiriendo el flujo remoto de subida y creación.
+El soporte offline actual incluye la lectura local-first de Explore y la creación de donaciones desde una sesión autenticada. Explore conserva donaciones, categorías e imágenes remotas que ya alcanzaron a descargarse, e informa la última sincronización cuando los datos están desactualizados o falla el refresh. La pantalla de publicación guarda primero la donación, sus imágenes y una operación en la base local cifrada; `SyncCoordinator` sube las imágenes pendientes y crea la donación en el backend cuando puede, conservando reintentos e idempotencia mediante `clientId`. Si no hay categorías locales, el formulario necesita red para prepararse. Mis donaciones, detalle, solicitudes, edición y eliminación siguen dependiendo del backend y no tienen un flujo offline completo.
 
 ## Uso de inteligencia artificial
 
