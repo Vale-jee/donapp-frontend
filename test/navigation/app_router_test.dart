@@ -12,6 +12,7 @@ import 'package:donapp_mobile/models/refreshed_tokens.dart';
 import 'package:donapp_mobile/navigation/app_router.dart';
 import 'package:donapp_mobile/repositories/donation_repository.dart';
 import 'package:donapp_mobile/screens/home_screen.dart';
+import 'package:donapp_mobile/screens/profile_screen.dart';
 import 'package:donapp_mobile/screens/my_donations_screen.dart';
 import 'package:donapp_mobile/screens/explore_donations_screen.dart';
 import 'package:donapp_mobile/screens/donation_detail_screen.dart';
@@ -106,6 +107,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
+  testWidgets('/perfil es privada y muestra el perfil autenticado', (
+    tester,
+  ) async {
+    final harness = await _pumpAuthenticatedRouter(
+      tester,
+      AppRoutes.profile,
+      _ValidSessionCoordinator(),
+      profileService: _SuccessfulProfileService(),
+    );
+    await tester.pumpAndSettle();
+
+    expect(harness.router.state.uri.path, AppRoutes.profile);
+    expect(find.byType(ProfileScreen), findsOneWidget);
+    expect(find.text('Información personal'), findsOneWidget);
   });
 
   testWidgets('no autenticado intentando /inicio va a Bienvenida', (
@@ -1179,6 +1196,11 @@ class _SuccessfulLoginService extends AuthService {
 class _SuccessfulProfileService extends ProfileService {
   @override
   Future<UserProfile> getProfile(String accessToken) async {
+    return _profileResult().profile!;
+  }
+
+  @override
+  Future<UserProfile> getAuthenticatedProfile() async {
     return _profileResult().profile!;
   }
 }

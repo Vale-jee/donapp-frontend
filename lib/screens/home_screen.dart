@@ -70,6 +70,12 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('DonApp'),
         backgroundColor: theme.colorScheme.surface,
         actions: [
+          IconButton(
+            key: const Key('profileButton'),
+            tooltip: 'Perfil',
+            onPressed: () => context.push(AppRoutes.profile),
+            icon: const Icon(Icons.person_outline),
+          ),
           Semantics(
             button: true,
             enabled: !_isLoggingOut,

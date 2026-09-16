@@ -23,12 +23,54 @@ class ProfileService {
         successStatusCodes: const {200},
         context: ApiRequestContext.protectedSession,
       );
-      final data = body['data'];
-      if (data is! Map<String, dynamic> ||
-          data['usuario'] is! Map<String, dynamic>) {
-        throw ApiErrorMapper.unexpectedResponse;
-      }
-      return UserProfile.fromJson(data['usuario'] as Map<String, dynamic>);
+      return _parseProfile(body);
+    } on ApiException {
+      rethrow;
+    } on FormatException {
+      throw ApiErrorMapper.unexpectedResponse;
+    }
+  }
+
+  Future<UserProfile> getAuthenticatedProfile() async {
+    try {
+      final body = await _apiClient.get(
+        '/api/usuarios/perfil',
+        headers: const {'Accept': 'application/json'},
+        successStatusCodes: const {200},
+        context: ApiRequestContext.protectedSession,
+      );
+      return _parseProfile(body);
+    } on ApiException {
+      rethrow;
+    } on FormatException {
+      throw ApiErrorMapper.unexpectedResponse;
+    }
+  }
+
+  UserProfile _parseProfile(Map<String, dynamic> body) {
+    final data = body['data'];
+    if (data is! Map<String, dynamic> ||
+        data['usuario'] is! Map<String, dynamic>) {
+      throw ApiErrorMapper.unexpectedResponse;
+    }
+    return UserProfile.fromJson(data['usuario'] as Map<String, dynamic>);
+  }
+
+  Future<UserProfile> updateProfile({
+    required Map<String, dynamic> changes,
+  }) async {
+    try {
+      final body = await _apiClient.patch(
+        '/api/usuarios/perfil',
+        headers: const {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: changes,
+        successStatusCodes: const {200},
+        context: ApiRequestContext.protectedSession,
+      );
+      return _parseProfile(body);
     } on ApiException {
       rethrow;
     } on FormatException {

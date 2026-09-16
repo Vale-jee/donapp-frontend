@@ -9,6 +9,12 @@ class ProfileRepository {
   ProfileRemoteDataSource get _delegate => _remote;
   factory ProfileRepository.fromService(ProfileService service) =>
       ProfileRepository(remote: ProfileRemoteDataSource(service));
+  Future<UserProfile> getAuthenticatedProfile() =>
+      _delegate.getAuthenticatedProfile();
   Future<UserProfile> getProfile(String accessToken) =>
       _delegate.getProfile(accessToken);
+  Future<UserProfile> updateProfile({
+    required Map<String, dynamic> changes,
+  }) =>
+      _delegate.updateProfile(changes: changes);
 }

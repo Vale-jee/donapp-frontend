@@ -19,6 +19,7 @@ import '../screens/request_detail_screen.dart';
 import '../screens/requests_screen.dart';
 import '../screens/session_gate.dart';
 import '../screens/welcome_screen.dart';
+import '../screens/profile_screen.dart';
 import '../repositories/donation_repository.dart';
 import '../services/auth_service.dart';
 import '../services/auth_state_controller.dart';
@@ -36,6 +37,7 @@ abstract final class AppRoutes {
   static const register = '/registro';
   static const nestedRegister = '/bienvenida/registro';
   static const home = '/inicio';
+  static const profile = '/perfil';
   static const explore = '/explorar';
   static const createDonation = '/donaciones/nueva';
   static const myDonations = '/donaciones/mias';
@@ -226,6 +228,16 @@ GoRouter createAppRouter({
             HomeScreen(profile: authState.profile!, authState: authState),
       ),
       GoRoute(
+        path: AppRoutes.profile,
+        builder: (context, state) => ProfileScreen(
+          profile: authState.profile!,
+          profileRepository: ProfileRepository.fromService(
+            effectiveProfileService,
+          ),
+          authState: authState,
+        ),
+      ),
+      GoRoute(
         path: AppRoutes.explore,
         builder: (context, state) => ExploreDonationsScreen(
           donationRepository: DonationRepository.fromService(
@@ -359,6 +371,7 @@ const _privateLocations = {
   AppRoutes.myDonations,
   AppRoutes.sentRequests,
   AppRoutes.receivedRequests,
+  AppRoutes.profile,
 };
 
 class _InvalidRequestRoute extends StatelessWidget {

@@ -8,4 +8,12 @@ class ProfileRemoteDataSource {
   ProfileService get _delegate => _service;
   Future<UserProfile> getProfile(String accessToken) =>
       _delegate.getProfile(accessToken);
+
+  Future<UserProfile> getAuthenticatedProfile() =>
+      _delegate.getAuthenticatedProfile();
+
+  Future<UserProfile> updateProfile({
+    required Map<String, dynamic> changes,
+  }) =>
+      _delegate.updateProfile(changes: changes);
 }
