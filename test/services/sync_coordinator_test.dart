@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
@@ -129,6 +130,30 @@ void main() {
     await coordinator(donations: service).processPending(1);
     expect(service.calls, 1, reason: 'completed no debe reprocesarse');
   });
+
+  test(
+    'limpieza fallida después de confirmar no repite una creación completada',
+    () async {
+      await seed(managedPath: 'private/image.jpg');
+      final service = _DonationService((_) async => remoteDonation());
+      final sync = coordinator(
+        donations: service,
+        deleteFile: (_) async => throw const FileSystemException('locked'),
+      );
+      await sync.processPending(1);
+      expect(
+        (await db.select(db.pendingOperations).getSingle()).state,
+        PendingOperationState.completed,
+      );
+      await sync.processPending(1);
+      expect(service.calls, 1);
+      expect(
+        (await db.select(db.localDonationImages).getSingle()).managedLocalPath,
+        'private/image.jpg',
+      );
+      await sync.shutdown();
+    },
+  );
 
   test(
     'respuesta idempotente adopta tiempos del servidor y conserva IDs',

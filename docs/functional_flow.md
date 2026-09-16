@@ -9,10 +9,10 @@ Este documento resume el recorrido principal del cliente móvil, los endpoints q
 | Login | Ingresar correo y contraseña. | `POST /api/auth/login` y `GET /api/usuarios/perfil` | Los tokens se almacenan de forma segura, se recupera el perfil y se abre Inicio o el destino privado solicitado. | Login completo e Inicio autenticado. |
 | Explorar | Abrir Explorar desde Inicio. | Caché local y `GET /api/donaciones` | Se muestran primero las tarjetas guardadas y luego se intenta el refresh remoto. Ante un fallo se conservan el contenido, las imágenes locales disponibles y la última sincronización real. | Varias tarjetas de donaciones y, sin red, aviso de datos guardados. |
 | Detalle | Seleccionar una donación. | `GET /api/donaciones/{id}` | Se muestra la información completa de la donación y las acciones disponibles para el usuario. | Pantalla de detalle. |
-| Crear | Volver a Inicio y abrir Donar. | `GET /api/categorias` | El formulario queda preparado con las categorías activas obtenidas del backend. | Formulario con una categoría seleccionada. |
-| Imágenes | Seleccionar entre una y cinco imágenes válidas. | `POST /api/imagenes/firma` y subida HTTPS firmada hacia Cloudinary | Se obtienen URL seguras, conservando el orden, listas para incluir en la creación. | Previsualizaciones de imágenes en el formulario. |
-| Publicar | Completar el formulario y pulsar **Publicar donación**. | `POST /api/donaciones` | La API crea la donación y devuelve su información. | Formulario completo antes de publicar. |
-| Detalle creado | Finalizar la publicación. | Navegación a `/donaciones/{id}` | La aplicación reemplaza el formulario por el detalle de la nueva donación. | Detalle de la donación recién creada. |
+| Crear | Volver a Inicio y abrir Donar. | Categorías locales; `GET /api/categorias` si no hay categorías guardadas | El formulario puede abrirse sin red si las categorías ya están guardadas y la sesión está abierta. | Formulario con una categoría seleccionada. |
+| Imágenes | Seleccionar entre una y cinco imágenes válidas. | Galería del dispositivo | Se previsualizan los archivos; al publicar se copian al almacenamiento administrado de la app. | Previsualizaciones de imágenes en el formulario. |
+| Publicar | Completar el formulario y pulsar **Publicar donación**. | Drift y outbox; luego firma, Cloudinary y `POST /api/donaciones` | Se guardan donación, imágenes y operación antes de enviar. SyncCoordinator publica con clientId estable. | Aviso de donación guardada y regreso a Inicio. |
+| Ver publicación | Abrir Mis donaciones después de sincronizar. | `GET /api/donaciones/mias` y detalle | El listado remoto permite abrir la donación confirmada. Las creaciones pendientes no se muestran como publicaciones remotas. | Detalle de la donación confirmada. |
 
 El recorrido Explorar → Detalle → Crear no representa una transición directa desde el detalle. El flujo normal es:
 
@@ -364,7 +364,7 @@ Las pantallas reciben repositories por constructor. Los repositories remotos
 | Explore con caché | DonationRepository | DonationRemoteDataSource | DonationLocalDataSource y Drift: donaciones, categorías, membresía y vigencia; RemoteImageCache conserva imágenes descargadas. |
 | Explore remoto | DonationRepository y CategoryRepository | DonationRemoteDataSource y CategoryRemoteDataSource | Ninguna; conserva la alternativa remota usada con dependencias inyectadas. |
 | Detalle y mis donaciones | DonationRepository | DonationRemoteDataSource | Ninguna. |
-| Crear donación | DonationRepository, CategoryRepository e ImageUploadRepository | DonationRemoteDataSource, CategoryRemoteDataSource e ImageUploadRemoteDataSource | No se añade persistencia al formulario; la selección de galería sigue siendo una dependencia independiente. |
+| Crear donación | DonationRepository e ImageUploadRepository | DonationRemoteDataSource e ImageUploadRemoteDataSource, usados por SyncCoordinator | DonationLocalDataSource guarda donación, imágenes y outbox. Las categorías se leen primero de Drift. La ruta remota inyectada sigue disponible para pruebas. |
 | Crear solicitud desde detalle | RequestRepository | RequestRemoteDataSource | Ninguna. |
 | Solicitudes enviadas y recibidas | RequestRepository | RequestRemoteDataSource | Ninguna. |
 | Detalle, aceptar, rechazar y cancelar solicitud | RequestRepository | RequestRemoteDataSource | Ninguna. |
@@ -388,8 +388,8 @@ DonationGalleryPicker solo selecciona archivos del dispositivo.
 La infraestructura de outbox existente (PendingOperationLocalDataSource,
 Drift y SyncCoordinator) conserva su comportamiento y persistencia. Las llamadas
 remotas de SyncCoordinator ahora pasan por DonationRepository e
-ImageUploadRepository; no se conectan nuevos flujos de UI a la cola ni se
-modifican sus reintentos, conflictos o sincronización.
+ImageUploadRepository. El requisito 21 conecta publicación a esta cola y
+compone su coordinador desde DonApp; conserva los reintentos y conflictos existentes.
 
 Las pruebas de pantallas inyectan repositories, las de caché verifican
 RemoteDataSource + LocalDataSource con Drift en memoria, y las de límites de
@@ -558,12 +558,13 @@ las esperas indicadas por 429 y la recuperación de sesión se contabilizan
 aparte. No se añade cancelación: un GET que agotó su plazo puede terminar
 tarde, pero es una lectura y su resultado tardío no se usa.
 
-La publicación de pantalla sigue sin reintento automático porque no envía
-clientId. No se generan claves nuevas al reenviar una operación protegida.
+La publicación normal de pantalla usa ahora la outbox del requisito 21 y
+envía clientId. ApiClient no reintenta su POST; lo controla SyncCoordinator.
+No se generan claves nuevas al reenviar una operación protegida.
 La cola existente mantiene su máximo de 5 intentos y su programación de
 5/15/30/60 segundos entre ellos (syncBackoff también define 120 segundos para
-valores posteriores, que el límite normal impide programar). No se modifica
-SyncCoordinator, PendingOperationLocalDataSource ni se conecta la UI a la cola.
+valores posteriores, que el límite normal impide programar). El requisito 21
+conecta esta política existente a la UI, sin sumar otro ciclo de reintentos.
 
 ApiClient permite desactivar el backoff de lecturas con retryReads: false.
 La espera retryDelay es inyectable para comprobar duraciones sin dormir en
@@ -633,3 +634,89 @@ repositories, el descarte de Explore con/sin caché, detalles, listas y perfil
 de login, sin errores visibles ni setState posterior a dispose. También se
 verifican backoff, ausencia de refresh provocado por cancelación, continuación
 segura de POST/PATCH y limpieza de temporales de imágenes.
+
+## Persistencia y sincronización conectadas (requisito 21)
+
+Antes de esta integración, Explore usaba caché en la app, pero publicación
+subía imágenes y creaba directamente en remoto. La outbox solo se llenaba en
+pruebas y SyncCoordinator no se componía en el arranque normal.
+
+Ahora DonApp crea OfflineDonations, que observa la sesión y compone un único
+SyncCoordinator y un DonationRepository local por usuario autenticado. El router
+entrega ese repository a Explore y publicación. No se crea un sincronizador por
+pantalla; los disparos concurrentes comparten el trabajo activo del coordinador.
+Al terminar la sesión deja de aceptar trabajo y espera el envío activo antes de
+cerrar su base. La siguiente sesión espera ese cierre antes de enviar.
+
+### Qué se guarda y cómo se publica
+
+1. El formulario valida los datos y las imágenes con las reglas existentes.
+2. DonationRepository delega en DonationLocalDataSource. Se genera un UUID
+   clientId para la donación y se copian las imágenes a pending_donation_images,
+   fuera de los archivos temporales de la galería.
+3. Una transacción Drift guarda la donación, el orden y las rutas de sus imágenes,
+   y la operación createDonation creada por PendingOperationLocalDataSource.
+   Esta operación recibe su propio UUID operationId. Si falla la persistencia,
+   la transacción se revierte y se limpian los archivos de ese intento.
+4. Solo después de confirmar la transacción se dispara la sincronización.
+   La pantalla avisa que la donación quedó guardada y vuelve a Inicio.
+5. SyncCoordinator recupera las imágenes locales, sube las que todavía no tienen
+   URL y guarda cada URL confirmada. Luego llama DonationRepository →
+   DonationRemoteDataSource → DonationService → ApiClient para crear la donación.
+   El reenvío conserva clientId y las URL guardadas. operationId identifica la
+   operación local y no se añade al contrato HTTP: la idempotencia del backend
+   para creación utiliza clientId.
+
+### Cuándo se sincroniza
+
+- Al autenticar o restaurar correctamente una sesión.
+- Después de guardar una nueva creación en la outbox.
+- Al volver la aplicación a foreground.
+- Al vencer la próxima fecha de reintento guardada en Drift. Se programa un solo
+  temporizador para esa fecha, sin polling periódico. Sin trabajo no hay timer.
+  Una operación processing abandonada se recupera tras el umbral existente de
+  cinco minutos, también después de reiniciar.
+
+Al ir a background se cancela el temporizador, no una escritura ya enviada.
+No se añade un servicio de sistema para ejecutar con la app cerrada ni un detector
+nuevo de conectividad. Si vuelve la red con la app abierta, el siguiente intento
+vencido puede completar el envío; volver a foreground también revisa la cola,
+siempre respetando nextAttemptAt.
+
+### Resultado de cada intento
+
+| Resultado | Operación y datos locales |
+| --- | --- |
+| Network, timeout, servidor o límite temporal | Se conservan datos e imágenes. La operación pasa a retryWait y guarda nextAttemptAt. |
+| Reintentos | Máximo existente de cinco intentos. Esperas de 5, 15, 30 y 60 segundos entre ellos. Al agotar el límite queda failedPermanent, sin borrar los datos. No hay nueva UI para reactivar ese estado. |
+| Autenticación pendiente | Se conserva la operación y se pausa la cola. AUTH_REQUIRED no programa un bucle automático; se vuelve a revisar por los disparos de sesión/foreground. |
+| Confirmación válida del servidor | Se actualiza la misma donación con remoteId, datos y fechas del servidor; la operación queda completed. Se limpian las imágenes administradas. Un fallo de limpieza no vuelve a enviar una creación confirmada. |
+| Conflicto 409 u otro fallo permanente | Se conserva la operación como failedPermanent. No se inventa un merge ni se reenvía automáticamente. |
+
+ConflictResolver mantiene la estrategia previa: protege datos locales aún no
+sincronizados y aplica la versión confirmada del servidor al reconciliar una
+creación. ApiClient sigue sin reintentar POST/PATCH; no hay un segundo backoff
+para crear. La recuperación de sesión existente sigue separada.
+
+### Alcance offline real
+
+| Flujo | Soporte actual |
+| --- | --- |
+| Explore | Local-first: contenido y categorías guardados, más imágenes que alcanzaron a descargarse. Un error remoto conserva la caché. |
+| Formulario de publicación | Lee primero categorías guardadas; sin categorías necesita red para prepararse. Puede encolar con la sesión ya abierta. |
+| Creación | Donación, imágenes, clientId, operationId, estados y fechas de reintento sobreviven a un reinicio normal. Una nueva instancia puede continuar desde la misma base cifrada. |
+| Mis donaciones y detalle | Siguen consultando remoto. No se presentan creaciones pendientes como donaciones ya publicadas ni se añade un listado offline nuevo. |
+| Solicitudes | Listados, detalle, creación, aceptación, rechazo y cancelación siguen online, sin outbox. |
+| Edición/eliminación y otros flujos | No se añade soporte offline. Las tablas disponibles no equivalen a flujos conectados. |
+| Sesión | No se añade restauración offline del perfil. Tras reiniciar puede ser necesario recuperar conexión para validar la sesión antes de acceder a las pantallas. Logout conserva su limpieza local existente, incluida la outbox; reinicio no equivale a logout. |
+
+Las pruebas usan el repository y Drift en disco, cierran la conexión y crean
+otro coordinador para comprobar continuidad e IDs estables. También comprueban
+network/timeout/503/409, ausencia de retries POST adicionales, temporizador de
+backoff, autenticación, foreground, composición desde DonApp y publicación desde
+el formulario sin envío directo. Las pruebas existentes cubren Explore local-first,
+resolución de conflictos y los flujos online que se conservan.
+
+Verificación del requisito 21 (16 de septiembre de 2026): dart format comprobado;
+flutter analyze sin incidencias; 586 pruebas focalizadas y 647 de la suite
+completa aprobadas. No se cambian tablas, contratos API, modelos JSON ni backend.

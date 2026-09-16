@@ -1,19 +1,108 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../../models/category.dart';
 import '../../models/donation.dart';
 import 'app_database.dart';
 import 'conflict_resolver.dart';
 import 'tables/local_tables.dart';
+import 'pending_operation_local_data_source.dart';
+import '../../services/client_id_generator.dart';
+import '../../services/local_session_cleanup.dart';
 
 class DonationLocalDataSource {
   DonationLocalDataSource(
     this.database, {
     this.conflictResolver = const ConflictResolver(),
+    this.imagesDirectory,
   });
 
   final AppDatabase database;
   final ConflictResolver conflictResolver;
+  final Directory? imagesDirectory;
+
+  Future<PendingOperation> enqueueCreation({
+    required int cacheUserId,
+    required String city,
+    required String title,
+    required String description,
+    required Category category,
+    required List<XFile> images,
+  }) async {
+    if (cacheUserId <= 0 || images.isEmpty || images.length > 5) {
+      throw ArgumentError('Invalid local creation');
+    }
+    final clientId = const UuidClientIdGenerator().newEntityId();
+    final root =
+        imagesDirectory ??
+        Directory(
+          p.join(
+            (await getApplicationSupportDirectory()).path,
+            LocalSessionCleanup.managedImagesDirectoryName,
+          ),
+        );
+    final directory = Directory(p.join(root.path, clientId));
+    final paths = <String>[];
+    try {
+      await directory.create(recursive: true);
+      for (var index = 0; index < images.length; index++) {
+        final path = p.join(
+          directory.path,
+          '$index${p.extension(images[index].name)}',
+        );
+        await images[index].saveTo(path);
+        paths.add(path);
+      }
+      return await database.transaction(() async {
+        final now = DateTime.now();
+        final localId = await database
+            .into(database.localDonations)
+            .insert(
+              LocalDonationsCompanion.insert(
+                cacheUserId: cacheUserId,
+                clientId: clientId,
+                expiresAt: now,
+                syncState: DonationSyncState.pendingCreate,
+                title: title,
+                description: Value(description),
+                city: city,
+                categoryId: category.id,
+                categoryName: category.nombre,
+                imageCount: Value(images.length),
+                createdAt: Value(now),
+              ),
+            );
+        for (var index = 0; index < paths.length; index++) {
+          await database
+              .into(database.localDonationImages)
+              .insert(
+                LocalDonationImagesCompanion.insert(
+                  localDonationId: localId,
+                  managedLocalPath: Value(paths[index]),
+                  sortOrder: index + 1,
+                  mimeType: Value(images[index].mimeType),
+                  sizeBytes: Value(await File(paths[index]).length()),
+                  uploadState: ImageUploadState.localPending,
+                ),
+              );
+        }
+        return PendingOperationLocalDataSource(
+          dao: database.pendingOperationsDao,
+        ).createPendingDonationOperation(
+          cacheUserId: cacheUserId,
+          entityClientId: clientId,
+        );
+      });
+    } catch (_) {
+      // Only this creation's files are removed if its transaction failed.
+      if (await directory.exists()) await directory.delete(recursive: true);
+      rethrow;
+    }
+  }
 
   Stream<List<DonationListItem>> watchExplore({
     required int cacheUserId,

@@ -63,6 +63,8 @@ class CreateDonationScreen extends StatefulWidget {
     this.imageUploadRepository,
     this.galleryPicker,
     this.onCreated,
+    this.cacheUserId,
+    this.city = '',
     super.key,
   });
 
@@ -71,6 +73,8 @@ class CreateDonationScreen extends StatefulWidget {
   final ImageUploadRepository? imageUploadRepository;
   final DonationGalleryPicker? galleryPicker;
   final ValueChanged<DonationDetail>? onCreated;
+  final int? cacheUserId;
+  final String city;
 
   @override
   State<CreateDonationScreen> createState() => _CreateDonationScreenState();
@@ -90,6 +94,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
   int? _categoryId;
   bool _loadingCategories = true;
   bool _submitting = false;
+  bool _queued = false;
   String? _pageError;
   String? _submitError;
   Map<String, String> _remoteFieldErrors = const {};
@@ -161,7 +166,9 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
     });
     try {
       final results = await Future.wait<Object>([
-        _categoryRepository.getCategories(),
+        widget.cacheUserId == null
+            ? _categoryRepository.getCategories()
+            : _donationRepository.getLocalFirstCategories(),
         _galleryPicker.retrieveLostImages(),
       ]);
       if (!mounted) return;
@@ -231,7 +238,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
   }
 
   Future<void> _submit() async {
-    if (_submitting || !_formKey.currentState!.validate()) return;
+    if (_queued || _submitting || !_formKey.currentState!.validate()) return;
     if (_categoryId == null) {
       setState(() => _submitError = 'Selecciona una categoría.');
       return;
@@ -245,6 +252,30 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
       _submitError = null;
     });
     try {
+      if (widget.cacheUserId case final userId?) {
+        for (final image in _images) {
+          await _imageUploadRepository.validateImage(image);
+        }
+        await _donationRepository.enqueueCreation(
+          cacheUserId: userId,
+          city: widget.city,
+          title: _titleController.text,
+          description: _descriptionController.text,
+          category: _categories.firstWhere((item) => item.id == _categoryId),
+          images: _images,
+        );
+        if (!mounted) return;
+        setState(() => _queued = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Donación guardada. Se publicará cuando haya conexión.',
+            ),
+          ),
+        );
+        if (GoRouter.maybeOf(context) != null) context.go(AppRoutes.home);
+        return;
+      }
       final references = await _imageUploadRepository.uploadImages(_images);
       final donation = await _donationRepository.createDonation(
         title: _titleController.text,

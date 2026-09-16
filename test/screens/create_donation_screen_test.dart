@@ -4,6 +4,7 @@ import 'package:donapp_mobile/repositories/category_repository.dart';
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:donapp_mobile/models/category.dart';
@@ -22,8 +23,98 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:drift/native.dart';
+import 'package:donapp_mobile/data/local/app_database.dart';
+import 'package:donapp_mobile/data/local/donation_local_data_source.dart';
+import 'package:donapp_mobile/data/remote/donation_remote_data_source.dart';
+import 'package:donapp_mobile/data/local/tables/local_tables.dart';
 
 void main() {
+  testWidgets(
+    'publicación con outbox guarda sin subir ni crear remoto desde UI',
+    (tester) async {
+      final root = (await tester.runAsync(
+        () => Directory.systemTemp.createTemp('donapp-form-outbox-'),
+      ))!;
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      final local = DonationLocalDataSource(db, imagesDirectory: root);
+      final queued = Completer<void>();
+      final uploads = _UploadService();
+      final repository = DonationRepository(
+        local,
+        DonationRemoteDataSource(_DonationService(), const CategoryService()),
+        onQueued: () => queued.complete(),
+      );
+      await tester.runAsync(
+        () => local.storeCategories(
+          const [Category(id: 4, nombre: 'Muebles', descripcion: null)],
+          syncedAt: DateTime.now(),
+          expiresAt: DateTime.now().add(const Duration(days: 1)),
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: CreateDonationScreen(
+            donationRepository: repository,
+            cacheUserId: 1,
+            city: 'Bogotá',
+            imageUploadRepository: ImageUploadRepository.fromService(uploads),
+            galleryPicker: _Picker([_image('one.jpg')]),
+          ),
+        ),
+      );
+      for (
+        var i = 0;
+        i < 50 &&
+            find.byKey(const Key('donationTitleField')).evaluate().isEmpty;
+        i++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await _completeForm(tester);
+      await tester.tap(find.byKey(const Key('publishDonationButton')));
+      for (var i = 0; i < 50 && !queued.isCompleted; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(queued.isCompleted, isTrue);
+      await tester.pumpAndSettle();
+      expect(uploads.calls, 0);
+      expect(
+        find.text('Donación guardada. Se publicará cuando haya conexión.'),
+        findsOneWidget,
+      );
+      await tester.runAsync(() async {
+        final operation = await db.select(db.pendingOperations).getSingle();
+        expect(operation.state, PendingOperationState.pending);
+        expect(
+          (await db.select(db.localDonations).getSingle()).clientId,
+          operation.entityClientId,
+        );
+        final image = await db.select(db.localDonationImages).getSingle();
+        expect(await File(image.managedLocalPath!).exists(), isTrue);
+      });
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('publishDonationButton')));
+      await tester.pump();
+      await tester.runAsync(
+        () async =>
+            expect(await db.select(db.pendingOperations).get(), hasLength(1)),
+      );
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(db.close);
+      await tester.runAsync(() => root.delete(recursive: true));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final status in [400, 422]) {
     testWidgets(
       '$status HTTP propaga campos hasta el formulario mediante repository',

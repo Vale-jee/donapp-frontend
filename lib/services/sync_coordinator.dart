@@ -88,6 +88,7 @@ class SyncCoordinator {
       now: now,
     );
     for (final operation in operations) {
+      if (!_acceptingWork) return;
       try {
         await _processCreateDonation(operation);
       } on ApiException catch (error) {
@@ -266,7 +267,13 @@ class SyncCoordinator {
       );
     });
     for (final path in managedPaths) {
-      await _deleteManagedFile(path);
+      try {
+        await _deleteManagedFile(path);
+      } on FileSystemException {
+        // The server already confirmed creation. Keep the path for cleanup,
+        // without turning a completed operation into another remote attempt.
+        continue;
+      }
       await (database.update(database.localDonationImages)
             ..where((row) => row.localDonationId.equals(local.localId))
             ..where((row) => row.managedLocalPath.equals(path)))
@@ -280,6 +287,10 @@ class SyncCoordinator {
     PendingOperation operation,
     ApiException error,
   ) async {
+    final current = await database.pendingOperationsDao.findByOperationId(
+      operation.operationId,
+    );
+    if (current?.state == PendingOperationState.completed) return;
     final attempt = operation.attemptCount + 1;
     final recoverable = _isRecoverable(error);
     final permanent = !recoverable || attempt >= syncMaxAttempts;

@@ -92,6 +92,7 @@ GoRouter createAppRouter({
   TokenStorage? tokenStorage,
   DonationService? donationService,
   DonationRepository? donationRepository,
+  DonationRepository? Function()? offlineRepository,
   RequestService? requestService,
   CategoryService? categoryService,
   ImageUploadService? imageUploadService,
@@ -127,6 +128,7 @@ GoRouter createAppRouter({
         tokenStorage: effectiveTokenStorage,
       );
   final useLocalFirstExplore =
+      offlineRepository != null ||
       donationRepository != null ||
       (donationService == null && categoryService == null);
 
@@ -234,6 +236,7 @@ GoRouter createAppRouter({
           ),
           cacheUserId: useLocalFirstExplore ? authState.profile!.id : null,
           repository:
+              offlineRepository?.call() ??
               donationRepository ??
               (useLocalFirstExplore
                   ? DonationRepository.create(
@@ -246,9 +249,13 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.createDonation,
         builder: (context, state) => CreateDonationScreen(
-          donationRepository: DonationRepository.fromService(
-            effectiveDonationService,
-          ),
+          cacheUserId: offlineRepository?.call() != null
+              ? authState.profile!.id
+              : null,
+          city: authState.profile!.ciudad,
+          donationRepository:
+              offlineRepository?.call() ??
+              DonationRepository.fromService(effectiveDonationService),
           categoryRepository: CategoryRepository.fromService(
             effectiveCategoryService,
           ),

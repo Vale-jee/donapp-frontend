@@ -1,3 +1,5 @@
+import 'package:image_picker/image_picker.dart';
+
 import '../data/local/app_database.dart';
 import '../data/local/donation_local_data_source.dart';
 import '../data/local/local_cache_policy.dart';
@@ -28,6 +30,7 @@ class DonationRepository {
     DateTime Function()? clock,
     this.cachePolicy = const LocalCachePolicy(),
     this.imageCache,
+    this.onQueued,
   }) : _clock = clock ?? DateTime.now;
 
   DonationRepository.remote({DonationRemoteDataSource? remote})
@@ -63,6 +66,34 @@ class DonationRepository {
   final LocalCachePolicy cachePolicy;
   final RemoteImageCache? imageCache;
   AppDatabase? _ownedDatabase;
+  void Function()? onQueued;
+
+  Future<List<Category>> getLocalFirstCategories() async {
+    final cached = await _local!.watchCategories().first;
+    if (cached.isNotEmpty) return cached;
+    await refreshCategories();
+    return _local.watchCategories().first;
+  }
+
+  Future<PendingOperation> enqueueCreation({
+    required int cacheUserId,
+    required String city,
+    required String title,
+    required String description,
+    required Category category,
+    required List<XFile> images,
+  }) async {
+    final operation = await _local!.enqueueCreation(
+      cacheUserId: cacheUserId,
+      city: city,
+      title: title,
+      description: description,
+      category: category,
+      images: images,
+    );
+    onQueued?.call();
+    return operation;
+  }
 
   Stream<List<DonationListItem>> watchExplore({
     required int cacheUserId,
