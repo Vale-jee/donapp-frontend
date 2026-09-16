@@ -20,10 +20,14 @@ import '../screens/requests_screen.dart';
 import '../screens/session_gate.dart';
 import '../screens/welcome_screen.dart';
 import '../screens/profile_screen.dart';
+import '../screens/chats_screen.dart';
+import '../screens/chat_detail_screen.dart';
 import '../repositories/donation_repository.dart';
+import '../repositories/chat_repository.dart';
 import '../services/auth_service.dart';
 import '../services/auth_state_controller.dart';
 import '../services/category_service.dart';
+import '../services/chat_service.dart';
 import '../services/donation_service.dart';
 import '../services/image_upload_service.dart';
 import '../services/profile_service.dart';
@@ -38,6 +42,8 @@ abstract final class AppRoutes {
   static const nestedRegister = '/bienvenida/registro';
   static const home = '/inicio';
   static const profile = '/perfil';
+  static const chats = '/chats';
+  static const chatDetailPattern = '/chats/:id';
   static const explore = '/explorar';
   static const createDonation = '/donaciones/nueva';
   static const myDonations = '/donaciones/mias';
@@ -48,6 +54,7 @@ abstract final class AppRoutes {
 
   static String donationDetailLocation(int id) => '/donaciones/$id';
   static String requestDetailLocation(int id) => '/solicitudes/$id';
+  static String chatLocation(int id) => '/chats/$id';
 
   static String rootLocation({String? redirect}) =>
       _location(root, redirect: redirect);
@@ -96,6 +103,7 @@ GoRouter createAppRouter({
   DonationRepository? donationRepository,
   DonationRepository? Function()? offlineRepository,
   RequestService? requestService,
+  ChatService? chatService,
   CategoryService? categoryService,
   ImageUploadService? imageUploadService,
   DonationGalleryPicker? galleryPicker,
@@ -121,6 +129,8 @@ GoRouter createAppRouter({
         apiClient: protectedApiClient,
         tokenStorage: effectiveTokenStorage,
       );
+  final effectiveChatService =
+      chatService ?? ChatService(apiClient: protectedApiClient);
   final effectiveCategoryService =
       categoryService ?? CategoryService(apiClient: protectedApiClient);
   final effectiveImageUploadService =
@@ -238,6 +248,24 @@ GoRouter createAppRouter({
         ),
       ),
       GoRoute(
+        path: AppRoutes.chats,
+        builder: (context, state) => ChatsScreen(
+          chatRepository: ChatRepository.fromService(effectiveChatService),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.chatDetailPattern,
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '');
+          if (id == null || id <= 0) return const _InvalidChatRoute();
+          return ChatDetailScreen(
+            chatId: id,
+            currentUserId: authState.profile!.id,
+            chatRepository: ChatRepository.fromService(effectiveChatService),
+          );
+        },
+      ),
+      GoRoute(
         path: AppRoutes.explore,
         builder: (context, state) => ExploreDonationsScreen(
           donationRepository: DonationRepository.fromService(
@@ -311,6 +339,7 @@ GoRouter createAppRouter({
             requestRepository: RequestRepository.fromService(
               effectiveRequestService,
             ),
+            chatRepository: ChatRepository.fromService(effectiveChatService),
           );
         },
       ),
@@ -372,6 +401,7 @@ const _privateLocations = {
   AppRoutes.sentRequests,
   AppRoutes.receivedRequests,
   AppRoutes.profile,
+  AppRoutes.chats,
 };
 
 class _InvalidRequestRoute extends StatelessWidget {
@@ -388,6 +418,15 @@ class _InvalidRequestRoute extends StatelessWidget {
         ),
       ),
     ),
+  );
+}
+
+class _InvalidChatRoute extends StatelessWidget {
+  const _InvalidChatRoute();
+
+  @override
+  Widget build(BuildContext context) => const Scaffold(
+    body: Center(child: Text('El chat solicitado no es válido.')),
   );
 }
 

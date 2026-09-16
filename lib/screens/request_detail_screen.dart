@@ -1,11 +1,15 @@
 import '../services/read_cancellation.dart';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../config/api_config.dart';
 import '../models/request.dart';
 import '../services/api_exception.dart';
 import '../repositories/request_repository.dart';
+import '../repositories/chat_repository.dart';
+import '../services/chat_service.dart';
+import '../navigation/app_router.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_content_state.dart';
@@ -16,10 +20,12 @@ class RequestDetailScreen extends StatefulWidget {
   const RequestDetailScreen({
     required this.requestId,
     this.requestRepository,
+    this.chatRepository,
     super.key,
   });
   final int requestId;
   final RequestRepository? requestRepository;
+  final ChatRepository? chatRepository;
   @override
   State<RequestDetailScreen> createState() => _RequestDetailScreenState();
 }
@@ -32,6 +38,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   bool _acting = false;
   String? _error;
   bool _notFound = false;
+  bool _openingChat = false;
 
   @override
   void dispose() {
@@ -115,6 +122,22 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No pudimos completar la acción.')),
       );
+    }
+  }
+
+  Future<void> _openChat(RequestDetail request) async {
+    if (_openingChat) return;
+    setState(() => _openingChat = true);
+    try {
+      final chat = await (widget.chatRepository ?? ChatRepository.fromService(ChatService())).createForRequest(request.id);
+      if (!mounted) return;
+      context.push(AppRoutes.chatLocation(chat.id));
+    } on ApiException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No pudimos abrir el chat.')));
+    } finally {
+      if (mounted) setState(() => _openingChat = false);
     }
   }
 
@@ -277,6 +300,21 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                         )
                       : const Icon(Icons.cancel_outlined),
                   label: const Text('Cancelar solicitud'),
+                ),
+              ],
+              if (request.status == RequestStatus.aceptada &&
+                  request.donation.status == RequestDonationStatus.reservada) ...[
+                SizedBox(height: spacing.large),
+                FilledButton.icon(
+                  key: const Key('openChatButton'),
+                  onPressed: _openingChat ? null : () => _openChat(request),
+                  icon: _openingChat
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.chat_bubble_outline),
+                  label: const Text('Abrir chat'),
                 ),
               ],
             ],

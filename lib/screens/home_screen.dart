@@ -192,6 +192,14 @@ class _ActionGrid extends StatelessWidget {
         accent: Theme.of(context).colorScheme.primary,
         onTap: () => context.push(AppRoutes.myDonations),
       ),
+      _HomeAction(
+        key: const Key('homeMessagesAction'),
+        icon: Icons.chat_bubble_outline,
+        title: 'Mensajes',
+        description: 'Continúa tus conversaciones.',
+        accent: colors.accentCoral,
+        onTap: () => context.push(AppRoutes.chats),
+      ),
     ];
 
     return LayoutBuilder(
