@@ -14,6 +14,7 @@ import '../repositories/category_repository.dart';
 import '../repositories/donation_repository.dart';
 import '../repositories/image_upload_repository.dart';
 import '../services/donation_gallery_picker.dart';
+import '../services/camera_capture_service.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_content_state.dart';
 import '../widgets/app_primary_button.dart';
@@ -62,6 +63,7 @@ class CreateDonationScreen extends StatefulWidget {
     this.categoryRepository,
     this.imageUploadRepository,
     this.galleryPicker,
+    this.cameraCaptureService,
     this.onCreated,
     this.cacheUserId,
     this.city = '',
@@ -72,6 +74,7 @@ class CreateDonationScreen extends StatefulWidget {
   final CategoryRepository? categoryRepository;
   final ImageUploadRepository? imageUploadRepository;
   final DonationGalleryPicker? galleryPicker;
+  final CameraCaptureService? cameraCaptureService;
   final ValueChanged<DonationDetail>? onCreated;
   final int? cacheUserId;
   final String city;
@@ -89,6 +92,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
   late final CategoryRepository _categoryRepository;
   late final ImageUploadRepository _imageUploadRepository;
   late final DonationGalleryPicker _galleryPicker;
+  late final CameraCaptureService _cameraCaptureService;
   List<Category> _categories = const [];
   List<XFile> _images = const [];
   int? _categoryId;
@@ -147,6 +151,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
     _imageUploadRepository =
         widget.imageUploadRepository ?? ImageUploadRepository();
     _galleryPicker = widget.galleryPicker ?? ImagePickerGallery();
+    _cameraCaptureService =
+      widget.cameraCaptureService ?? PermissionCameraCaptureService();
     _load();
   }
 
@@ -202,22 +208,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
   Future<void> _pickImages() async {
     try {
       final selected = await _galleryPicker.pickImages();
-      if (!mounted || selected.isEmpty) return;
-      final combined = [..._images, ...selected];
-      if (combined.length > ImageUploadRepository.maxImages) {
-        setState(() => _submitError = 'Puedes seleccionar máximo 5 imágenes.');
-        return;
-      }
-      for (final image in selected) {
-        await _imageUploadRepository.validateImage(image);
-      }
-      if (mounted) {
-        setState(() {
-          _images = List.unmodifiable(combined);
-          _submitError = null;
-          _remoteFieldErrors = Map.of(_remoteFieldErrors)..remove('imagenes');
-        });
-      }
+      await _addSelectedImages(selected);
     } on ApiException catch (error) {
       if (mounted) setState(() => _submitError = error.message);
     } catch (_) {
@@ -227,6 +218,84 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
               'No pudimos seleccionar las imágenes. Intenta nuevamente.',
         );
       }
+    }
+  }
+
+  Future<void> _addSelectedImages(List<XFile> selected) async {
+    if (!mounted || selected.isEmpty) return;
+    final combined = [..._images, ...selected];
+    if (combined.length > ImageUploadRepository.maxImages) {
+      setState(() => _submitError = 'Puedes seleccionar máximo 5 imágenes.');
+      return;
+    }
+    for (final image in selected) {
+      await _imageUploadRepository.validateImage(image);
+    }
+    if (mounted) {
+      setState(() {
+        _images = List.unmodifiable(combined);
+        _submitError = null;
+        _remoteFieldErrors = Map.of(_remoteFieldErrors)..remove('imagenes');
+      });
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    final shouldContinue = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tomar una foto'),
+        content: const Text(
+          'DonnaP necesita acceso a la cámara para tomar fotografías de los artículos que deseas donar.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Ahora no'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+    if (shouldContinue != true || !mounted) return;
+
+    final result = await _cameraCaptureService.capture();
+    if (!mounted) return;
+    switch (result.status) {
+      case CameraCaptureStatus.granted:
+        if (result.image != null) await _addSelectedImages([result.image!]);
+      case CameraCaptureStatus.denied:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Permiso de cámara denegado. Puedes usar la galería.')),
+        );
+      case CameraCaptureStatus.permanentlyDenied:
+        final openSettings = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Permiso de cámara bloqueado'),
+            content: const Text(
+              'Activa el permiso de cámara desde los ajustes del sistema para tomar una foto.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Ahora no'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Abrir ajustes'),
+              ),
+            ],
+          ),
+        );
+        if (openSettings == true) await _cameraCaptureService.openSettings();
+      case CameraCaptureStatus.error:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.message ?? 'La cámara no está disponible. Puedes usar la galería.')),
+        );
     }
   }
 
@@ -433,32 +502,36 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                             },
                           ),
                           SizedBox(height: spacing.large),
-                          OutlinedButton(
-                            key: const Key('pickDonationImagesButton'),
-                            onPressed:
-                                _submitting ||
-                                    _images.length >=
-                                        ImageUploadRepository.maxImages
-                                ? null
-                                : _pickImages,
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(
-                                vertical: spacing.small,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  key: const Key('takeDonationPhotoButton'),
+                                  onPressed:
+                                      _submitting ||
+                                          _images.length >=
+                                              ImageUploadRepository.maxImages
+                                      ? null
+                                      : _takePhoto,
+                                  icon: const Icon(Icons.photo_camera_outlined),
+                                  label: const Text('Tomar foto'),
+                                ),
                               ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.photo_library_outlined),
-                                  SizedBox(width: spacing.small),
-                                  Expanded(
-                                    child: Text(
-                                      'Seleccionar imágenes (${_images.length}/5)',
-                                      textAlign: TextAlign.center,
-                                      maxLines: 2,
-                                    ),
-                                  ),
-                                ],
+                              SizedBox(width: spacing.small),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  key: const Key('pickDonationImagesButton'),
+                                  onPressed:
+                                      _submitting ||
+                                          _images.length >=
+                                              ImageUploadRepository.maxImages
+                                      ? null
+                                      : _pickImages,
+                                  icon: const Icon(Icons.photo_library_outlined),
+                                  label: Text('Galería (${_images.length}/5)'),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                           if (_remoteFieldErrors['imagenes']
                               case final error?) ...[

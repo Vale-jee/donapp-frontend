@@ -619,7 +619,7 @@ void main() {
     await tester.tap(find.byKey(const Key('pickDonationImagesButton')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('createDonationError')), findsNothing);
-    expect(find.text('Seleccionar imágenes (0/5)'), findsOneWidget);
+    expect(find.text('Galería (0/5)'), findsOneWidget);
   });
 
   testWidgets('fallo del selector muestra un mensaje útil', (tester) async {
@@ -641,7 +641,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('pickDonationImagesButton')));
     await tester.pumpAndSettle();
-    expect(find.text('Seleccionar imágenes (2/5)'), findsOneWidget);
+    expect(find.text('Galería (2/5)'), findsOneWidget);
     expect(find.byKey(const Key('selectedDonationImages')), findsOneWidget);
   });
 
@@ -653,7 +653,7 @@ void main() {
     await tester.tap(find.byKey(const Key('pickDonationImagesButton')));
     await tester.pumpAndSettle();
     expect(find.text('Puedes seleccionar máximo 5 imágenes.'), findsOneWidget);
-    expect(find.text('Seleccionar imágenes (0/5)'), findsOneWidget);
+    expect(find.text('Galería (0/5)'), findsOneWidget);
   });
 
   testWidgets('publica solo después de subir todas y preserva orden', (
@@ -710,7 +710,7 @@ void main() {
       _app(picker: _Picker(const [], recovered: [_image('recovered.jpg')])),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Seleccionar imágenes (1/5)'), findsOneWidget);
+    expect(find.text('Galería (1/5)'), findsOneWidget);
   });
 
   testWidgets('mapea varios errores remotos a sus campos con HTTP 422', (
@@ -929,7 +929,7 @@ void main() {
 
     await _fillDraft(tester);
     expect(_categoryValue(tester), 4);
-    expect(find.text('Seleccionar imágenes (1/5)'), findsOneWidget);
+    expect(find.text('Galería (1/5)'), findsOneWidget);
 
     router.push('/temporal');
     await tester.pumpAndSettle();
@@ -945,7 +945,7 @@ void main() {
     );
     expect(_categoryValue(tester), 4);
     expect(find.text('Muebles'), findsOneWidget);
-    expect(find.text('Seleccionar imágenes (1/5)'), findsOneWidget);
+    expect(find.text('Galería (1/5)'), findsOneWidget);
     expect(find.byKey(const Key('selectedDonationImages')), findsOneWidget);
   });
 
@@ -992,7 +992,7 @@ void main() {
     await tester.pumpAndSettle();
     await _fillDraft(tester);
     expect(_categoryValue(tester), 4);
-    expect(find.text('Seleccionar imágenes (1/5)'), findsOneWidget);
+    expect(find.text('Galería (1/5)'), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -1004,7 +1004,7 @@ void main() {
     expect(_fieldText(tester, const Key('donationTitleField')), isEmpty);
     expect(_fieldText(tester, const Key('donationDescriptionField')), isEmpty);
     expect(_categoryValue(tester), isNull);
-    expect(find.text('Seleccionar imágenes (0/5)'), findsOneWidget);
+    expect(find.text('Galería (0/5)'), findsOneWidget);
     expect(find.byKey(const Key('selectedDonationImages')), findsNothing);
   });
 }
