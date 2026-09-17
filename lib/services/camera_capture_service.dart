@@ -1,17 +1,28 @@
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-enum CameraCaptureStatus { granted, denied, permanentlyDenied, error }
+enum CameraCaptureStatus {
+  granted,
+  cancelled,
+  denied,
+  permanentlyDenied,
+  restricted,
+  error,
+}
 
 class CameraCaptureResult {
   const CameraCaptureResult._({required this.status, this.image, this.message});
 
   const CameraCaptureResult.granted(XFile image)
     : this._(status: CameraCaptureStatus.granted, image: image);
+  const CameraCaptureResult.cancelled()
+    : this._(status: CameraCaptureStatus.cancelled);
   const CameraCaptureResult.denied()
     : this._(status: CameraCaptureStatus.denied);
   const CameraCaptureResult.permanentlyDenied()
     : this._(status: CameraCaptureStatus.permanentlyDenied);
+  const CameraCaptureResult.restricted()
+    : this._(status: CameraCaptureStatus.restricted);
   const CameraCaptureResult.error(String message)
     : this._(status: CameraCaptureStatus.error, message: message);
 
@@ -34,14 +45,21 @@ class PermissionCameraCaptureService implements CameraCaptureService {
   @override
   Future<CameraCaptureResult> capture() async {
     final status = await Permission.camera.status;
-    if (status.isPermanentlyDenied || status.isRestricted) {
+    if (status.isPermanentlyDenied) {
       return const CameraCaptureResult.permanentlyDenied();
     }
+    if (status.isRestricted) {
+      return const CameraCaptureResult.restricted();
+    }
+
     final permission = status.isGranted
         ? status
         : await Permission.camera.request();
-    if (permission.isPermanentlyDenied || permission.isRestricted) {
+    if (permission.isPermanentlyDenied) {
       return const CameraCaptureResult.permanentlyDenied();
+    }
+    if (permission.isRestricted) {
+      return const CameraCaptureResult.restricted();
     }
     if (!permission.isGranted) return const CameraCaptureResult.denied();
 
@@ -51,7 +69,7 @@ class PermissionCameraCaptureService implements CameraCaptureService {
         imageQuality: 85,
       );
       return image == null
-          ? const CameraCaptureResult.denied()
+          ? const CameraCaptureResult.cancelled()
           : CameraCaptureResult.granted(image);
     } catch (_) {
       return const CameraCaptureResult.error(

@@ -77,6 +77,16 @@ class ChatService {
     }
   }
 
+  Future<ChatMessage> sendLocation(
+    int chatId, {
+    required double latitude,
+    required double longitude,
+  }) {
+    final content =
+        'Ubicación aproximada: https://www.google.com/maps/search/?api=1&query=${latitude.toStringAsFixed(3)},${longitude.toStringAsFixed(3)}';
+    return sendMessage(chatId, content);
+  }
+
   Future<Map<String, dynamic>> _get(
     String path, {
     required int page,

@@ -18,4 +18,13 @@ class ChatRepository {
       _remote.listMessages(chatId);
   Future<ChatMessage> sendMessage(int chatId, String content) =>
       _remote.sendMessage(chatId, content);
+  Future<ChatMessage> sendLocation(
+    int chatId, {
+    required double latitude,
+    required double longitude,
+  }) => _remote.sendLocation(
+    chatId,
+    latitude: latitude,
+    longitude: longitude,
+  );
 }

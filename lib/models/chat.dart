@@ -86,6 +86,23 @@ class ChatMessage {
   final int remitenteId;
   final String remitenteNombre;
 
+  bool get isLocation => locationCoordinates != null;
+
+  ({double latitude, double longitude})? get locationCoordinates {
+    final match = _locationPattern.firstMatch(contenido);
+    if (match == null) return null;
+    final latitude = double.tryParse(match.group(1)!);
+    final longitude = double.tryParse(match.group(2)!);
+    if (latitude == null || longitude == null) return null;
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      return null;
+    }
+    return (latitude: latitude, longitude: longitude);
+  }
+
+  double? get latitude => locationCoordinates?.latitude;
+  double? get longitude => locationCoordinates?.longitude;
+
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     final sender = json['remitente'] as Map<String, dynamic>;
     return ChatMessage(
@@ -96,6 +113,10 @@ class ChatMessage {
       remitenteNombre: sender['nombreVisible'] as String,
     );
   }
+
+  static final RegExp _locationPattern = RegExp(
+    r'^Ubicación aproximada: https://www\.google\.com/maps/search/\?api=1&query=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$',
+  );
 }
 
 class ChatPage<T> {

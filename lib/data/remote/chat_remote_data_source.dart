@@ -14,4 +14,13 @@ class ChatRemoteDataSource {
       _service.listMessages(chatId);
   Future<ChatMessage> sendMessage(int chatId, String content) =>
       _service.sendMessage(chatId, content);
+  Future<ChatMessage> sendLocation(
+    int chatId, {
+    required double latitude,
+    required double longitude,
+  }) => _service.sendLocation(
+    chatId,
+    latitude: latitude,
+    longitude: longitude,
+  );
 }

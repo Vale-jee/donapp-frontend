@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>DonnaP necesita acceso a la cámara para tomar fotografías de los artículos que deseas donar.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>DonnaP usa tu ubicación únicamente cuando decides compartirla en un chat para coordinar la entrega de una donación.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

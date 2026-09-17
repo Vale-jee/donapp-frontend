@@ -267,9 +267,15 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
     switch (result.status) {
       case CameraCaptureStatus.granted:
         if (result.image != null) await _addSelectedImages([result.image!]);
+      case CameraCaptureStatus.cancelled:
+        return;
       case CameraCaptureStatus.denied:
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Permiso de cámara denegado. Puedes usar la galería.')),
+          const SnackBar(
+            content: Text(
+              'Permiso de cámara denegado. Puedes usar la galería.',
+            ),
+          ),
         );
       case CameraCaptureStatus.permanentlyDenied:
         final openSettings = await showDialog<bool>(
@@ -292,9 +298,22 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
           ),
         );
         if (openSettings == true) await _cameraCaptureService.openSettings();
+      case CameraCaptureStatus.restricted:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'El acceso a la cámara está restringido o no disponible. Puedes usar la galería.',
+            ),
+          ),
+        );
       case CameraCaptureStatus.error:
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.message ?? 'La cámara no está disponible. Puedes usar la galería.')),
+          SnackBar(
+            content: Text(
+              result.message ??
+                  'La cámara no está disponible. Puedes usar la galería.',
+            ),
+          ),
         );
     }
   }
