@@ -10,7 +10,8 @@ class ImagePickerGallery implements DonationGalleryPicker {
   final ImagePicker _picker;
 
   @override
-  Future<List<XFile>> pickImages() => _picker.pickMultiImage(imageQuality: 85);
+  Future<List<XFile>> pickImages() =>
+      _picker.pickMultiImage(imageQuality: 85, requestFullMetadata: false);
 
   @override
   Future<List<XFile>> retrieveLostImages() async {

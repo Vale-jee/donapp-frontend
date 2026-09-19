@@ -1,6 +1,6 @@
 {
-    "name": "donapp_mobile",
-    "short_name": "donapp_mobile",
+    "name": "DonApp",
+    "short_name": "DonApp",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

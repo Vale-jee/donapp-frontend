@@ -6,14 +6,15 @@ import 'package:donapp_mobile/services/chat_service.dart';
 import 'package:donapp_mobile/services/location_share_service.dart';
 import 'package:donapp_mobile/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('muestra conversaciones y abre el detalle', (tester) async {
     final service = _FakeChatService();
-    await tester.pumpWidget(_app(ChatsScreen(
-      chatRepository: ChatRepository.fromService(service),
-    )));
+    await tester.pumpWidget(
+      _app(ChatsScreen(chatRepository: ChatRepository.fromService(service))),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Vale'), findsOneWidget);
@@ -23,9 +24,9 @@ void main() {
 
   testWidgets('muestra estado vacío sin conversaciones', (tester) async {
     final service = _FakeChatService(empty: true);
-    await tester.pumpWidget(_app(ChatsScreen(
-      chatRepository: ChatRepository.fromService(service),
-    )));
+    await tester.pumpWidget(
+      _app(ChatsScreen(chatRepository: ChatRepository.fromService(service))),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('No tienes conversaciones'), findsOneWidget);
@@ -33,11 +34,15 @@ void main() {
 
   testWidgets('envía un mensaje y evita doble envío', (tester) async {
     final service = _FakeChatService();
-    await tester.pumpWidget(_app(ChatDetailScreen(
-      chatId: 7,
-      currentUserId: 1,
-      chatRepository: ChatRepository.fromService(service),
-    )));
+    await tester.pumpWidget(
+      _app(
+        ChatDetailScreen(
+          chatId: 7,
+          currentUserId: 1,
+          chatRepository: ChatRepository.fromService(service),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField), 'Hola');
@@ -49,22 +54,30 @@ void main() {
     expect(find.text('Hola'), findsOneWidget);
   });
 
-  testWidgets('comparte ubicación aproximada y la muestra como mensaje', (tester) async {
+  testWidgets('comparte ubicación, la recupera al reabrir y abre el mapa', (
+    tester,
+  ) async {
     final service = _FakeChatService();
     final location = _FakeLocationShareService(
       const LocationShareResult.granted(latitude: -0.1807, longitude: -78.4678),
     );
-    await tester.pumpWidget(_app(ChatDetailScreen(
-      chatId: 7,
-      currentUserId: 1,
-      chatRepository: ChatRepository.fromService(service),
-      locationShareService: location,
-    )));
+    await tester.pumpWidget(
+      _app(
+        ChatDetailScreen(
+          chatId: 7,
+          currentUserId: 1,
+          chatRepository: ChatRepository.fromService(service),
+          locationShareService: location,
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('shareChatLocationButton')));
     await tester.pumpAndSettle();
     expect(find.text('Compartir ubicación'), findsOneWidget);
+    expect(find.textContaining('DonApp usará'), findsOneWidget);
+    expect(location.requestCount, 0);
     await tester.tap(find.byKey(const Key('continueShareLocationButton')));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Confirmar ubicación'), findsOneWidget);
@@ -74,19 +87,61 @@ void main() {
     expect(service.locationSendCount, 1);
     expect(find.text('Ubicación'), findsOneWidget);
     expect(find.text('-0.181, -78.468'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(
+      _app(
+        ChatDetailScreen(
+          chatId: 7,
+          currentUserId: 1,
+          chatRepository: ChatRepository.fromService(service),
+          locationShareService: location,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Ubicación'), findsOneWidget);
+    expect(find.textContaining('Ubicación aproximada:'), findsNothing);
+    const channel = MethodChannel('plugins.flutter.io/url_launcher');
+    MethodCall? launched;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      call,
+    ) async {
+      launched = call;
+      return true;
+    });
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      ),
+    );
+    await tester.tap(find.text('Ubicación'));
+    await tester.pumpAndSettle();
+    expect(launched?.method, 'launch');
+    expect(
+      launched?.arguments['url'],
+      'https://www.google.com/maps/search/?api=1&query=-0.181,-78.468',
+    );
+    expect(launched?.arguments['useWebView'], false);
   });
 
-  testWidgets('degradación de ubicación denegada mantiene disponible el chat', (tester) async {
+  testWidgets('degradación de ubicación denegada mantiene disponible el chat', (
+    tester,
+  ) async {
     final service = _FakeChatService();
     final location = _FakeLocationShareService(
       const LocationShareResult.denied(),
     );
-    await tester.pumpWidget(_app(ChatDetailScreen(
-      chatId: 7,
-      currentUserId: 1,
-      chatRepository: ChatRepository.fromService(service),
-      locationShareService: location,
-    )));
+    await tester.pumpWidget(
+      _app(
+        ChatDetailScreen(
+          chatId: 7,
+          currentUserId: 1,
+          chatRepository: ChatRepository.fromService(service),
+          locationShareService: location,
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('shareChatLocationButton')));
@@ -94,7 +149,10 @@ void main() {
     await tester.tap(find.byKey(const Key('continueShareLocationButton')));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Permiso de ubicación denegado'), findsOneWidget);
+    expect(
+      find.textContaining('Permiso de ubicación denegado'),
+      findsOneWidget,
+    );
     expect(find.byType(TextField), findsOneWidget);
     expect(service.locationSendCount, 0);
   });
@@ -104,12 +162,16 @@ void main() {
     final location = _FakeLocationShareService(
       const LocationShareResult.permanentlyDenied(),
     );
-    await tester.pumpWidget(_app(ChatDetailScreen(
-      chatId: 7,
-      currentUserId: 1,
-      chatRepository: ChatRepository.fromService(service),
-      locationShareService: location,
-    )));
+    await tester.pumpWidget(
+      _app(
+        ChatDetailScreen(
+          chatId: 7,
+          currentUserId: 1,
+          chatRepository: ChatRepository.fromService(service),
+          locationShareService: location,
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('shareChatLocationButton')));
@@ -123,31 +185,40 @@ void main() {
     expect(location.appSettingsOpened, isTrue);
   });
 
-  testWidgets('servicio de ubicación apagado ofrece abrir ajustes de ubicación', (tester) async {
-    final service = _FakeChatService();
-    final location = _FakeLocationShareService(
-      const LocationShareResult.serviceDisabled(),
-    );
-    await tester.pumpWidget(_app(ChatDetailScreen(
-      chatId: 7,
-      currentUserId: 1,
-      chatRepository: ChatRepository.fromService(service),
-      locationShareService: location,
-    )));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'servicio de ubicación apagado ofrece abrir ajustes de ubicación',
+    (tester) async {
+      final service = _FakeChatService();
+      final location = _FakeLocationShareService(
+        const LocationShareResult.serviceDisabled(),
+      );
+      await tester.pumpWidget(
+        _app(
+          ChatDetailScreen(
+            chatId: 7,
+            currentUserId: 1,
+            chatRepository: ChatRepository.fromService(service),
+            locationShareService: location,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('shareChatLocationButton')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('continueShareLocationButton')));
-    await tester.pumpAndSettle();
-    expect(find.text('Ubicación desactivada'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('shareChatLocationButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('continueShareLocationButton')));
+      await tester.pumpAndSettle();
+      expect(find.text('Ubicación desactivada'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('openLocationSettingsButton')));
-    await tester.pumpAndSettle();
-    expect(location.locationSettingsOpened, isTrue);
-  });
+      await tester.tap(find.byKey(const Key('openLocationSettingsButton')));
+      await tester.pumpAndSettle();
+      expect(location.locationSettingsOpened, isTrue);
+    },
+  );
 
-  testWidgets('ubicación no disponible mantiene usable el chat', (tester) async {
+  testWidgets('ubicación no disponible mantiene usable el chat', (
+    tester,
+  ) async {
     final service = _FakeChatService();
     final location = _FakeLocationShareService(
       const LocationShareResult.unavailable(),
@@ -172,7 +243,43 @@ void main() {
     expect(find.textContaining('ubicación no está disponible'), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
     expect(service.locationSendCount, 0);
+    await tester.enterText(find.byType(TextField), 'Nos vemos en el parque');
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sendChatMessageButton')));
+    await tester.pumpAndSettle();
+    expect(service.sendCount, 1);
+    expect(find.text('Nos vemos en el parque'), findsOneWidget);
   });
+
+  testWidgets(
+    'cerrar el chat durante confirmación no actualiza estado descartado',
+    (tester) async {
+      final service = _FakeChatService();
+      await tester.pumpWidget(
+        _app(
+          ChatDetailScreen(
+            chatId: 7,
+            currentUserId: 1,
+            chatRepository: ChatRepository.fromService(service),
+            locationShareService: _FakeLocationShareService(
+              const LocationShareResult.granted(latitude: 1, longitude: 2),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('shareChatLocationButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('continueShareLocationButton')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Confirmar ubicación'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(service.locationSendCount, 0);
+    },
+  );
 }
 
 Widget _app(Widget child) => MaterialApp(theme: AppTheme.light, home: child);
@@ -258,9 +365,13 @@ class _FakeLocationShareService implements LocationShareService {
   final LocationShareResult result;
   bool appSettingsOpened = false;
   bool locationSettingsOpened = false;
+  int requestCount = 0;
 
   @override
-  Future<LocationShareResult> currentApproximateLocation() async => result;
+  Future<LocationShareResult> currentApproximateLocation() async {
+    requestCount++;
+    return result;
+  }
 
   @override
   Future<bool> openAppSettings() async {

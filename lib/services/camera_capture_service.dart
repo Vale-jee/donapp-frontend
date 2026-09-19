@@ -44,29 +44,30 @@ class PermissionCameraCaptureService implements CameraCaptureService {
 
   @override
   Future<CameraCaptureResult> capture() async {
-    final status = await Permission.camera.status;
-    if (status.isPermanentlyDenied) {
-      return const CameraCaptureResult.permanentlyDenied();
-    }
-    if (status.isRestricted) {
-      return const CameraCaptureResult.restricted();
-    }
-
-    final permission = status.isGranted
-        ? status
-        : await Permission.camera.request();
-    if (permission.isPermanentlyDenied) {
-      return const CameraCaptureResult.permanentlyDenied();
-    }
-    if (permission.isRestricted) {
-      return const CameraCaptureResult.restricted();
-    }
-    if (!permission.isGranted) return const CameraCaptureResult.denied();
-
     try {
+      final status = await Permission.camera.status;
+      if (status.isPermanentlyDenied) {
+        return const CameraCaptureResult.permanentlyDenied();
+      }
+      if (status.isRestricted) {
+        return const CameraCaptureResult.restricted();
+      }
+
+      final permission = status.isGranted
+          ? status
+          : await Permission.camera.request();
+      if (permission.isPermanentlyDenied) {
+        return const CameraCaptureResult.permanentlyDenied();
+      }
+      if (permission.isRestricted) {
+        return const CameraCaptureResult.restricted();
+      }
+      if (!permission.isGranted) return const CameraCaptureResult.denied();
+
       final image = await _picker.pickImage(
         source: ImageSource.camera,
         imageQuality: 85,
+        requestFullMetadata: false,
       );
       return image == null
           ? const CameraCaptureResult.cancelled()

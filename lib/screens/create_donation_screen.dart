@@ -152,7 +152,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
         widget.imageUploadRepository ?? ImageUploadRepository();
     _galleryPicker = widget.galleryPicker ?? ImagePickerGallery();
     _cameraCaptureService =
-      widget.cameraCaptureService ?? PermissionCameraCaptureService();
+        widget.cameraCaptureService ?? PermissionCameraCaptureService();
     _load();
   }
 
@@ -246,7 +246,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Tomar una foto'),
         content: const Text(
-          'DonnaP necesita acceso a la cámara para tomar fotografías de los artículos que deseas donar.',
+          'DonApp necesita acceso a la cámara para tomar fotografías de los artículos que deseas donar.',
         ),
         actions: [
           TextButton(
@@ -266,7 +266,18 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
     if (!mounted) return;
     switch (result.status) {
       case CameraCaptureStatus.granted:
-        if (result.image != null) await _addSelectedImages([result.image!]);
+        try {
+          if (result.image != null) await _addSelectedImages([result.image!]);
+        } on ApiException catch (error) {
+          if (mounted) setState(() => _submitError = error.message);
+        } catch (_) {
+          if (mounted) {
+            setState(
+              () => _submitError =
+                  'No pudimos agregar la foto. Puedes usar la galería.',
+            );
+          }
+        }
       case CameraCaptureStatus.cancelled:
         return;
       case CameraCaptureStatus.denied:
@@ -546,7 +557,9 @@ class _CreateDonationScreenState extends State<CreateDonationScreen> {
                                               ImageUploadRepository.maxImages
                                       ? null
                                       : _pickImages,
-                                  icon: const Icon(Icons.photo_library_outlined),
+                                  icon: const Icon(
+                                    Icons.photo_library_outlined,
+                                  ),
                                   label: Text('Galería (${_images.length}/5)'),
                                 ),
                               ),

@@ -26,6 +26,8 @@ DonApp es una aplicación móvil que conecta a personas que desean donar artícu
 - Detalle de donación.
 - Publicación completa con categorías obtenidas del backend.
 - Selección, validación y subida segura de imágenes.
+- Cámara para fotografiar artículos y galería mediante el selector del sistema.
+- Chat con mensajes y ubicación compartida que puede abrirse en el mapa.
 - Consulta de donaciones propias.
 - Solicitudes enviadas y recibidas, detalle y creación de solicitudes.
 - Aceptación, rechazo y cancelación de solicitudes.
@@ -70,13 +72,26 @@ Las pantallas consumen repositorios que coordinan fuentes locales y remotas (`UI
 ## Funcionalidades futuras
 
 - Búsqueda textual completa.
-- Chat.
 - Calificaciones.
 - Recuperación de contraseña.
 
 ## Requisitos y ejecución
 
 Se necesita Flutter compatible con la restricción de Dart declarada en `pubspec.yaml`, Android SDK, un dispositivo o emulador y el backend de DonApp en ejecución.
+
+Con el SDK Flutter usado en esta revisión, Android compila con API 36, apunta a API 36 y requiere como mínimo API 24. Gradle conserva los valores proporcionados por Flutter.
+
+### Cámara y ubicación
+
+En Crear donación, pulse **Tomar foto** y confirme la explicación de DonApp antes de solicitar el permiso. Cancelar la captura vuelve al formulario sin error. Si se deniega el permiso o la cámara no está disponible, puede usar **Galería**; una denegación permanente ofrece **Abrir ajustes**. La galería usa el selector del sistema, sin pedir acceso amplio a fotos ni metadatos completos. Las fotos de cámara entran en la misma validación, copia local, outbox y sincronización que las seleccionadas.
+
+En el chat, pulse compartir ubicación, lea la explicación y confirme las coordenadas antes de enviarlas. Se solicita una posición con `LocationAccuracy.high` y se conserva el redondeo a tres decimales. No hay seguimiento en segundo plano. Si el permiso se deniega, escriba el punto de encuentro; si está bloqueado, use **Abrir ajustes**; si el servicio está apagado, use **Activar ubicación**. El chat sigue disponible ante fallos de ubicación.
+
+La ubicación se guarda como mensaje mediante la API de chat existente y se recupera al reabrir la conversación con conexión. La tarjeta muestra **Ubicación** y abre un mapa externo. El prefijo interno `Ubicación aproximada:` se conserva para leer mensajes anteriores. El chat no tiene outbox ni soporte offline nuevo.
+
+Android declara cámara y ubicación aproximada/precisa, sin ubicación en segundo plano ni permisos amplios de almacenamiento. iOS incluye las explicaciones de cámara, ubicación al usar la app y selección de fotos; `requestFullMetadata: false` evita solicitar permiso amplio de fototeca. El proyecto iOS usa Swift Package Manager; `permission_handler` detecta los permisos desde `Info.plist` al compilar con Flutter. La compilación y los diálogos reales de iOS deben verificarse en un Mac/dispositivo iOS.
+
+Para la entrega en Android físico, use el comando USB de abajo y compruebe: captura y cancelación, denegación y bloqueo de permisos, galería como alternativa, ubicación apagada, envío y reapertura del chat, y apertura del mapa. Las pruebas automatizadas usan dobles de plugins y no sustituyen esta comprobación física.
 
 Instale las dependencias y verifique el proyecto:
 

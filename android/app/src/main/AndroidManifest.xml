@@ -6,7 +6,7 @@
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
-        android:label="donapp_mobile"
+        android:label="DonApp"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="false"

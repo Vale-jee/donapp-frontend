@@ -66,8 +66,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       if (!mounted) return;
       setState(() {
         _chat = results[0] as Chat;
-        _messages = (results[1] as ChatPage<ChatMessage>).items.reversed
-            .toList(growable: false);
+        _messages = (results[1] as ChatPage<ChatMessage>).items.reversed.toList(
+          growable: false,
+        );
         _loading = false;
       });
       _scrollToEnd();
@@ -107,14 +108,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     setState(() => _sending = true);
     try {
       await widget.chatRepository.sendMessage(widget.chatId, content);
+      if (!mounted) return;
       _messageController.clear();
       await _refreshMessages();
     } on ApiException catch (error) {
       if (mounted) {
         setState(() => _sending = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
       }
     } catch (_) {
       if (mounted) {
@@ -145,7 +146,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Compartir ubicación'),
         content: const Text(
-          'DonnaP usará tu ubicación solo esta vez para compartirla en este chat y facilitar la coordinación de la entrega.',
+          'DonApp usará tu ubicación solo esta vez para compartirla en este chat y facilitar la coordinación de la entrega.',
         ),
         actions: [
           TextButton(
@@ -175,7 +176,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           return;
         }
         final confirmed = await _confirmLocation(latitude, longitude);
-        if (confirmed != true || !mounted) {
+        if (!mounted) return;
+        if (confirmed != true) {
           setState(() => _sharingLocation = false);
           return;
         }
@@ -268,9 +270,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     } on ApiException catch (error) {
       if (mounted) {
         setState(() => _sharingLocation = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
       }
     } catch (_) {
       if (mounted) {
@@ -337,7 +338,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   void _showLocationError(String message) {
     if (!mounted) return;
     setState(() => _sharingLocation = false);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _openMap(ChatMessage message) async {
@@ -347,7 +349,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     final uri = Uri.parse(
       'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude',
     );
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    bool opened;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      opened = false;
+    }
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No pudimos abrir el mapa.')),
@@ -553,9 +560,8 @@ class _LocationMessageCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     '${message.latitude!.toStringAsFixed(3)}, ${message.longitude!.toStringAsFixed(3)}',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: textColor),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: textColor),
                   ),
                   const SizedBox(height: 6),
                   Text(

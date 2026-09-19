@@ -380,10 +380,27 @@ Se conservan fotoPerfil, telefono, descripcion de categoría, imagenPrincipal, r
 
 api_json.dart conserva validaciones de dominio: enteros sin convertir decimales, cadenas obligatorias no vacías y timestamps de donaciones con zona explícita convertidos a UTC sin perder microsegundos. Perfil y solicitudes mantienen DateTime.parse sin conversión UTC adicional. Los enums desconocidos se rechazan. Los errores de tipo/valor se normalizan a FormatException para mantener el manejo actual de los servicios. fromMutationJson conserva puedeSolicitar=false; fromJson del detalle exige el booleano. La firma de subida mantiene sus restricciones de HTTPS, host, ruta, carpeta y formatos.
 
-Quedan fuera Drift y sus codecs de persistencia, entidades/estados locales, StoredTokens, SessionRestoreResult, excepciones, estados de UI y sincronización, y cachedLocalPath (excluido en ambas direcciones con JsonKey). No hay modelos de red implementados de chats/calificaciones; sus pantallas no consumen contratos adicionales. Los cuerpos de petición construidos como mapas en servicios y el sobre success/data no son clases de modelo; permanecen sin cambios. Tampoco se migra el parsing de respuesta externa de Cloudinary. No quedan casos dudosos pendientes dentro del inventario actual.
+Quedan fuera Drift y sus codecs de persistencia, entidades/estados locales, StoredTokens, SessionRestoreResult, excepciones, estados de UI y sincronización, y cachedLocalPath (excluido en ambas direcciones con JsonKey). El chat añadido posteriormente usa los modelos de chat.dart y conserva su parsing manual; no forma parte de esta migración. Los cuerpos de petición construidos como mapas en servicios y el sobre success/data no son clases de modelo; permanecen sin cambios. Tampoco se migra el parsing de respuesta externa de Cloudinary.
 
 Generación: `dart run build_runner build --delete-conflicting-outputs`. La versión instalada advierte que ese flag ya se ignora; genera correctamente los siete archivos .g.dart. Se versionan los generados y no se editan manualmente. La generación mantiene sin cambios los archivos de Drift y no requiere modificar repositories/data sources.
 
+
+## Cámara y ubicación en chat
+
+| Acción | Permiso y alternativa | Destino de los datos |
+| --- | --- | --- |
+| Tomar foto al crear donación | Explicación de DonApp antes de pedir cámara. Cancelar no es denegar. Denegación/restricción/error permiten Galería; bloqueo permanente ofrece Abrir ajustes. | La foto se valida y entra en la lista existente; al publicar se copia al almacenamiento local y se encola mediante DonationRepository. SyncCoordinator conserva su subida y creación habituales. |
+| Galería | Selector del sistema, sin petición de permiso amplio de fotos/almacenamiento; no solicita metadatos completos. | Mismo flujo de imágenes y outbox que la cámara. |
+| Compartir ubicación | Solo por acción explícita, con explicación y confirmación. Comprueba servicio y permiso por separado; precisión solicitada alta, espera máxima 15 s y redondeo existente a tres decimales. | ChatRepository → ChatRemoteDataSource → ChatService → POST /api/chats/{id}/mensajes. No hay seguimiento continuo ni outbox de chat. |
+| Reabrir chat / tocar ubicación | Reabrir consulta los mensajes con conexión; tocar la tarjeta abre Google Maps mediante url_launcher. Si no puede abrirlo, informa sin bloquear el chat. | Conserva el texto serializado `Ubicación aproximada:` para reconocer mensajes anteriores; el rótulo visible es Ubicación. |
+
+Si se deniega ubicación, puede escribirse el punto de encuentro manualmente. Un bloqueo permanente ofrece **Abrir ajustes** de la app; servicio apagado ofrece **Activar ubicación** en ajustes de ubicación. Si no está disponible o falla, puede seguir enviando mensajes.
+
+Android mantiene INTERNET, CAMERA, ACCESS_COARSE_LOCATION y ACCESS_FINE_LOCATION, sin permisos de ubicación en segundo plano ni almacenamiento amplio. El SDK Flutter revisado proporciona compile/target 36 y mínimo 24; no se cambiaron esos valores. iOS mantiene las explicaciones DonApp de cámara y ubicación al usar la app e incluye la descripción de selección de fotos exigida por image_picker. Cámara y galería usan `requestFullMetadata: false`.
+
+Las pruebas verifican cámara concedida/cancelada/denegada/bloqueada/restringida/no disponible, consulta de permisos fallida, alternativas de galería, ubicación compartida y sus degradaciones, reapertura con mensajes guardados y solicitud de apertura del mapa. Son pruebas automatizadas con dobles de plataforma; la ejecución física de los diálogos, GPS y aplicaciones externas se comprueba con el procedimiento del README. La compilación iOS requiere macOS y sigue pendiente de esa verificación.
+
+En la revisión del 19 de septiembre de 2026 pasaron 72 pruebas focalizadas y las 680 de la suite completa; `flutter analyze` no informó problemas. Se compiló el APK debug y se verificaron su nombre DonApp, compile/target 36, mínimo 24 y permisos combinados sin ubicación en segundo plano ni almacenamiento amplio. Esta revisión no incluye una nueva prueba física de cámara/GPS ni una compilación iOS.
 
 ## Acceso a datos mediante repositories y data sources
 
@@ -406,12 +423,13 @@ Las pantallas reciben repositories por constructor. Los repositories remotos
 | Login y registro | AuthRepository | AuthRemoteDataSource | Login guarda tokens mediante SessionRepository y SessionLocalDataSource. |
 | Perfil y restauración de sesión | ProfileRepository | ProfileRemoteDataSource | SessionRepository lee los tokens cifrados. El perfil mostrado en inicio sigue siendo el estado de sesión, sin nueva caché. |
 | Renovación y logout | AuthRepository, SessionRepository | AuthRemoteDataSource | SessionLocalDataSource delega en TokenStorage/FlutterSecureStorage. |
+| Conversaciones, mensajes y ubicación compartida | ChatRepository | ChatRemoteDataSource y ChatService | Persistencia remota de mensajes; sin outbox de chat. |
 
 Antes de esta separación, solo la variante con caché de Explore utilizaba
 Repository y RemoteDataSource. Su alternativa remota y las demás pantallas
 llamaban servicios directamente. No había pantallas que usaran solo un
-RemoteDataSource sin Repository. No hay flujos de chat o calificaciones con
-acceso remoto implementado que requieran nuevas capas.
+RemoteDataSource sin Repository. El chat incorporado posteriormente usa
+ChatRepository → ChatRemoteDataSource → ChatService; las calificaciones siguen pendientes.
 
 SessionCoordinator conserva la coordinación de restauración, renovación y
 logout; sus operaciones remotas y de tokens pasan por los repositories.

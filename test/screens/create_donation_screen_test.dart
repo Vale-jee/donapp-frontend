@@ -1008,7 +1008,9 @@ void main() {
     expect(find.text('Galería (0/5)'), findsOneWidget);
     expect(find.byKey(const Key('selectedDonationImages')), findsNothing);
   });
-  testWidgets('cámara agrega la foto capturada al mismo flujo de imágenes', (tester) async {
+  testWidgets('cámara agrega la foto capturada al mismo flujo de imágenes', (
+    tester,
+  ) async {
     final camera = _FakeCameraCaptureService(
       CameraCaptureResult.granted(_image('camera.jpg')),
     );
@@ -1017,9 +1019,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.byKey(const Key('takeDonationPhotoButton')));
+    await tester.ensureVisible(
+      find.byKey(const Key('takeDonationPhotoButton')),
+    );
     await tester.tap(find.byKey(const Key('takeDonationPhotoButton')));
     await tester.pumpAndSettle();
+    expect(find.textContaining('DonApp necesita'), findsOneWidget);
+    expect(camera.captureCount, 0);
     await tester.tap(find.text('Continuar'));
     await tester.pumpAndSettle();
 
@@ -1027,7 +1033,9 @@ void main() {
     expect(find.text('Galería (1/5)'), findsOneWidget);
   });
 
-  testWidgets('cancelar la cámara vuelve al formulario sin mostrar error', (tester) async {
+  testWidgets('cancelar la cámara vuelve al formulario sin mostrar error', (
+    tester,
+  ) async {
     final camera = _FakeCameraCaptureService(
       const CameraCaptureResult.cancelled(),
     );
@@ -1036,7 +1044,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.byKey(const Key('takeDonationPhotoButton')));
+    await tester.ensureVisible(
+      find.byKey(const Key('takeDonationPhotoButton')),
+    );
     await tester.tap(find.byKey(const Key('takeDonationPhotoButton')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continuar'));
@@ -1046,7 +1056,9 @@ void main() {
     expect(find.textContaining('Permiso de cámara'), findsNothing);
   });
 
-  testWidgets('denegación de cámara mantiene disponible la galería', (tester) async {
+  testWidgets('denegación de cámara mantiene disponible la galería', (
+    tester,
+  ) async {
     final camera = _FakeCameraCaptureService(
       const CameraCaptureResult.denied(),
     );
@@ -1055,7 +1067,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.byKey(const Key('takeDonationPhotoButton')));
+    await tester.ensureVisible(
+      find.byKey(const Key('takeDonationPhotoButton')),
+    );
     await tester.tap(find.byKey(const Key('takeDonationPhotoButton')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continuar'));
@@ -1065,7 +1079,9 @@ void main() {
     expect(find.byKey(const Key('pickDonationImagesButton')), findsOneWidget);
   });
 
-  testWidgets('denegación permanente de cámara ofrece abrir ajustes', (tester) async {
+  testWidgets('denegación permanente de cámara ofrece abrir ajustes', (
+    tester,
+  ) async {
     final camera = _FakeCameraCaptureService(
       const CameraCaptureResult.permanentlyDenied(),
     );
@@ -1074,7 +1090,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.byKey(const Key('takeDonationPhotoButton')));
+    await tester.ensureVisible(
+      find.byKey(const Key('takeDonationPhotoButton')),
+    );
     await tester.tap(find.byKey(const Key('takeDonationPhotoButton')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continuar'));
@@ -1086,7 +1104,9 @@ void main() {
     expect(camera.openSettingsCount, 1);
   });
 
-  testWidgets('cámara restringida degrada a galería sin mandar a ajustes', (tester) async {
+  testWidgets('cámara restringida degrada a galería sin mandar a ajustes', (
+    tester,
+  ) async {
     final camera = _FakeCameraCaptureService(
       const CameraCaptureResult.restricted(),
     );
@@ -1095,7 +1115,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.byKey(const Key('takeDonationPhotoButton')));
+    await tester.ensureVisible(
+      find.byKey(const Key('takeDonationPhotoButton')),
+    );
     await tester.tap(find.byKey(const Key('takeDonationPhotoButton')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continuar'));
@@ -1106,6 +1128,37 @@ void main() {
     expect(find.byKey(const Key('pickDonationImagesButton')), findsOneWidget);
   });
 
+  testWidgets('cámara no disponible conserva galería y formulario', (
+    tester,
+  ) async {
+    final camera = _FakeCameraCaptureService(
+      const CameraCaptureResult.error(
+        'La cámara no está disponible. Puedes usar la galería.',
+      ),
+    );
+    await tester.pumpWidget(
+      _app(
+        picker: _Picker([_image('gallery.jpg')]),
+        cameraCaptureService: camera,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const Key('takeDonationPhotoButton')),
+    );
+    await tester.tap(find.byKey(const Key('takeDonationPhotoButton')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continuar'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('cámara no está disponible'), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const Key('pickDonationImagesButton')),
+    );
+    await tester.tap(find.byKey(const Key('pickDonationImagesButton')));
+    await tester.pumpAndSettle();
+    expect(find.text('Galería (1/5)'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<void> _fillDraft(WidgetTester tester) async {
@@ -1125,8 +1178,6 @@ Future<void> _fillDraft(WidgetTester tester) async {
   await tester.ensureVisible(picker);
   await tester.tap(picker);
   await tester.pumpAndSettle();
-
-
 }
 
 String _fieldText(WidgetTester tester, Key key) => tester
