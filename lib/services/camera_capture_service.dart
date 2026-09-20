@@ -46,13 +46,12 @@ class PermissionCameraCaptureService implements CameraCaptureService {
   Future<CameraCaptureResult> capture() async {
     try {
       final status = await Permission.camera.status;
-      if (status.isPermanentlyDenied) {
-        return const CameraCaptureResult.permanentlyDenied();
-      }
       if (status.isRestricted) {
         return const CameraCaptureResult.restricted();
       }
 
+      // Android puede conservar un historial de denegación tras limpiar los
+      // flags con ADB. Decide el bloqueo por el resultado de la solicitud.
       final permission = status.isGranted
           ? status
           : await Permission.camera.request();

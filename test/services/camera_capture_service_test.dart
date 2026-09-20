@@ -47,7 +47,48 @@ void main() {
         .capture();
     expect(result.status, CameraCaptureStatus.granted);
     expect(calls, ['checkPermissionStatus', 'requestPermissions']);
+    expect(picker.source, ImageSource.camera);
   });
+
+  test(
+    'historial bloqueado previo no impide solicitar un permiso limpio',
+    () async {
+      status = PermissionStatus.permanentlyDenied;
+      requested = PermissionStatus.granted;
+      final result = await PermissionCameraCaptureService(picker: picker)
+          .capture();
+      expect(calls, ['checkPermissionStatus', 'requestPermissions']);
+      expect(result.status, CameraCaptureStatus.granted);
+      expect(picker.source, ImageSource.camera);
+    },
+  );
+
+  test('denegación normal tras historial previo no ofrece ajustes', () async {
+    status = PermissionStatus.permanentlyDenied;
+    requested = PermissionStatus.denied;
+    final result = await PermissionCameraCaptureService(picker: picker)
+        .capture();
+    expect(calls, ['checkPermissionStatus', 'requestPermissions']);
+    expect(result.status, CameraCaptureStatus.denied);
+    expect(picker.source, isNull);
+  });
+
+  test(
+    'request bloqueado ofrece estado permanente y ajustes por acción explícita',
+    () async {
+      status = PermissionStatus.denied;
+      requested = PermissionStatus.permanentlyDenied;
+      final service = PermissionCameraCaptureService(picker: picker);
+      expect(
+        (await service.capture()).status,
+        CameraCaptureStatus.permanentlyDenied,
+      );
+      expect(calls, ['checkPermissionStatus', 'requestPermissions']);
+      expect(picker.source, isNull);
+      expect(await service.openSettings(), isTrue);
+      expect(calls.last, 'openAppSettings');
+    },
+  );
 
   test('cancelación del selector no es denegación', () async {
     picker.image = null;
@@ -70,6 +111,12 @@ void main() {
         entry.value,
       );
       expect(picker.source, isNull);
+      expect(
+        calls,
+        entry.key == PermissionStatus.restricted
+            ? ['checkPermissionStatus']
+            : ['checkPermissionStatus', 'requestPermissions'],
+      );
     });
   }
 
