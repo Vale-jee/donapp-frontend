@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:donapp_mobile/data/local/app_database.dart';
 import 'package:donapp_mobile/data/local/donation_local_data_source.dart';
@@ -44,6 +45,173 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  for (final useOfflineFactory in [true, false]) {
+    testWidgets(
+      'Mis donaciones usa id remoto 731 y servicio configurado, con caché ${useOfflineFactory ? 'offline' : 'inyectada'}',
+      (tester) async {
+        const remoteId = 731;
+        final db = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(db.close);
+        final local = DonationLocalDataSource(db);
+        var offlineRequests = 0;
+        final cachedRepository = DonationRepository(
+          local,
+          DonationRemoteDataSource(
+            DonationService(
+              apiClient: ApiClient(
+                endpointBuilder: (path) =>
+                    Uri.parse('https://offline.test$path'),
+                client: MockClient((_) async {
+                  offlineRequests++;
+                  return http.Response('{"success":false,"status":404}', 404);
+                }),
+              ),
+            ),
+            _EmptyCategoryService(),
+          ),
+        );
+        final data = <String, dynamic>{
+          'id': remoteId,
+          'titulo': 'Mesa sincronizada',
+          'descripcion': 'Mesa de madera en buen estado.',
+          'ciudad': 'Bogotá',
+          'estado': 'PUBLICADA',
+          'createdAt': '2026-09-01T12:00:00Z',
+          'updatedAt': '2026-09-01T12:00:00Z',
+          'categoria': {'id': 4, 'nombre': 'Muebles'},
+          'imagenes': <Object>[],
+          'puedeSolicitar': false,
+        };
+        DonationPage ownPage() => DonationPage.fromJson({
+          'donaciones': [
+            {...data, 'imagenPrincipal': null, 'cantidadImagenes': 0},
+          ],
+          'pagination': {'page': 1, 'limit': 20, 'total': 1, 'totalPages': 1},
+        });
+        await local.storeExplorePage(
+          cacheUserId: 1,
+          page: ownPage(),
+          categoryId: null,
+          syncedAt: DateTime.utc(2026, 9),
+          expiresAt: DateTime.utc(2026, 10),
+        );
+        final stored = await db.select(db.localDonations).getSingle();
+        expect(stored.localId, isNot(remoteId));
+        expect(stored.remoteId, remoteId);
+        expect(stored.clientId, 'remote-$remoteId');
+        expect(
+          (await tester.runAsync(
+            () => cachedRepository.watchExplore(cacheUserId: 1).first,
+          ))!.single.id,
+          remoteId,
+        );
+
+        final detailPaths = <String>[];
+        final patchPaths = <String>[];
+        final service = DonationService(
+          tokenStorage: _ExpiringTokenStorage(),
+          apiClient: ApiClient(
+            endpointBuilder: (path) =>
+                Uri.parse('https://configured.test$path'),
+            client: MockClient((request) async {
+              expect(request.url.host, 'configured.test');
+              expect(request.headers['Authorization'], 'Bearer old-access');
+              if (request.url.path == '/api/donaciones/mias') {
+                return http.Response(
+                  jsonEncode({'success': true, 'data': ownPage().toJson()}),
+                  200,
+                );
+              }
+              if (request.method == 'PATCH') {
+                patchPaths.add(request.url.path);
+                expect(jsonDecode(request.body), {
+                  'titulo': 'Mesa editada Samsung',
+                });
+                data['titulo'] = 'Mesa editada Samsung';
+                data['updatedAt'] = '2026-09-28T12:00:00Z';
+              } else {
+                detailPaths.add(request.url.path);
+              }
+              expect(request.url.path, '/api/donaciones/$remoteId');
+              return http.Response(
+                jsonEncode({
+                  'success': true,
+                  'data': {'donacion': data},
+                }),
+                200,
+              );
+            }),
+          ),
+        );
+        final harness = await _pumpAuthenticatedRouter(
+          tester,
+          AppRoutes.myDonations,
+          _ValidSessionCoordinator(),
+          donationService: service,
+          offlineRepository: useOfflineFactory ? () => cachedRepository : null,
+          donationRepository: useOfflineFactory ? null : cachedRepository,
+          categoryService: _EmptyCategoryService(),
+        );
+        await tester.tap(find.byKey(const ValueKey('myDonationCard-731')));
+        await tester.pumpAndSettle();
+        expect(harness.router.state.uri.path, '/donaciones/$remoteId');
+        expect(detailPaths, ['/api/donaciones/$remoteId']);
+        expect(
+          detailPaths,
+          isNot(contains('/api/donaciones/${stored.localId}')),
+        );
+        expect(find.text('Detalle de donación'), findsOneWidget);
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics &&
+                widget.properties.label ==
+                    'La donación Mesa sincronizada no tiene imágenes',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Editar'), findsOneWidget);
+        expect(offlineRequests, 0);
+
+        await tester.tap(find.text('Editar'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const Key('editDonationTitle')),
+          'Mesa editada Samsung',
+        );
+        await tester.ensureVisible(find.byKey(const Key('saveDonationButton')));
+        await tester.tap(find.byKey(const Key('saveDonationButton')));
+        await tester.pumpAndSettle();
+        expect(patchPaths, ['/api/donaciones/$remoteId']);
+        expect(
+          find.text('Donación actualizada correctamente.'),
+          findsOneWidget,
+        );
+        expect(find.text('Mesa editada Samsung'), findsOneWidget);
+        final after = await db.select(db.localDonations).getSingle();
+        expect(after.localId, stored.localId);
+        expect(after.remoteId, remoteId);
+        expect(after.clientId, stored.clientId);
+        expect(after.title, 'Mesa editada Samsung');
+        expect(await db.select(db.pendingOperations).get(), isEmpty);
+        expect(offlineRequests, 0);
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.byType(MyDonationsScreen), findsOneWidget);
+        expect(find.text('Mesa editada Samsung'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('myDonationCard-731')));
+        await tester.pumpAndSettle();
+        expect(detailPaths, [
+          '/api/donaciones/$remoteId',
+          '/api/donaciones/$remoteId',
+        ]);
+        expect(find.text('Mesa editada Samsung'), findsOneWidget);
+        expect(offlineRequests, 0);
+      },
+    );
+  }
+
   testWidgets('/ reconstruye SessionGate sin datos previos', (tester) async {
     await _pumpRoute(
       tester,
@@ -1066,6 +1234,7 @@ _pumpAuthenticatedRouter(
   TokenStorage? tokenStorage,
   DonationService? donationService,
   DonationRepository? donationRepository,
+  DonationRepository? Function()? offlineRepository,
   RequestService? requestService,
   CategoryService? categoryService,
   ImageUploadService? imageUploadService,
@@ -1081,6 +1250,7 @@ _pumpAuthenticatedRouter(
     tokenStorage: tokenStorage,
     donationService: donationService,
     donationRepository: donationRepository,
+    offlineRepository: offlineRepository,
     requestService: requestService,
     categoryService: categoryService,
     imageUploadService: imageUploadService,

@@ -31,20 +31,27 @@ class DonationRepository {
     this.cachePolicy = const LocalCachePolicy(),
     this.imageCache,
     this.onQueued,
+    this.onConfirmedUpdate,
   }) : _clock = clock ?? DateTime.now;
 
-  DonationRepository.remote({DonationRemoteDataSource? remote})
-    : _local = null,
-      _remote =
-          remote ??
-          DonationRemoteDataSource(DonationService(), const CategoryService()),
-      _clock = DateTime.now,
-      cachePolicy = const LocalCachePolicy(),
-      imageCache = null;
-  factory DonationRepository.fromService(DonationService service) =>
-      DonationRepository.remote(
-        remote: DonationRemoteDataSource(service, const CategoryService()),
-      );
+  DonationRepository.remote({
+    DonationRemoteDataSource? remote,
+    this.onConfirmedUpdate,
+  }) : _local = null,
+       _remote =
+           remote ??
+           DonationRemoteDataSource(DonationService(), const CategoryService()),
+       _clock = DateTime.now,
+       cachePolicy = const LocalCachePolicy(),
+       imageCache = null;
+  factory DonationRepository.fromService(
+    DonationService service, {
+    Future<void> Function(int cacheUserId, DonationDetail donation)?
+    onConfirmedUpdate,
+  }) => DonationRepository.remote(
+    remote: DonationRemoteDataSource(service, const CategoryService()),
+    onConfirmedUpdate: onConfirmedUpdate,
+  );
   factory DonationRepository.create({
     DonationService? donationService,
     CategoryService? categoryService,
@@ -67,6 +74,12 @@ class DonationRepository {
   final RemoteImageCache? imageCache;
   AppDatabase? _ownedDatabase;
   void Function()? onQueued;
+  final Future<void> Function(int cacheUserId, DonationDetail donation)?
+  onConfirmedUpdate;
+  // Session-scoped confirmed mutations also update lists on navigation back,
+  // without requiring another network request to render a successful write.
+  final Map<int, DonationDetail> _confirmedUpdates = {};
+  DonationDetail? confirmedUpdate(int id) => _confirmedUpdates[id];
 
   Future<List<Category>> getLocalFirstCategories() async {
     final cached = await _local!.watchCategories().first;
@@ -195,6 +208,58 @@ class DonationRepository {
     int limit = 20,
     DonationStatus? status,
   }) => _remote.getOwnDonations(page: page, limit: limit, status: status);
+  // Detail has no owner id. Only the authenticated own-list proves ownership;
+  // puedeSolicitar == false is not an ownership signal.
+  Future<bool> canEditDonation(int id) async {
+    var page = 1;
+    while (true) {
+      final result = await getOwnDonations(
+        page: page,
+        limit: 100,
+        status: DonationStatus.publicada,
+      );
+      if (result.donations.any(
+        (item) => item.id == id && item.estado == DonationStatus.publicada,
+      )) {
+        return true;
+      }
+      if (!result.pagination.hasNextPage) return false;
+      page++;
+    }
+  }
+
+  Future<DonationDetail> updateDonation(
+    int id, {
+    required int cacheUserId,
+    String? title,
+    String? description,
+    int? categoryId,
+  }) async {
+    final updated = await _remote.updateDonation(
+      id,
+      title: title,
+      description: description,
+      categoryId: categoryId,
+    );
+    // No optimistic write or UPDATE outbox: a failed PATCH leaves cache intact.
+    await cacheConfirmedUpdate(cacheUserId: cacheUserId, donation: updated);
+    await onConfirmedUpdate?.call(cacheUserId, updated);
+    _confirmedUpdates[id] = updated;
+    return updated;
+  }
+
+  // Apply a server-confirmed mutation without issuing any remote request or
+  // changing which service is responsible for list/detail/PATCH requests.
+  Future<void> cacheConfirmedUpdate({
+    required int cacheUserId,
+    required DonationDetail donation,
+  }) async {
+    await _local?.storeConfirmedUpdate(
+      cacheUserId: cacheUserId,
+      donation: donation,
+    );
+  }
+
   Future<DonationDetail> createDonation({
     String? clientId,
     required String title,

@@ -50,6 +50,33 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
     super.dispose();
   }
 
+  Future<void> _openDonation(int id) async {
+    await context.push(AppRoutes.donationDetailLocation(id));
+    if (!mounted) return;
+    setState(() {
+      _donations = _donations
+          .map((item) {
+            final updated = _service.confirmedUpdate(item.id);
+            if (updated == null || updated.updatedAt.isBefore(item.updatedAt)) {
+              return item;
+            }
+            return DonationListItem(
+              id: updated.id,
+              titulo: updated.titulo,
+              ciudad: updated.ciudad,
+              estado: updated.estado,
+              createdAt: updated.createdAt,
+              updatedAt: updated.updatedAt,
+              categoriaId: updated.categoriaId,
+              categoriaNombre: updated.categoriaNombre,
+              imagenPrincipal: updated.imagenes.firstOrNull,
+              cantidadImagenes: updated.imagenes.length,
+            );
+          })
+          .toList(growable: false);
+    });
+  }
+
   void _onScroll() {
     if (_scrollController.position.extentAfter < 240) _loadNextPage();
   }
@@ -290,9 +317,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
                             subtitle: donation.cantidadImagenes == 1
                                 ? '1 imagen'
                                 : '${donation.cantidadImagenes} imágenes',
-                            onTap: () => context.push(
-                              AppRoutes.donationDetailLocation(donation.id),
-                            ),
+                            onTap: () => _openDonation(donation.id),
                           ),
                         );
                       } else if (_loadingMore &&

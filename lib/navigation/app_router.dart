@@ -144,6 +144,15 @@ GoRouter createAppRouter({
       donationRepository != null ||
       (donationService == null && categoryService == null);
 
+  final remoteDonations = DonationRepository.fromService(
+    effectiveDonationService,
+    onConfirmedUpdate: (cacheUserId, updated) async {
+      if (authState.profile?.id != cacheUserId) return;
+      await (offlineRepository?.call() ?? donationRepository)
+          ?.cacheConfirmedUpdate(cacheUserId: cacheUserId, donation: updated);
+    },
+  );
+
   return GoRouter(
     initialLocation: initialLocation,
     refreshListenable: authState,
@@ -307,11 +316,8 @@ GoRouter createAppRouter({
       ),
       GoRoute(
         path: AppRoutes.myDonations,
-        builder: (context, state) => MyDonationsScreen(
-          donationRepository: DonationRepository.fromService(
-            effectiveDonationService,
-          ),
-        ),
+        builder: (context, state) =>
+            MyDonationsScreen(donationRepository: remoteDonations),
       ),
       GoRoute(
         path: AppRoutes.sentRequests,
@@ -350,9 +356,11 @@ GoRouter createAppRouter({
           if (id == null || id <= 0) return const _InvalidDonationRoute();
           return DonationDetailScreen(
             donationId: id,
-            donationRepository: DonationRepository.fromService(
-              effectiveDonationService,
+            cacheUserId: authState.profile!.id,
+            categoryRepository: CategoryRepository.fromService(
+              effectiveCategoryService,
             ),
+            donationRepository: remoteDonations,
             requestRepository: RequestRepository.fromService(
               effectiveRequestService,
             ),

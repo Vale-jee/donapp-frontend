@@ -31,6 +31,18 @@ class DonationRemoteDataSource {
     limit: limit,
     status: status,
   );
+  Future<DonationDetail> updateDonation(
+    int id, {
+    String? title,
+    String? description,
+    int? categoryId,
+  }) => _donationService.updateDonation(
+    id,
+    title: title,
+    description: description,
+    categoryId: categoryId,
+  );
+
   Future<DonationDetail> createDonation({
     String? clientId,
     required String title,

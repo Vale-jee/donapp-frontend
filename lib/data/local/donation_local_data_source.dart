@@ -25,6 +25,37 @@ class DonationLocalDataSource {
   final ConflictResolver conflictResolver;
   final Directory? imagesDirectory;
 
+  Future<void> storeConfirmedUpdate({
+    required int cacheUserId,
+    required DonationDetail donation,
+  }) => database.transaction(() async {
+    final existing =
+        await (database.select(database.localDonations)
+              ..where((row) => row.cacheUserId.equals(cacheUserId))
+              ..where((row) => row.remoteId.equals(donation.id)))
+            .getSingleOrNull();
+    if (existing == null || existing.locallyDeleted) return;
+    final decision = conflictResolver.resolveDonation(
+      localSyncState: existing.syncState,
+      localServerUpdatedAt: existing.serverUpdatedAt,
+      remoteServerUpdatedAt: donation.updatedAt,
+    );
+    if (decision == ConflictDecision.keepLocal) return;
+    // Preserve local identity, memberships, images and pending operations.
+    await (database.update(
+      database.localDonations,
+    )..where((row) => row.localId.equals(existing.localId))).write(
+      LocalDonationsCompanion(
+        title: Value(donation.titulo),
+        description: Value(donation.descripcion),
+        categoryId: Value(donation.categoriaId),
+        categoryName: Value(donation.categoriaNombre),
+        status: Value(donation.estado.apiValue),
+        serverUpdatedAt: Value(donation.updatedAt),
+      ),
+    );
+  });
+
   Future<PendingOperation> enqueueCreation({
     required int cacheUserId,
     required String city,

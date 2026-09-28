@@ -12,18 +12,24 @@ import '../theme/app_colors.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_content_state.dart';
+import '../repositories/category_repository.dart';
+import 'edit_donation_screen.dart';
 
 class DonationDetailScreen extends StatefulWidget {
   const DonationDetailScreen({
     required this.donationId,
     this.donationRepository,
     this.requestRepository,
+    this.cacheUserId,
+    this.categoryRepository = const CategoryRepository(),
     super.key,
   });
 
   final int donationId;
   final DonationRepository? donationRepository;
   final RequestRepository? requestRepository;
+  final int? cacheUserId;
+  final CategoryRepository categoryRepository;
 
   @override
   State<DonationDetailScreen> createState() => _DonationDetailScreenState();
@@ -37,6 +43,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
   ApiException? _error;
   bool _isSubmitting = false;
   bool _requestCreated = false;
+  bool _canEdit = false;
 
   @override
   void dispose() {
@@ -57,10 +64,23 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     setState(() {
       _donation = null;
       _error = null;
+      _canEdit = false;
     });
     try {
       final donation = await _service.getDonationById(widget.donationId);
       if (mounted) setState(() => _donation = donation);
+      if (widget.cacheUserId != null &&
+          donation.estado == DonationStatus.publicada) {
+        // Failure to establish ownership must never expose the edit action.
+        try {
+          final allowed = await _service.canEditDonation(donation.id);
+          if (mounted) setState(() => _canEdit = allowed);
+        } on RequestCancelled {
+          return;
+        } catch (_) {
+          // The detail remains usable even if the own-list is unavailable.
+        }
+      }
     } on RequestCancelled {
       return;
     } on ApiException catch (error) {
@@ -83,7 +103,18 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     final colors =
         theme.extension<AppColorTokens>() ?? const AppColorTokens.standard();
     return Scaffold(
-      appBar: AppBar(title: const Text('Detalle de donación')),
+      appBar: AppBar(
+        title: const Text('Detalle de donación'),
+        actions: [
+          if (_canEdit)
+            TextButton.icon(
+              key: const Key('editDonationButton'),
+              onPressed: _edit,
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Editar'),
+            ),
+        ],
+      ),
       body: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -137,6 +168,33 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
       isSubmitting: _isSubmitting,
       showRequestAction: donation.puedeSolicitar && !_requestCreated,
       onRequest: _confirmRequest,
+    );
+  }
+
+  Future<void> _edit() async {
+    final donation = _donation;
+    if (!_canEdit ||
+        donation == null ||
+        donation.estado != DonationStatus.publicada) {
+      return;
+    }
+    final updated = await Navigator.of(context).push<DonationDetail>(
+      MaterialPageRoute(
+        builder: (_) => EditDonationScreen(
+          donation: donation,
+          cacheUserId: widget.cacheUserId!,
+          donationRepository: _service,
+          categoryRepository: widget.categoryRepository,
+        ),
+      ),
+    );
+    if (!mounted || updated == null) return;
+    setState(() {
+      _donation = updated;
+      _canEdit = updated.estado == DonationStatus.publicada;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Donación actualizada correctamente.')),
     );
   }
 

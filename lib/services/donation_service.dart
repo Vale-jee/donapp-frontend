@@ -12,6 +12,47 @@ class DonationService {
 
   final ApiClient _apiClient;
 
+  Future<DonationDetail> updateDonation(
+    int id, {
+    String? title,
+    String? description,
+    int? categoryId,
+  }) async {
+    if (id <= 0 ||
+        (title == null && description == null && categoryId == null)) {
+      throw const ApiException(
+        ApiErrorType.validation,
+        'No hay cambios para guardar.',
+      );
+    }
+    try {
+      final body = await _apiClient.patch(
+        '/api/donaciones/$id',
+        headers: {..._headers, 'Content-Type': 'application/json'},
+        body: {
+          'titulo': ?title,
+          'descripcion': ?description,
+          'categoriaId': ?categoryId,
+        },
+        successStatusCodes: const {200},
+        context: ApiRequestContext.protectedSession,
+        allowSafeBackendMessage: true,
+      );
+      final data = body['data'];
+      final donation = data is Map<String, dynamic> ? data['donacion'] : null;
+      if (donation is! Map<String, dynamic>) {
+        throw ApiErrorMapper.unexpectedResponse;
+      }
+      final result = DonationDetail.fromMutationJson(donation);
+      if (result.id != id) throw ApiErrorMapper.unexpectedResponse;
+      return result;
+    } on ApiException {
+      rethrow;
+    } on FormatException {
+      throw ApiErrorMapper.unexpectedResponse;
+    }
+  }
+
   Future<DonationDetail> createDonation({
     String? clientId,
     required String title,
