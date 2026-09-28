@@ -12,6 +12,7 @@ class DonationCard extends StatelessWidget {
     required this.location,
     required this.status,
     this.imageFit = BoxFit.cover,
+    this.limitContainedImageDecode = false,
     this.onTap,
     this.subtitle,
     super.key,
@@ -23,6 +24,9 @@ class DonationCard extends StatelessWidget {
   final String location;
   final String status;
   final BoxFit imageFit;
+
+  /// Opt-in decode bound for thumbnails displayed with [BoxFit.contain].
+  final bool limitContainedImageDecode;
   final VoidCallback? onTap;
   final String? subtitle;
 
@@ -50,7 +54,11 @@ class DonationCard extends StatelessWidget {
               children: [
                 AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: _DonationImage(image: image, fit: imageFit),
+                  child: _DonationImage(
+                    image: image,
+                    fit: imageFit,
+                    limitDecode: limitContainedImageDecode,
+                  ),
                 ),
                 Padding(
                   padding: EdgeInsets.all(spacing.medium),
@@ -124,14 +132,45 @@ class _OptionalInkWell extends StatelessWidget {
 }
 
 class _DonationImage extends StatelessWidget {
-  const _DonationImage({required this.image, required this.fit});
+  const _DonationImage({
+    required this.image,
+    required this.fit,
+    required this.limitDecode,
+  });
 
   final ImageProvider<Object>? image;
   final BoxFit fit;
+  final bool limitDecode;
 
   @override
   Widget build(BuildContext context) {
     if (image == null) return const _ImagePlaceholder();
+    if (limitDecode && fit == BoxFit.contain) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final dpr = MediaQuery.devicePixelRatioOf(context);
+          // Use the actual viewport, including the card's layout/margins.
+          // Fit preserves portrait/landscape ratios without upscaling sources.
+          final width = (constraints.maxWidth * dpr).ceil();
+          final height = (constraints.maxHeight * dpr).ceil();
+          return _buildImage(
+            context,
+            width > 0 && height > 0
+                ? ResizeImage(
+                    image!,
+                    width: width,
+                    height: height,
+                    policy: ResizeImagePolicy.fit,
+                  )
+                : image!,
+          );
+        },
+      );
+    }
+    return _buildImage(context, image!);
+  }
+
+  Widget _buildImage(BuildContext context, ImageProvider<Object> provider) {
     final colors =
         Theme.of(context).extension<AppColorTokens>() ??
         const AppColorTokens.standard();
@@ -140,7 +179,7 @@ class _DonationImage extends StatelessWidget {
       color: colors.background,
       child: Image(
         key: const Key('donationCardImage'),
-        image: image!,
+        image: provider,
         fit: fit,
         excludeFromSemantics: true,
         errorBuilder: (context, error, stackTrace) => const _ImagePlaceholder(),

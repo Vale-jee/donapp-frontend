@@ -19,6 +19,76 @@ import 'package:donapp_mobile/services/donation_service.dart';
 import 'package:donapp_mobile/theme/app_theme.dart';
 
 void main() {
+  testWidgets(
+    'Explorar distingue carga, vacío y error; conserva datos al fallar y se recupera',
+    (tester) async {
+      final repository = _ScriptedExploreRepository();
+      addTearDown(repository.disposeStreams);
+      await tester.pumpWidget(_app(repository));
+      await tester.pump();
+      expect(find.byKey(const Key('exploreLoading')), findsOneWidget);
+      expect(repository.calls, 1);
+
+      repository.succeed(empty: true);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('exploreEmpty')), findsOneWidget);
+      expect(find.byKey(const Key('exploreError')), findsNothing);
+
+      await tester.drag(
+        find.byKey(const Key('exploreList')),
+        const Offset(0, 350),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(repository.calls, 2);
+      repository.fail();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('exploreError')), findsOneWidget);
+      expect(find.text('Sin conexión'), findsOneWidget);
+      expect(find.byKey(const Key('exploreEmpty')), findsNothing);
+
+      await tester.tap(find.text('Reintentar'));
+      await tester.pump();
+      expect(repository.calls, 3);
+      expect(find.byKey(const Key('exploreLoading')), findsOneWidget);
+      repository.succeed();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('donationCard-10')), findsOneWidget);
+      expect(find.byKey(const Key('exploreError')), findsNothing);
+
+      await tester.drag(
+        find.byKey(const Key('exploreList')),
+        const Offset(0, 350),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(repository.calls, 4);
+      repository.fail();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('donationCard-10')), findsOneWidget);
+      expect(
+        find.byKey(const Key('exploreFreshnessIndicator')),
+        findsOneWidget,
+      );
+      expect(find.byType(RefreshProgressIndicator), findsNothing);
+      expect(find.byKey(const Key('exploreError')), findsNothing);
+
+      await tester.drag(
+        find.byKey(const Key('exploreList')),
+        const Offset(0, 350),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(repository.calls, 5);
+      repository.succeed();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('donationCard-10')), findsOneWidget);
+      expect(find.byKey(const Key('exploreFreshnessIndicator')), findsNothing);
+      expect(find.byType(RefreshProgressIndicator), findsNothing);
+      await _dispose(tester);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('caché y fallo remoto conservan tarjetas y muestran aviso', (
     tester,
   ) async {
@@ -281,6 +351,76 @@ Future<void> _dispose(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
   await tester.pump(const Duration(milliseconds: 1));
   await tester.pump(const Duration(milliseconds: 1));
+}
+
+class _ScriptedExploreRepository extends DonationRepository {
+  _ScriptedExploreRepository() : super.remote();
+  final donations = StreamController<List<DonationListItem>>.broadcast();
+  final statuses = StreamController<ExploreCacheStatus?>.broadcast();
+  Completer<DonationPage>? pending;
+  int calls = 0;
+
+  @override
+  Stream<List<DonationListItem>> watchExplore({
+    required int cacheUserId,
+    int? categoryId,
+  }) {
+    expect(cacheUserId, 77);
+    return donations.stream;
+  }
+
+  @override
+  Stream<List<Category>> watchCategories() => Stream.value(const []);
+  @override
+  Stream<ExploreCacheStatus?> watchExploreStatus(int cacheUserId) =>
+      statuses.stream;
+  @override
+  Future<void> refreshCategories() async {}
+  @override
+  Future<DonationPage> refreshExplore({
+    required int cacheUserId,
+    int page = 1,
+    int limit = 20,
+    int? categoryId,
+  }) {
+    expect(pending == null || pending!.isCompleted, isTrue);
+    calls++;
+    pending = Completer<DonationPage>();
+    return pending!.future;
+  }
+
+  void succeed({bool empty = false}) {
+    final page = empty
+        ? DonationPage(
+            donations: const [],
+            pagination: const DonationPagination(
+              page: 1,
+              limit: 20,
+              total: 0,
+              totalPages: 0,
+            ),
+          )
+        : _page();
+    donations.add(page.donations);
+    statuses.add(
+      ExploreCacheStatus(
+        lastSyncedAt: DateTime.utc(2026, 9, 21),
+        expiresAt: DateTime.utc(2026, 9, 22),
+        isStale: false,
+      ),
+    );
+    pending!.complete(page);
+  }
+
+  void fail() => pending!.completeError(
+    const ApiException(ApiErrorType.network, 'Sin conexión'),
+  );
+  @override
+  Future<void> close() async {}
+  Future<void> disposeStreams() async {
+    await donations.close();
+    await statuses.close();
+  }
 }
 
 class _PendingDonationService extends DonationService {

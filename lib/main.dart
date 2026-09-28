@@ -6,15 +6,22 @@ import 'navigation/app_router.dart';
 import 'services/auth_state_controller.dart';
 import 'services/session_coordinator.dart';
 import 'services/offline_donations.dart';
+import 'services/donation_gallery_picker.dart';
 import 'theme/app_theme.dart';
 
 void main() => runApp(const DonApp());
 
 class DonApp extends StatefulWidget {
-  const DonApp({this.sessionCoordinator, this.offlineFactory, super.key});
+  const DonApp({
+    this.sessionCoordinator,
+    this.offlineFactory,
+    this.galleryPicker,
+    super.key,
+  });
 
   final SessionCoordinator? sessionCoordinator;
   final OfflineDonations Function(AuthStateController)? offlineFactory;
+  final DonationGalleryPicker? galleryPicker;
 
   @override
   State<DonApp> createState() => _DonAppState();
@@ -30,6 +37,7 @@ class _DonAppState extends State<DonApp> {
   late final _router = createAppRouter(
     authState: _authState,
     offlineRepository: () => _offline.repository,
+    galleryPicker: widget.galleryPicker,
   );
 
   @override

@@ -1,16 +1,26 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import '../config/api_config.dart';
 
 /// Accepts metadata only: never headers, bodies or exception messages.
+enum LogLevel { debug, info, warning, error }
+
 class HttpRequestLogger {
   const HttpRequestLogger({
     this.environment = ApiConfig.environment,
     this.write = _debugWrite,
+    this.minimumLevel = LogLevel.debug,
+    this.releaseMode = kReleaseMode,
+    this.enabled = const bool.fromEnvironment('HTTP_LOGS', defaultValue: true),
   });
 
   final String environment;
   final void Function(String) write;
+  final LogLevel minimumLevel;
+  final bool releaseMode;
+  final bool enabled;
 
   void record({
     required String method,
@@ -18,13 +28,26 @@ class HttpRequestLogger {
     required int? statusCode,
     required Duration elapsed,
   }) {
-    if (environment != 'dev') return;
+    if (kReleaseMode || releaseMode || !enabled || environment != 'dev') return;
+    final level = statusCode == null || statusCode >= 500
+        ? LogLevel.error
+        : statusCode >= 400
+        ? LogLevel.warning
+        : LogLevel.info;
+    if (level.index < minimumLevel.index) return;
     final safeMethod = const {'GET', 'POST', 'PATCH'}.contains(method)
         ? method
         : 'HTTP';
     try {
       write(
-        '[HTTP] $safeMethod ${_safePath(path)} status=${statusCode ?? "sin_respuesta"} duration=${elapsed.inMilliseconds}ms',
+        jsonEncode({
+          'event': 'http.request',
+          'level': level.name,
+          'method': safeMethod,
+          'route': _safePath(path),
+          'status_code': statusCode,
+          'duration_ms': elapsed.inMilliseconds,
+        }),
       );
     } on Object {
       // Diagnostics must never change the request result.

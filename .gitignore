@@ -32,6 +32,7 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+/tool/e2e.local.json
 
 # Symbolication related
 app.*.symbols

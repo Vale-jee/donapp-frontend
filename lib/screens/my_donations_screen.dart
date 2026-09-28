@@ -216,15 +216,20 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
                 )
               : RefreshIndicator(
                   onRefresh: _refresh,
-                  child: ListView(
+                  child: ListView.builder(
                     key: const Key('myDonationsList'),
                     controller: _scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: EdgeInsets.all(spacing.large),
-                    children: [
-                      Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 720),
+                    itemCount:
+                        1 +
+                        (_donations.isEmpty ? 1 : _donations.length) +
+                        (_loadingMore ? 1 : 0) +
+                        (_pageError != null ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      Widget child;
+                      if (index == 0) {
+                        child = _KeepAliveHeader(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -258,67 +263,94 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
                                 onChanged: _selectStatus,
                               ),
                               SizedBox(height: spacing.large),
-                              if (_donations.isEmpty)
-                                const AppContentState(
-                                  key: Key('myDonationsEmpty'),
-                                  type: AppContentStateType.empty,
-                                  title: 'Aún no tienes donaciones',
-                                  message: 'Cuando publiques una donación, aparecerá aquí.',
-                                )
-                              else
-                                ..._donations.map(
-                                  (donation) => Padding(
-                                    padding: EdgeInsets.only(
-                                      bottom: spacing.large,
-                                    ),
-                                    child: DonationCard(
-                                      key: ValueKey(
-                                        'myDonationCard-${donation.id}',
-                                      ),
-                                      image: _imageFor(donation),
-                                      imageFit: BoxFit.contain,
-                                      title: donation.titulo,
-                                      category: donation.categoriaNombre,
-                                      location: donation.ciudad,
-                                      status: donation.estado.label,
-                                      subtitle: donation.cantidadImagenes == 1
-                                          ? '1 imagen'
-                                          : '${donation.cantidadImagenes} imágenes',
-                                      onTap: () => context.push(
-                                        AppRoutes.donationDetailLocation(
-                                          donation.id,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              if (_loadingMore)
-                                const Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Center(
-                                    child: CircularProgressIndicator(
-                                      key: Key('myDonationsLoadingMore'),
-                                    ),
-                                  ),
-                                ),
-                              if (_pageError case final message?)
-                                AppContentState(
-                                  key: const Key('myDonationsPaginationError'),
-                                  type: AppContentStateType.error,
-                                  title: 'No pudimos completar la carga',
-                                  message: message,
-                                  actionText: 'Reintentar',
-                                  onAction: _loadNextPage,
-                                ),
                             ],
                           ),
+                        );
+                      } else if (_donations.isEmpty && index == 1) {
+                        child = const AppContentState(
+                          key: Key('myDonationsEmpty'),
+                          type: AppContentStateType.empty,
+                          title: 'Aún no tienes donaciones',
+                          message:
+                              'Cuando publiques una donación, aparecerá aquí.',
+                        );
+                      } else if (index <= _donations.length) {
+                        final donation = _donations[index - 1];
+                        child = Padding(
+                          padding: EdgeInsets.only(bottom: spacing.large),
+                          child: DonationCard(
+                            key: ValueKey('myDonationCard-${donation.id}'),
+                            image: _imageFor(donation),
+                            imageFit: BoxFit.contain,
+                            limitContainedImageDecode: true,
+                            title: donation.titulo,
+                            category: donation.categoriaNombre,
+                            location: donation.ciudad,
+                            status: donation.estado.label,
+                            subtitle: donation.cantidadImagenes == 1
+                                ? '1 imagen'
+                                : '${donation.cantidadImagenes} imágenes',
+                            onTap: () => context.push(
+                              AppRoutes.donationDetailLocation(donation.id),
+                            ),
+                          ),
+                        );
+                      } else if (_loadingMore &&
+                          index ==
+                              1 +
+                                  (_donations.isEmpty
+                                      ? 1
+                                      : _donations.length)) {
+                        child = const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              key: Key('myDonationsLoadingMore'),
+                            ),
+                          ),
+                        );
+                      } else {
+                        child = AppContentState(
+                          key: const Key('myDonationsPaginationError'),
+                          type: AppContentStateType.error,
+                          title: 'No pudimos completar la carga',
+                          message: _pageError!,
+                          actionText: 'Reintentar',
+                          onAction: _loadNextPage,
+                        );
+                      }
+                      return Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 720),
+                          child: SizedBox(width: double.infinity, child: child),
                         ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
         ),
       ),
     );
+  }
+}
+
+// Preserve the form field state when the header leaves the lazy viewport.
+class _KeepAliveHeader extends StatefulWidget {
+  const _KeepAliveHeader({required this.child});
+  final Widget child;
+
+  @override
+  State<_KeepAliveHeader> createState() => _KeepAliveHeaderState();
+}
+
+class _KeepAliveHeaderState extends State<_KeepAliveHeader>
+    with AutomaticKeepAliveClientMixin<_KeepAliveHeader> {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }

@@ -1,0 +1,8 @@
+{
+  "APP_ENV": "test",
+  "API_BASE_URL": "https://backend-de-pruebas.example.invalid",
+  "E2E_ALLOW_WRITES": "true",
+  "E2E_EMAIL": "",
+  "E2E_PASSWORD": "",
+  "E2E_CATEGORY": "Muebles"
+}

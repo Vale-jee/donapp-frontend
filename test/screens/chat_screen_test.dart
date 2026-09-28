@@ -3,6 +3,7 @@ import 'package:donapp_mobile/repositories/chat_repository.dart';
 import 'package:donapp_mobile/screens/chat_detail_screen.dart';
 import 'package:donapp_mobile/screens/chats_screen.dart';
 import 'package:donapp_mobile/services/chat_service.dart';
+import 'package:donapp_mobile/services/api_exception.dart';
 import 'package:donapp_mobile/services/location_share_service.dart';
 import 'package:donapp_mobile/theme/app_theme.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,49 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  // General battery: selected from uncovered lines 114-118, not a sixth forum test.
+  testWidgets(
+    'fallo de envío conserva borrador y permite reintentar sin perder el mensaje',
+    (tester) async {
+      final service = _FakeChatService(failNextSend: true);
+      await tester.pumpWidget(
+        _app(
+          ChatDetailScreen(
+            chatId: 7,
+            currentUserId: 1,
+            chatRepository: ChatRepository.fromService(service),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField),
+        'Puedo recoger la mesa mañana',
+      );
+      await tester.tap(find.byKey(const Key('sendChatMessageButton')));
+      await tester.pumpAndSettle();
+      expect(service.sendCount, 1);
+      expect(service.messages, isEmpty);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'Puedo recoger la mesa mañana',
+      );
+      expect(find.text('Sin conexión. Intenta nuevamente.'), findsOneWidget);
+      // The snackbar temporarily covers the bottom send button.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('sendChatMessageButton')));
+      await tester.pumpAndSettle();
+      expect(service.sendCount, 2);
+      expect(service.messages.single.contenido, 'Puedo recoger la mesa mañana');
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        isEmpty,
+      );
+      expect(find.text('Puedo recoger la mesa mañana'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('muestra conversaciones y abre el detalle', (tester) async {
     final service = _FakeChatService();
     await tester.pumpWidget(
@@ -304,9 +348,10 @@ final _chat = Chat(
 );
 
 class _FakeChatService extends ChatService {
-  _FakeChatService({this.empty = false});
+  _FakeChatService({this.empty = false, this.failNextSend = false});
 
   final bool empty;
+  bool failNextSend;
   int sendCount = 0;
   int locationSendCount = 0;
   final List<ChatMessage> messages = [];
@@ -328,6 +373,13 @@ class _FakeChatService extends ChatService {
   @override
   Future<ChatMessage> sendMessage(int chatId, String content) async {
     sendCount++;
+    if (failNextSend) {
+      failNextSend = false;
+      throw const ApiException(
+        ApiErrorType.network,
+        'Sin conexión. Intenta nuevamente.',
+      );
+    }
     final message = ChatMessage(
       id: sendCount,
       contenido: content,

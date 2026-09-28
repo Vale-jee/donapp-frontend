@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:donapp_mobile/services/api_client.dart';
 import 'package:donapp_mobile/services/api_exception.dart';
@@ -32,18 +33,49 @@ void main() {
           'Authorization': 'Bearer ACCESS_SECRET',
           'Cookie': 'COOKIE_SECRET',
         },
-        body: {'password': 'PASSWORD_SECRET', 'refreshToken': 'REFRESH_SECRET'},
+        body: {
+          'password': 'PASSWORD_SECRET',
+          'refreshToken': 'REFRESH_SECRET',
+          'email': 'private@example.invalid',
+          'nombre': 'PRIVATE_NAME',
+          'documento': 'PRIVATE_DOCUMENT',
+          'latitude': 12.345678,
+          'longitude': -76.543219,
+        },
         successStatusCodes: {200},
       );
       if (env == 'dev') {
         expect(logs, hasLength(1));
+        final record = jsonDecode(logs.single) as Map<String, dynamic>;
         expect(
-          logs.single,
-          matches(r'^\[HTTP\] POST /api/auth/login status=200 duration=\d+ms$'),
+          record.keys,
+          unorderedEquals([
+            'event',
+            'level',
+            'method',
+            'route',
+            'status_code',
+            'duration_ms',
+          ]),
         );
+        expect(record['event'], 'http.request');
+        expect(record['level'], 'info');
+        expect(record['method'], 'POST');
+        expect(record['route'], '/api/auth/login');
+        expect(record['status_code'], 200);
+        expect(record['duration_ms'], isNonNegative);
         expect(logs.single, isNot(contains('SECRET')));
         expect(logs.single, isNot(contains('Authorization')));
         expect(logs.single, isNot(contains('secret-host')));
+        for (final privateValue in [
+          'private@example.invalid',
+          'PRIVATE_NAME',
+          'PRIVATE_DOCUMENT',
+          '12.345678',
+          '-76.543219',
+        ]) {
+          expect(logs.single, isNot(contains(privateValue)));
+        }
       } else {
         expect(logs, isEmpty);
       }
@@ -68,7 +100,9 @@ void main() {
       expect(logs.single, isNot(contains('SECRET')));
       expect(logs.single, isNot(contains('123')));
       expect(logs.single, isNot(contains('42')));
-      expect(logs.single, contains('status=404 duration=12ms'));
+      expect(jsonDecode(logs.single)['status_code'], 404);
+      expect(jsonDecode(logs.single)['duration_ms'], 12);
+      expect(jsonDecode(logs.single)['level'], 'warning');
       if (path == '/api/donaciones/123') {
         expect(logs.single, contains('/api/donaciones/:id'));
       }
@@ -104,9 +138,10 @@ void main() {
       );
       expect(logs, hasLength(1));
       expect(
-        logs.single,
-        contains(failure == 'http' ? 'status=500' : 'status=sin_respuesta'),
+        jsonDecode(logs.single)['status_code'],
+        failure == 'http' ? 500 : null,
       );
+      expect(jsonDecode(logs.single)['level'], 'error');
       expect(logs.single, isNot(contains('SECRET')));
     });
   }
@@ -131,8 +166,8 @@ void main() {
     );
     expect(count, 2);
     expect(logs, hasLength(2));
-    expect(logs.first, contains('status=401'));
-    expect(logs.last, contains('status=200'));
+    expect(jsonDecode(logs.first)['status_code'], 401);
+    expect(jsonDecode(logs.last)['status_code'], 200);
     expect(logs.join(), isNot(contains('SECRET')));
   });
 
@@ -151,6 +186,27 @@ void main() {
       'success': true,
       'data': null,
     });
+  });
+
+  test('release, explicit disable and minimum level suppress diagnostics', () {
+    final logs = <String>[];
+    for (final logger in [
+      HttpRequestLogger(environment: 'dev', releaseMode: true, write: logs.add),
+      HttpRequestLogger(environment: 'dev', enabled: false, write: logs.add),
+      HttpRequestLogger(
+        environment: 'dev',
+        minimumLevel: LogLevel.warning,
+        write: logs.add,
+      ),
+    ]) {
+      logger.record(
+        method: 'GET',
+        path: '/api/categorias',
+        statusCode: 200,
+        elapsed: Duration.zero,
+      );
+    }
+    expect(logs, isEmpty);
   });
 }
 

@@ -118,6 +118,14 @@ void main() {
       );
       expect(failed.operationId, operation.operationId);
       expect(failed.entityClientId, operation.entityClientId);
+      if (failure == 'timeout') {
+        expect(failed.lastErrorCode, 'TIMEOUT');
+        expect(failed.attemptCount, 1);
+        expect(
+          failed.nextAttemptAt?.toUtc(),
+          now.add(const Duration(seconds: 5)),
+        );
+      }
       expect(await File(image.managedLocalPath!).exists(), isTrue);
       await sync.processPending(1);
       expect(bodies, hasLength(1), reason: 'backoff or permanent conflict');
@@ -160,6 +168,18 @@ void main() {
           1,
           reason: 'persisted image URL is reused after restart',
         );
+        if (failure == 'timeout') {
+          expect(result.operationId, operation.operationId);
+          expect(result.entityClientId, operation.entityClientId);
+          expect(await db.select(db.localDonations).get(), hasLength(1));
+          await sync.processPending(1);
+          expect(
+            bodies,
+            hasLength(2),
+            reason: 'completed work must not be sent again',
+          );
+          expect(images.calls, 1);
+        }
       }
       await sync.shutdown();
       await db.close();

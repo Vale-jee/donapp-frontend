@@ -32,6 +32,80 @@ import 'package:donapp_mobile/data/local/tables/local_tables.dart';
 
 void main() {
   testWidgets(
+    'formulario inválido no encola; al corregir guarda una sola donación pendiente',
+    (tester) async {
+      final repository = _PendingCreationRepository();
+      final uploads = _UploadService();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: CreateDonationScreen(
+            donationRepository: repository,
+            cacheUserId: 1,
+            city: 'Bogotá',
+            imageUploadRepository: ImageUploadRepository.fromService(uploads),
+            galleryPicker: _Picker([_image('one.jpg')]),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final publish = find.byKey(const Key('publishDonationButton'));
+      await tester.ensureVisible(publish);
+      await tester.tap(publish);
+      await tester.pump();
+      expect(
+        find.text('El título debe tener al menos 5 caracteres.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('La descripción debe tener al menos 20 caracteres.'),
+        findsOneWidget,
+      );
+      expect(find.text('Selecciona una categoría.'), findsOneWidget);
+      expect(repository.calls, 0);
+      expect(uploads.calls, 0);
+
+      await _completeForm(tester);
+      // Two taps before rebuilding exercise the guard as well as the disabled UI.
+      await tester.tap(publish);
+      await tester.tap(publish);
+      await tester.pump();
+      expect(repository.calls, 1);
+      expect(repository.savedTitle, 'Mesa para donar');
+      expect(
+        repository.savedDescription,
+        'Mesa de madera en buen estado para donar.',
+      );
+      expect(repository.savedCategoryId, 4);
+      expect(repository.savedImages, hasLength(1));
+      expect(repository.pending.isCompleted, isFalse);
+      expect(uploads.calls, 0);
+      repository.pending.complete(
+        PendingOperation(
+          localId: 1,
+          operationId: 'operation-test',
+          cacheUserId: 1,
+          entityType: PendingOperationEntityType.donation,
+          entityClientId: 'donation-test',
+          operationType: PendingOperationType.createDonation,
+          state: PendingOperationState.pending,
+          attemptCount: 0,
+          createdAt: DateTime.utc(2026, 9, 21),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Donación guardada. Se publicará cuando haya conexión.'),
+        findsOneWidget,
+      );
+      await tester.tap(publish);
+      await tester.pump();
+      expect(repository.calls, 1);
+      expect(uploads.calls, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'publicación con outbox guarda sin subir ni crear remoto desde UI',
     (tester) async {
       final root = (await tester.runAsync(
@@ -1260,6 +1334,40 @@ Widget _app({
         ? screen
         : MediaQuery(data: mediaQuery, child: screen),
   );
+}
+
+class _PendingCreationRepository extends DonationRepository {
+  _PendingCreationRepository() : super.remote();
+  final pending = Completer<PendingOperation>();
+  int calls = 0;
+  String? savedTitle;
+  String? savedDescription;
+  int? savedCategoryId;
+  List<XFile>? savedImages;
+
+  @override
+  Future<List<Category>> getLocalFirstCategories() async => const [
+    Category(id: 4, nombre: 'Muebles', descripcion: null),
+  ];
+
+  @override
+  Future<PendingOperation> enqueueCreation({
+    required int cacheUserId,
+    required String city,
+    required String title,
+    required String description,
+    required Category category,
+    required List<XFile> images,
+  }) {
+    expect(cacheUserId, 1);
+    expect(city, 'Bogotá');
+    calls++;
+    savedTitle = title;
+    savedDescription = description;
+    savedCategoryId = category.id;
+    savedImages = List.of(images);
+    return pending.future;
+  }
 }
 
 class _Picker implements DonationGalleryPicker {
