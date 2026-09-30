@@ -35,7 +35,7 @@ class HttpRequestLogger {
         ? LogLevel.warning
         : LogLevel.info;
     if (level.index < minimumLevel.index) return;
-    final safeMethod = const {'GET', 'POST', 'PATCH'}.contains(method)
+    final safeMethod = const {'GET', 'POST', 'PATCH', 'DELETE'}.contains(method)
         ? method
         : 'HTTP';
     try {

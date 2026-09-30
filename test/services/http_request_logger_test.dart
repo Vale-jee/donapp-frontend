@@ -11,6 +11,31 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test(
+    'DELETE registra solo metadatos y anonimiza identificador y credenciales',
+    () async {
+      final logs = <String>[];
+      final client = ApiClient(
+        logger: HttpRequestLogger(environment: 'dev', write: logs.add),
+        endpointBuilder: (_) =>
+            Uri.parse('https://private.test/api/donaciones/731'),
+        client: MockClient(
+          (_) async => http.Response('{"success":true,"data":{"id":731}}', 200),
+        ),
+      );
+      await client.delete(
+        '/api/donaciones/731?secret=SECRET',
+        headers: {'Authorization': 'Bearer SECRET'},
+        successStatusCodes: {200},
+      );
+      expect(logs, hasLength(1));
+      expect(jsonDecode(logs.single)['method'], 'DELETE');
+      expect(jsonDecode(logs.single)['route'], '/api/donaciones/:id');
+      expect(logs.single, isNot(contains('731')));
+      expect(logs.single, isNot(contains('SECRET')));
+      expect(logs.single, isNot(contains('private.test')));
+    },
+  );
   for (final env in ['dev', 'test', 'prod']) {
     test('$env logs only safe metadata', () async {
       final logs = <String>[];

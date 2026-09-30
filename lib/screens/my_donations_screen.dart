@@ -55,6 +55,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
     if (!mounted) return;
     setState(() {
       _donations = _donations
+          .where((item) => !_service.wasDeleted(item.id))
           .map((item) {
             final updated = _service.confirmedUpdate(item.id);
             if (updated == null || updated.updatedAt.isBefore(item.updatedAt)) {

@@ -108,6 +108,7 @@ void main() {
 
         final detailPaths = <String>[];
         final patchPaths = <String>[];
+        final deletePaths = <String>[];
         final service = DonationService(
           tokenStorage: _ExpiringTokenStorage(),
           apiClient: ApiClient(
@@ -129,6 +130,15 @@ void main() {
                 });
                 data['titulo'] = 'Mesa editada Samsung';
                 data['updatedAt'] = '2026-09-28T12:00:00Z';
+              } else if (request.method == 'DELETE') {
+                deletePaths.add(request.url.path);
+                return http.Response(
+                  jsonEncode({
+                    'success': true,
+                    'data': {'id': remoteId},
+                  }),
+                  200,
+                );
               } else {
                 detailPaths.add(request.url.path);
               }
@@ -208,6 +218,16 @@ void main() {
         ]);
         expect(find.text('Mesa editada Samsung'), findsOneWidget);
         expect(offlineRequests, 0);
+        await tester.tap(find.byKey(const Key('deleteDonationButton')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('confirmDeleteDonationButton')));
+        await tester.pumpAndSettle();
+        expect(deletePaths, ['/api/donaciones/$remoteId']);
+        expect(offlineRequests, 0);
+        expect(await db.select(db.localDonations).get(), isEmpty);
+        expect(find.byType(MyDonationsScreen), findsOneWidget);
+        expect(find.byKey(const ValueKey('myDonationCard-731')), findsNothing);
+        expect(find.text('Donación eliminada correctamente.'), findsOneWidget);
       },
     );
   }

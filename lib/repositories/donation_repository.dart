@@ -32,11 +32,13 @@ class DonationRepository {
     this.imageCache,
     this.onQueued,
     this.onConfirmedUpdate,
+    this.onConfirmedDeletion,
   }) : _clock = clock ?? DateTime.now;
 
   DonationRepository.remote({
     DonationRemoteDataSource? remote,
     this.onConfirmedUpdate,
+    this.onConfirmedDeletion,
   }) : _local = null,
        _remote =
            remote ??
@@ -48,9 +50,11 @@ class DonationRepository {
     DonationService service, {
     Future<void> Function(int cacheUserId, DonationDetail donation)?
     onConfirmedUpdate,
+    Future<void> Function(int cacheUserId, int remoteId)? onConfirmedDeletion,
   }) => DonationRepository.remote(
     remote: DonationRemoteDataSource(service, const CategoryService()),
     onConfirmedUpdate: onConfirmedUpdate,
+    onConfirmedDeletion: onConfirmedDeletion,
   );
   factory DonationRepository.create({
     DonationService? donationService,
@@ -76,6 +80,29 @@ class DonationRepository {
   void Function()? onQueued;
   final Future<void> Function(int cacheUserId, DonationDetail donation)?
   onConfirmedUpdate;
+  final Future<void> Function(int cacheUserId, int remoteId)?
+  onConfirmedDeletion;
+  final Set<int> _confirmedDeletions = {};
+  bool wasDeleted(int remoteId) => _confirmedDeletions.contains(remoteId);
+
+  Future<void> deleteDonation(int remoteId, {required int cacheUserId}) async {
+    await _remote.deleteDonation(remoteId);
+    await cacheConfirmedDeletion(cacheUserId: cacheUserId, remoteId: remoteId);
+    await onConfirmedDeletion?.call(cacheUserId, remoteId);
+    _confirmedUpdates.remove(remoteId);
+    _confirmedDeletions.add(remoteId);
+  }
+
+  Future<void> cacheConfirmedDeletion({
+    required int cacheUserId,
+    required int remoteId,
+  }) async {
+    await _local?.invalidateDeletedDonation(
+      cacheUserId: cacheUserId,
+      remoteId: remoteId,
+    );
+  }
+
   // Session-scoped confirmed mutations also update lists on navigation back,
   // without requiring another network request to render a successful write.
   final Map<int, DonationDetail> _confirmedUpdates = {};
@@ -207,7 +234,20 @@ class DonationRepository {
     int page = 1,
     int limit = 20,
     DonationStatus? status,
-  }) => _remote.getOwnDonations(page: page, limit: limit, status: status);
+  }) async {
+    final result = await _remote.getOwnDonations(
+      page: page,
+      limit: limit,
+      status: status,
+    );
+    return DonationPage(
+      donations: result.donations
+          .where((item) => !wasDeleted(item.id))
+          .toList(growable: false),
+      pagination: result.pagination,
+    );
+  }
+
   // Detail has no owner id. Only the authenticated own-list proves ownership;
   // puedeSolicitar == false is not an ownership signal.
   Future<bool> canEditDonation(int id) async {

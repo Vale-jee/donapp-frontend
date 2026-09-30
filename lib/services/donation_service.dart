@@ -12,6 +12,26 @@ class DonationService {
 
   final ApiClient _apiClient;
 
+  Future<void> deleteDonation(int id) async {
+    if (id <= 0) {
+      throw const ApiException(
+        ApiErrorType.validation,
+        'La donación solicitada no es válida.',
+      );
+    }
+    final body = await _apiClient.delete(
+      '/api/donaciones/$id',
+      headers: _headers,
+      successStatusCodes: const {200},
+      context: ApiRequestContext.protectedSession,
+      allowSafeBackendMessage: true,
+    );
+    final data = body['data'];
+    if (data is! Map<String, dynamic> || data['id'] != id) {
+      throw ApiErrorMapper.unexpectedResponse;
+    }
+  }
+
   Future<DonationDetail> updateDonation(
     int id, {
     String? title,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../config/api_config.dart';
+import '../navigation/app_router.dart';
 import '../models/donation.dart';
 import '../services/api_exception.dart';
 import '../repositories/donation_repository.dart';
@@ -44,6 +45,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
   bool _isSubmitting = false;
   bool _requestCreated = false;
   bool _canEdit = false;
+  bool _deleting = false;
 
   @override
   void dispose() {
@@ -102,30 +104,117 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     final theme = Theme.of(context);
     final colors =
         theme.extension<AppColorTokens>() ?? const AppColorTokens.standard();
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Detalle de donación'),
-        actions: [
-          if (_canEdit)
-            TextButton.icon(
-              key: const Key('editDonationButton'),
-              onPressed: _edit,
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('Editar'),
-            ),
-        ],
-      ),
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [theme.colorScheme.surface, colors.background],
-          ),
+    return PopScope(
+      canPop: !_deleting,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Detalle de donación'),
+          actions: [
+            if (_canEdit)
+              TextButton.icon(
+                key: const Key('editDonationButton'),
+                onPressed: _deleting ? null : _edit,
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Editar'),
+              ),
+            if (_canEdit)
+              TextButton.icon(
+                key: const Key('deleteDonationButton'),
+                onPressed: _deleting ? null : _delete,
+                icon: const Icon(Icons.delete_outline),
+                label: Text(_deleting ? 'Eliminando…' : 'Eliminar'),
+              ),
+          ],
         ),
-        child: SafeArea(child: _body()),
+        body: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [theme.colorScheme.surface, colors.background],
+            ),
+          ),
+          child: SafeArea(child: _body()),
+        ),
       ),
     );
+  }
+
+  Future<void> _delete() async {
+    final donation = _donation;
+    if (_deleting ||
+        !_canEdit ||
+        donation == null ||
+        donation.estado != DonationStatus.publicada ||
+        widget.cacheUserId == null) {
+      return;
+    }
+    setState(() => _deleting = true);
+    try {
+      var decisionMade = false;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Eliminar donación'),
+          content: const Text(
+            '¿Seguro que deseas eliminar esta donación? Esta acción no se puede deshacer.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                if (decisionMade) return;
+                decisionMade = true;
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              key: const Key('confirmDeleteDonationButton'),
+              onPressed: () {
+                if (decisionMade) return;
+                decisionMade = true;
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('Eliminar'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      await _service.deleteDonation(
+        donation.id,
+        cacheUserId: widget.cacheUserId!,
+      );
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(content: Text('Donación eliminada correctamente.')),
+        );
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(AppRoutes.myDonations);
+      }
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No pudimos eliminar la donación. Intenta nuevamente.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
   }
 
   Widget _body() {

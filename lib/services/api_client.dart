@@ -132,6 +132,22 @@ class ApiClient {
     );
   }
 
+  Future<Map<String, dynamic>> delete(
+    String path, {
+    Map<String, String>? headers,
+    required Set<int> successStatusCodes,
+    ApiRequestContext context = ApiRequestContext.general,
+    bool allowSafeBackendMessage = false,
+  }) => _request(
+    method: 'DELETE',
+    path: path,
+    headers: headers,
+    send: (uri, requestHeaders) => _client.delete(uri, headers: requestHeaders),
+    successStatusCodes: successStatusCodes,
+    context: context,
+    allowSafeBackendMessage: allowSafeBackendMessage,
+  );
+
   Future<Map<String, dynamic>> patch(
     String path, {
     Map<String, String>? headers,

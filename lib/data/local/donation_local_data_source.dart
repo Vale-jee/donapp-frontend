@@ -25,6 +25,22 @@ class DonationLocalDataSource {
   final ConflictResolver conflictResolver;
   final Directory? imagesDirectory;
 
+  // Shared by data sources using this database. In-flight reads cannot restore
+  // a confirmed deletion; after restart the row is physically absent.
+  static final _deletedIds = Expando<Set<(int, int)>>();
+  Set<(int, int)> get _deleted => _deletedIds[database] ??= {};
+
+  Future<void> invalidateDeletedDonation({
+    required int cacheUserId,
+    required int remoteId,
+  }) => database.transaction(() async {
+    await (database.delete(database.localDonations)
+          ..where((row) => row.cacheUserId.equals(cacheUserId))
+          ..where((row) => row.remoteId.equals(remoteId)))
+        .go();
+    _deleted.add((cacheUserId, remoteId));
+  });
+
   Future<void> storeConfirmedUpdate({
     required int cacheUserId,
     required DonationDetail donation,
@@ -264,6 +280,7 @@ class DonationLocalDataSource {
     }
 
     for (final donation in page.donations) {
+      if (_deleted.contains((cacheUserId, donation.id))) continue;
       final existing =
           await (database.select(database.localDonations)
                 ..where((row) => row.cacheUserId.equals(cacheUserId))

@@ -146,6 +146,14 @@ GoRouter createAppRouter({
 
   final remoteDonations = DonationRepository.fromService(
     effectiveDonationService,
+    onConfirmedDeletion: (cacheUserId, remoteId) async {
+      if (authState.profile?.id != cacheUserId) return;
+      await (offlineRepository?.call() ?? donationRepository)
+          ?.cacheConfirmedDeletion(
+            cacheUserId: cacheUserId,
+            remoteId: remoteId,
+          );
+    },
     onConfirmedUpdate: (cacheUserId, updated) async {
       if (authState.profile?.id != cacheUserId) return;
       await (offlineRepository?.call() ?? donationRepository)

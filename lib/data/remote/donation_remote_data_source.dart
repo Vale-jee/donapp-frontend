@@ -9,6 +9,8 @@ class DonationRemoteDataSource {
   final DonationService _donationService;
   final CategoryService _categoryService;
 
+  Future<void> deleteDonation(int id) => _donationService.deleteDonation(id);
+
   Future<DonationPage> getExplore({
     required int page,
     required int limit,
