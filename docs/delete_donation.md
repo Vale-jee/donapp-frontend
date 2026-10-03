@@ -162,14 +162,14 @@ habituales disponibles, una cuenta autenticada y publicaciones de prueba.
    ```
 
 3. En otra terminal, desde `Proyecto/donapp-frontend`, comprobar el dispositivo
-   y ejecutar (el número documentado del Samsung es `RZCXC0568GK`; si `devices`
-   muestra otro, usar ese número en los comandos):
+   y ejecutar (sustituya `ID_DISPOSITIVO` por el identificador que muestra
+   `devices` en los comandos):
 
    ```powershell
-   $donappAdb = 'C:\Users\parap\AppData\Local\Android\sdk\platform-tools\adb.exe'
+   $donappAdb = Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'
    & $donappAdb devices
-   & $donappAdb -s RZCXC0568GK reverse tcp:3000 tcp:3000
-   flutter run -d RZCXC0568GK --dart-define=APP_ENV=dev --dart-define=API_BASE_URL=http://localhost:3000
+   & $donappAdb -s ID_DISPOSITIVO reverse tcp:3000 tcp:3000
+   flutter run -d ID_DISPOSITIVO --dart-define=APP_ENV=dev --dart-define=API_BASE_URL=http://localhost:3000
    ```
 
 4. Publicar una donación propia de prueba con una imagen y esperar la
@@ -191,14 +191,14 @@ habituales disponibles, una cuenta autenticada y publicaciones de prueba.
     el túnel USB antes de confirmar:
 
     ```powershell
-    & $donappAdb -s RZCXC0568GK reverse --remove tcp:3000
+    & $donappAdb -s ID_DISPOSITIVO reverse --remove tcp:3000
     ```
 
     Confirmar, esperar el error y comprobar que conserva el detalle y permite
     reintento. El modo avión por sí solo no corta el túnel USB. Restaurarlo:
 
     ```powershell
-    & $donappAdb -s RZCXC0568GK reverse tcp:3000 tcp:3000
+    & $donappAdb -s ID_DISPOSITIVO reverse tcp:3000 tcp:3000
     ```
 
     Reintentar y comprobar el éxito.

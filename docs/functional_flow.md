@@ -1,6 +1,6 @@
 # Flujo funcional de DonApp
 
-Este documento resume el recorrido principal del cliente móvil, los endpoints que intervienen y el resultado visible esperado en cada paso.
+Este documento describe el flujo actual y conserva registros fechados de revisiones anteriores. Las secciones «Verificación del requisito» son evidencia histórica, no verificaciones de la versión actual.
 
 ## Seguridad de red por variante (requisito 23)
 
@@ -45,7 +45,7 @@ una prueba física del túnel ADB reverse.
 | Explorar | Abrir Explorar desde Inicio. | Caché local y `GET /api/donaciones` | Se muestran primero las tarjetas guardadas y luego se intenta el refresh remoto. Ante un fallo se conservan el contenido, las imágenes locales disponibles y la última sincronización real. | Varias tarjetas de donaciones y, sin red, aviso de datos guardados. |
 | Detalle | Seleccionar una donación. | `GET /api/donaciones/{id}` | Se muestra la información completa de la donación y las acciones disponibles para el usuario. | Pantalla de detalle. |
 | Crear | Volver a Inicio y abrir Donar. | Categorías locales; `GET /api/categorias` si no hay categorías guardadas | El formulario puede abrirse sin red si las categorías ya están guardadas y la sesión está abierta. | Formulario con una categoría seleccionada. |
-| Imágenes | Seleccionar entre una y cinco imágenes válidas. | Galería del dispositivo | Se previsualizan los archivos; al publicar se copian al almacenamiento administrado de la app. | Previsualizaciones de imágenes en el formulario. |
+| Imágenes | Seleccionar entre una y cinco imágenes válidas. | Cámara o galería del dispositivo | Se previsualizan los archivos; al publicar se copian al almacenamiento administrado de la app. | Previsualizaciones de imágenes en el formulario. |
 | Publicar | Completar el formulario y pulsar **Publicar donación**. | Drift y outbox; luego firma, Cloudinary y `POST /api/donaciones` | Se guardan donación, imágenes y operación antes de enviar. SyncCoordinator publica con clientId estable. | Aviso de donación guardada y regreso a Inicio. |
 | Ver publicación | Abrir Mis donaciones después de sincronizar. | `GET /api/donaciones/mias` y detalle | El listado remoto permite abrir la donación confirmada. Las creaciones pendientes no se muestran como publicaciones remotas. | Detalle de la donación confirmada. |
 
@@ -96,42 +96,22 @@ Ante una autenticación definitivamente inválida:
 - Título, descripción y categoría se validan al perder foco.
 - Al pulsar **Publicar donación**, el formulario vuelve a validar todos sus campos antes de realizar peticiones remotas.
 - Las reglas locales muestran mensajes debajo del campo correspondiente.
-- Los errores estructurados que devuelve la API para `titulo`, `descripcion`, `categoriaId` e `imagenes` se asocian al control correspondiente; errores generales o desconocidos permanecen como mensaje del formulario.
+- En la composición remota directa, los errores estructurados que devuelve la API para `titulo`, `descripcion`, `categoriaId` e `imagenes` se asocian al control correspondiente; errores generales o desconocidos permanecen como mensaje del formulario.
 - Las imágenes se validan por cantidad, formato y tamaño antes de subirlas.
+- La composición normal con outbox vuelve a Inicio tras guardar: un rechazo posterior queda failedPermanent, sin UI de corrección por campo.
 - Una navegación temporal realizada con `push` mantiene montado el formulario y conserva texto, categoría e imágenes. Si el usuario abandona la ruta y abre un formulario nuevo, comienza limpio.
 
-## Cliente HTTP y justificación técnica
+## Cliente HTTP: alcance actual
 
-DonApp mantiene **package:http** (`http: ^1.6.0`, versión resuelta 1.6.0). La funcionalidad transversal de la API se centraliza en `ApiClient`, `ApiErrorMapper` y coordinadores propios: `SessionCoordinator` administra recuperación y rotación de sesión; `SyncCoordinator` define reintentos de operaciones persistidas. Esta separación permite completar las necesidades HTTP identificadas sin trasladar políticas de red a las pantallas ni cambiar la arquitectura. No se identifica una necesidad técnica de migrar ahora a Dio.
+La API usa package:http mediante ApiClient; Cloudinary y RemoteImageCache tienen transportes separados. Las pantallas consumen repositorios/fuentes; SessionCoordinator comparte transporte y recuperación de sesión. El inventario incluye Auth, GET/PATCH perfil, categorías, CREATE/READ/PATCH/DELETE donaciones, solicitudes, habilitación/lista/detalle de chats, mensajes y firma de imágenes. No se conserva el conteo anterior que omitía chat, edición y eliminación.
 
-### Alcance real
+GET tiene hasta tres intentos para red/timeout y HTTP 500/502/503/504, con backoff 500 ms/1 s. HTTP 429 solo reintenta con Retry-After entero entre 0 y 5 s, respetando el mayor plazo. POST/PATCH/DELETE no reintentan por estos fallos; ante 401 protegido puede renovarse y repetirse una vez. La outbox de creación aplica su propia política, clientId y reconciliación.
 
-Se consumen **18 operaciones método+ruta sobre 17 rutas de la API**: autenticación (4: registro, login, refresh y logout), perfil (1), categorías (1), donaciones (4: crear, disponibles, propias y detalle), solicitudes (7: crear, enviadas, recibidas, detalle, aceptar, rechazar y cancelar) y firma de imágenes (1). Además, se realiza POST multipart a la URL firmada de Cloudinary y GET de imágenes con URL variable para caché; estas transferencias no se cuentan como endpoints adicionales del backend.
+ReadCancellation se propaga mediante contexto a GET y descarga de imágenes con AbortableRequest. Pantallas integradas cancelan al descartarse y se comprueba la señal antes de guardar/presentar datos. Mutaciones continúan aunque la UI se descarte; chat no integra esa cancelación general y utiliza comprobaciones mounted. Los wrappers no exponen cierre general del transporte: no se afirma que timeout cierre siempre sockets.
 
-| Aspecto | Implementación actual con package:http | Aporte concreto de Dio |
-| --- | --- | --- |
-| Bearer y configuración | Los servicios agregan Authorization; ApiConfig centraliza API_BASE_URL. El router comparte un ApiClient con SessionRecovery entre servicios protegidos. | BaseOptions e interceptores facilitarían headers y opciones comunes; no son necesarios para centralizar estas políticas. |
-| Renovación y 401 | ApiClient repite una vez después de recuperar el token. SessionCoordinator comparte el refresh entre 401 concurrentes, reutiliza el token ya rotado y guarda ambos tokens. Login no dispara recuperación; un segundo 401 invalida la sesión. | Interceptores y QueuedInterceptor ofrecen mecanismos de coordinación; las reglas de rotación, exclusión de login/refresh e invalidación seguirían siendo propias. |
-| Multipart | ImageUploadService solicita firma mediante ApiClient y sube 1–5 imágenes secuencialmente con AbortableMultipartRequest y un cliente separado, sin Bearer de DonApp. | FormData, MultipartFile y callbacks de progreso simplificarían transferencias con progreso; multipart ya está implementado. |
-| Timeouts y cancelación | Plazos totales centralizados: API 15 s por intento, subida 120 s por imagen y descarga 30 s por imagen; todos incluyen el body. Solo la subida tiene aborto por timeout. No hay cancelación HTTP expuesta a la interfaz. | Timeouts de conexión/envío/recepción y CancelToken reducen código de control. Sus plazos por fase no equivalen automáticamente a un límite total de operación. |
-| Errores y logging | ApiErrorMapper traduce estados, validaciones, red y timeout a ApiException. Cloudinary tiene clasificación propia. HttpRequestLogger registra metadatos seguros solo en dev; lastErrorCode de sincronización no es un log de peticiones. | DioException y LogInterceptor aportan mecanismos, pero requieren adaptar clasificación y ocultar credenciales, firmas y datos privados. |
-| Pruebas | Client inyectable, MockClient y clientes simulados de streaming; existen pruebas de servicios, sesión, errores y subida. | También permite pruebas mediante adaptadores; migrar obliga a adaptar los dobles de transporte y verificar equivalencia. |
+El chat carga por HTTP al abrir/refrescar/enviar. No tiene polling periódico, WebSocket ni recepción automática. ChatDetailScreen consume la primera página de hasta 100 mensajes y no navega páginas anteriores; la API sí tiene paginación. La ubicación se envía como texto/enlace, no como mapa de donaciones.
 
-### Trabajo propio y costo de cambio
-
-La composición de la API se establece por instancia de `SessionCoordinator`: recibe un `ApiClient` inyectable o crea el cliente base. Autenticación y restauración de perfil comparten ese cliente sin recuperación automática; `protectedApiClient` es una vista estable que reutiliza el mismo transporte, URL y timeout mediante `withSessionRecovery`. El router reutiliza el AuthRepository del coordinador e inyecta la vista protegida en perfil, categorías, donaciones, solicitudes y firma de imágenes. Así, el arranque normal utiliza dos vistas ApiClient sobre un único http.Client para la API propia, sin singleton global. Los constructores independientes y los reemplazos de servicios se conservan para pruebas; no forman parte de la composición normal de la app.
-
-La separación de políticas evita que el refresh intente renovarse a sí mismo y conserva la restauración inicial gestionada por SessionCoordinator. Cloudinary mantiene su transporte multipart separado, sin Bearer de DonApp. RemoteImageCache también mantiene un transporte de recursos, incluso cuando una referencia relativa se resuelve contra el host de la API: no consume el sobre JSON ni aplica recuperación de sesión. Esta composición no cambia timeouts, cancelación, serialización, logging ni políticas de cierre existentes.
-
-Con package:http ya se implementan manualmente serialización y validación del sobre JSON, headers Bearer, recuperación tras 401, rotación concurrente, traducción de errores y política de reintentos de sincronización. No hay reintento genérico de todos los errores HTTP. El refresh automático depende de inyectar SessionRecovery; construir ApiClient() por separado no lo habilita. La restauración inicial de sesión tiene su propio flujo en SessionCoordinator.
-
-Si se requieren cancelación desde la interfaz o progreso, habrá que incorporar propagación de señales Abortable mediante Client.send y seguimiento de bytes en las capas de transporte. También queda por definir el cierre de los clientes propios: los wrappers actuales no exponen close. Son mejoras pendientes, no limitaciones que obliguen a cambiar de biblioteca.
-
-Migrar ahora tendría un costo moderado y riesgo de regresión en sesión, errores y subida: habría que sustituir transporte, adaptar excepciones y pruebas, conservar el reintento único, evitar rotaciones duplicadas y mantener los plazos y la separación de credenciales de Cloudinary. Los modelos y repositorios podrían conservarse detrás de ApiClient, pero Dio no reemplazaría la cola persistida, la idempotencia ni las reglas de sesión. Se reconsiderará si el producto necesita de forma extensa progreso, cancelación y políticas de transferencia por fase; el número actual de endpoints no justifica por sí solo una migración.
-
-Evidencia local: [ApiClient](../lib/services/api_client.dart), [configuración](../lib/config/api_config.dart), [inyección en router](../lib/navigation/app_router.dart), [sesión](../lib/services/session_coordinator.dart), [subida](../lib/services/image_upload_service.dart), [caché de imágenes](../lib/services/remote_image_cache.dart) y [sincronización](../lib/services/sync_coordinator.dart). Las pruebas existentes cubren [401 y errores de transporte](../test/services/api_client_test.dart), [rotación concurrente y restauración](../test/services/session_coordinator_test.dart), [multipart, errores y aborto por timeout](../test/services/image_upload_service_test.dart) y [política de errores](../test/services/service_error_policy_test.dart). Esta evaluación revisa el código y las pruebas; no constituye una nueva ejecución de la suite.
-
-Referencias de capacidades: [documentación de package:http](https://pub.dev/packages/http) y [documentación de Dio](https://pub.dev/packages/dio).
+Fuentes: [ApiClient](../lib/services/api_client.dart), [sesión](../lib/services/session_coordinator.dart), [cancelación](../lib/services/read_cancellation.dart), [chat](../lib/screens/chat_detail_screen.dart), [sincronización](../lib/services/sync_coordinator.dart).
 
 ## Validación de respuestas HTTP
 
@@ -141,23 +121,9 @@ ApiErrorMapper traduce 400/422 a validación, 401 a autenticación (credenciales
 
 ## Tiempos de espera de red
 
-Las duraciones se definen en [NetworkTimeouts](../lib/config/network_timeouts.dart). Son límites totales de cada intercambio HTTP: incluyen establecimiento de conexión, envío, espera de cabeceras y lectura completa del body. No se reinician al recibir fragmentos ni se presentan como timeouts independientes de conexión y recepción.
+[NetworkTimeouts](../lib/config/network_timeouts.dart) define plazos totales por intercambio: API 15 s por intento, subida Cloudinary 120 s por imagen, descarga de caché 30 s por imagen. Incluyen conexión/envío, cabeceras y body; no son timeouts separados de socket y no limitan todo el flujo de sesión/lote.
 
-| Operación | Constante | Plazo | Aplicación y resultado al vencer |
-| --- | --- | --- | --- |
-| API propia | `apiResponse` | 15 s por intento | ApiClient limita el Future de get/post/patch, que incluye el body. ApiErrorMapper devuelve ApiException de tipo timeout con el mensaje comprensible existente. |
-| Subida a Cloudinary | `imageUpload` | 120 s por imagen | ImageUploadService limita send más Response.fromStream; conserva el aborto de AbortableMultipartRequest y CloudinaryFailure.timeout. Se mantiene el plazo porque ya se verificó una subida móvil superior a 30 s. |
-| Descarga a caché | `imageDownload` | 30 s por imagen | RemoteImageCache limita get, incluido el body. Traduce TimeoutException a ApiException de tipo timeout, elimina el temporal y no publica una respuesta tardía. El plazo permite más transferencia que una respuesta JSON sin prolongarlo tanto como una subida. |
-
-`package:http` no ofrece connectTimeout/receiveTimeout separados en la interfaz común de Client. Client.send devuelve una StreamedResponse y permite limitar por separado hasta cabeceras y la lectura posterior; sin embargo, la primera fase también incluye conexión y envío, por lo que no mide exclusivamente establecimiento de conexión. En plataformas IO se puede configurar connectionTimeout en dart:io HttpClient, pero no es una política portable de Client ni identifica todos los errores de red como timeout. DonApp conserva la interfaz inyectable actual y usa un presupuesto total finito: una conexión o recepción bloqueada consume ese mismo presupuesto. No se garantiza un plazo independiente de socket ni se informa en qué fase se agotó.
-
-Future.timeout deja de esperar, pero no cancela por sí solo el transporte subyacente. API y descarga pueden seguir teniendo actividad de transporte después del error; su resultado tardío se descarta. La subida conserva su señal de aborto existente. Estos plazos limitan la espera del consumidor HTTP, no garantizan cierre del socket. No se añade cancelación desde pantallas ni se altera la política de reintentos.
-
-El refresh y la repetición después de 401 son intercambios separados, cada uno con el plazo de API; 15 s no es un límite de todo el flujo de sesión. La firma de Cloudinary usa el plazo de API; 120 s aplica a cada imagen, no al lote. Lectura del archivo local previa a subir, escritura en disco, acceso al almacenamiento seguro y procesamiento posterior no forman parte de los plazos HTTP. Una imagen ya guardada no realiza petición. El repositorio conserva su manejo de fallos de caché para mantener disponible el contenido remoto.
-
-Se verifica el límite del body de API, incluso con cabeceras y fragmentos recibidos; respuestas dentro de plazo; descarga bloqueada antes o después de cabeceras, limpieza y propagación del error; y las pruebas existentes de subida a los 60 s y timeout con aborto a los 120 s. Los clientes y plazos inyectables permiten pruebas sin backend real.
-
-Referencias: [Client.send](https://pub.dev/documentation/http/latest/http/Client/send.html), [HttpClient.connectionTimeout](https://api.dart.dev/dart-io/HttpClient/connectionTimeout.html) y [Future.timeout](https://api.dart.dev/dart-async/Future/timeout.html).
+Future.timeout limita la espera pero no cancela por sí solo el transporte. La subida tiene aborto por timeout; GET/descargas con ReadCancellation pueden abortarse por ciclo de vida. Red/timeout puede reintentar GET según la política anterior; el consumidor descarta resultados tardíos. Lectura de archivos, SQLite y almacenamiento seguro no forman parte de estos plazos HTTP.
 
 ## Correspondencia entre JSON del servidor y modelos Dart
 
@@ -748,7 +714,7 @@ siempre respetando nextAttemptAt.
 
 ConflictResolver mantiene la estrategia previa: protege datos locales aún no
 sincronizados y aplica la versión confirmada del servidor al reconciliar una
-creación. ApiClient sigue sin reintentar POST/PATCH; no hay un segundo backoff
+creación. ApiClient sigue sin reintentar POST/PATCH/DELETE por fallos de red; no hay un segundo backoff
 para crear. La recuperación de sesión existente sigue separada.
 
 ### Alcance offline real
@@ -773,3 +739,7 @@ resolución de conflictos y los flujos online que se conservan.
 Verificación del requisito 21 (16 de septiembre de 2026): dart format comprobado;
 flutter analyze sin incidencias; 586 pruebas focalizadas y 647 de la suite
 completa aprobadas. No se cambian tablas, contratos API, modelos JSON ni backend.
+
+## CRUD y límites actuales de entrega
+
+[Editar](edit_donation.md) y [Eliminar](delete_donation.md) describen propietario + PUBLICADA y operaciones online. Editar Flutter cambia texto/categoría sin imágenes. DELETE no borra historiales ni archivos Cloudinary. Perfil y chat también requieren conexión. La ciudad viene del perfil, sin GPS; cámara se usa al publicar, ubicación en chat. No hay push reales, mapa de donaciones, búsqueda por distancia, cambio de contraseña completo ni panel administrativo móvil. Entrega/calificaciones/administración backend no equivalen a flujos Flutter terminados.

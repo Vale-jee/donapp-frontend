@@ -1,224 +1,143 @@
-# DonApp
+# DonApp — cliente Flutter
 
-DonApp es una aplicación móvil que conecta a personas que desean donar artículos en buen estado con personas interesadas en recibirlos. Este repositorio contiene el cliente Flutter; la API REST se ejecuta y configura por separado.
+DonApp conecta a personas que donan artículos con personas interesadas en recibirlos en la misma ciudad. Este repositorio contiene la aplicación móvil; requiere la API REST del repositorio separado `donapp`, configurada con PostgreSQL, Redis y Cloudinary.
 
-## Tecnologías principales
+## Tecnologías y estructura
 
-- Flutter y Dart.
-- Material 3.
-- API REST de DonApp mediante `package:http`.
-- Drift sobre SQLite cifrado con SQLCipher para persistencia local.
-- Autenticación JWT con access token y refresh token.
-- Almacenamiento seguro mediante `flutter_secure_storage`.
-- Navegación declarativa con GoRouter.
-- Selección de imágenes y subida HTTPS mediante un flujo firmado hacia Cloudinary.
-
-## Funcionalidades implementadas
-
-- Registro e inicio de sesión.
-- Restauración automática de sesión y recuperación del perfil autenticado.
-- Almacenamiento seguro de access token y refresh token.
-- Renovación y rotación automática de tokens.
-- Rutas públicas y privadas, con regreso al destino solicitado después del Login.
-- Manejo diferenciado de 401, 403 por permisos y cuenta inactiva.
-- Inicio con información real del usuario.
-- Exploración paginada de donaciones y filtro por categoría.
-- Detalle de donación.
-- Publicación completa con categorías obtenidas del backend.
-- Selección, validación y subida segura de imágenes.
-- Cámara para fotografiar artículos y galería mediante el selector del sistema.
-- Chat con mensajes y ubicación compartida que puede abrirse en el mapa.
-- Consulta de donaciones propias.
-- Solicitudes enviadas y recibidas, detalle y creación de solicitudes.
-- Aceptación, rechazo y cancelación de solicitudes.
-- Validación de formularios al perder foco y nuevamente al enviar.
-- Presentación de errores locales y remotos debajo del campo correspondiente.
-- Conservación del contenido del formulario durante navegación temporal con `push`.
-- Componentes reutilizables para carga, contenido vacío, error y reintento.
-
-## Sesión y navegación
-
-El inicio normal de la aplicación sigue este flujo:
+Flutter/Dart, Material 3, GoRouter, `package:http`, Drift con SQLCipher, `flutter_secure_storage`, `image_picker`, `permission_handler`, `geolocator` y `url_launcher`. Versiones declaradas/resueltas: `pubspec.yaml` y `pubspec.lock`.
 
 ```text
-Inicio de app
-  → restaurar sesión
-  → consultar perfil
-  → renovar tokens si es necesario
-  → abrir Inicio o el destino privado solicitado
+lib/
+  config/          URL, ambientes y timeouts
+  models/          Modelos y serialización JSON
+  navigation/      Router y protección de rutas
+  screens/         Pantallas
+  repositories/    Coordinación de fuentes de datos
+  data/local/      Drift, DAO, caché y outbox
+  data/remote/     Delegación a servicios HTTP
+  services/        HTTP, sesión, permisos, imágenes y sincronización
+  theme/           Tema y tokens visuales
+  widgets/         Componentes reutilizables
+test/              Pruebas automatizadas de escritorio
+integration_test/  E2E de publicación con servicios reales
+docs/              Documentación técnica e informes históricos
 ```
 
-Una sesión inválida elimina los tokens y el perfil en memoria. El router abandona las rutas privadas y conserva el destino para regresar después de un nuevo Login.
+## Funciones disponibles
 
-El recorrido funcional principal es:
+- Bienvenida, registro, inicio y cierre de sesión, restauración de sesión y renovación de tokens.
+- Perfil editable e Inicio con los datos del usuario.
+- Explorar donaciones paginadas de la misma ciudad, filtro por categoría y detalle.
+- Publicar con una a cinco imágenes desde cámara o galería.
+- Mis donaciones; editar título, descripción y categoría de una publicación propia `PUBLICADA`. El formulario Editar conserva las imágenes.
+- Eliminar online una publicación propia `PUBLICADA` sin solicitudes ni historial restrictivo.
+- Crear solicitudes, consultar enviadas/recibidas y detalle; aceptar, rechazar y cancelar.
+- Lista de chats, conversación HTTP, envío de mensajes y ubicación compartida como mensaje con apertura de un mapa externo.
 
-```text
-Login
-  → Inicio
-  → Explorar
-  → Detalle
-  → Inicio
-  → Donar
-  → Publicar
-  → Detalle de la nueva donación
-```
+El backend toma la ciudad de la donación del perfil al crearla; no usa GPS y esa ciudad no cambia al editar posteriormente el perfil. Explorar filtra por ciudad, no por distancia.
 
-La descripción de cada paso, sus endpoints y las capturas sugeridas se encuentra en [Flujo funcional de DonApp](docs/functional_flow.md).
+### CRUD de donaciones
 
-## Arquitectura resumida
+| Operación móvil | API | Restricción principal |
+| --- | --- | --- |
+| Crear | `POST /api/donaciones` después de sincronizar imágenes | Sesión válida, categoría activa y referencias de imágenes válidas |
+| Leer | `GET /api/donaciones`, `/mias`, `/{id}` | Explorar usa caché; Mis donaciones y detalle son remotos |
+| Editar | `PATCH /api/donaciones/{id}` | Propietario y `PUBLICADA`; Flutter envía los campos modificados de texto/categoría |
+| Eliminar | `DELETE /api/donaciones/{id}` | Propietario, `PUBLICADA`, sin solicitudes de ningún estado ni historial restrictivo |
 
-Las pantallas consumen repositorios que coordinan fuentes locales y remotas (`UI → Repository → LocalDataSource / RemoteDataSource`). Los servicios de sesión administran autenticación y limpieza local; `SyncCoordinator` procesa la cola persistida. El backend sigue siendo la autoridad remota sobre los datos confirmados.
+DELETE bloquea la fila y comprueba solicitudes, solicitud aceptada, calificación, exención y auditoría `DONACION`. En una transacción elimina primero `ImagenDonacion` y después `Donacion`; un fallo revierte ambos pasos. No elimina solicitudes, chats, mensajes, calificaciones, exenciones ni auditorías. Tampoco borra archivos físicos de Cloudinary. La retirada lógica del backend es distinta. Consulte [Editar](docs/edit_donation.md) y [Eliminar](docs/delete_donation.md).
 
-## Funcionalidades futuras
+## Offline y sincronización
 
-- Búsqueda textual completa.
-- Calificaciones.
-- Recuperación de contraseña.
+| Flujo | Alcance sin conexión |
+| --- | --- |
+| Explorar | Lee primero donaciones, categorías e imágenes ya descargadas; informa frescura y última sincronización |
+| Crear | Guarda donación, copias de imágenes y operación en Drift antes de enviar; requiere sesión ya abierta y categorías guardadas |
+| Restaurar sesión al iniciar | Consulta perfil remoto; no hay restauración offline integrada desde el perfil Drift |
+| Mis donaciones, detalle, edición, eliminación | Necesitan backend; no tienen cola de mutaciones offline |
+| Registro/login, perfil, solicitudes y chat | Necesitan conexión; chat no tiene outbox |
 
-## Requisitos y ejecución
+SQLite se cifra con SQLCipher; tokens y clave se guardan en almacenamiento seguro. Las imágenes están en archivos privados separados y no están cifradas por SQLCipher.
 
-Se necesita Flutter compatible con la restricción de Dart declarada en `pubspec.yaml`, Android SDK, un dispositivo o emulador y el backend de DonApp en ejecución.
+`OfflineDonations` compone un `SyncCoordinator` por sesión. Se activa al encolar, establecer sesión y volver a primer plano; programa reintentos en primer plano. No es un servicio Android de sincronización en segundo plano ni tiene un detector de conectividad integrado.
 
-Con el SDK Flutter usado en esta revisión, Android compila con API 36, apunta a API 36 y requiere como mínimo API 24. Gradle conserva los valores proporcionados por Flutter.
+La outbox admite solo creación. Sube imágenes, conserva URLs confirmadas y publica con el mismo UUID `clientId`; el backend deduplica por `(propietarioId, clientId)`. `operationId` identifica el trabajo local. Hay hasta cinco intentos: tras fallos recuperables espera 5, 15, 30 y 60 s; la función contempla 120 s, pero el quinto fallo ya pasa a permanente. Recupera trabajos `processing` abandonados después de cinco minutos y pausa por autenticación.
 
-### Cámara y ubicación
+No existe UI para corregir/reactivar errores permanentes. Logout intenta eliminar caché, base, clave, tokens, imágenes administradas y creaciones pendientes; continúa aunque alguna limpieza o la revocación remota falle. TTL significa frescura; no hay limpieza automática por antigüedad. Consulte [Persistencia local](docs/local_persistence.md).
 
-En Crear donación, pulse **Tomar foto** y confirme la explicación de DonApp antes de solicitar el permiso. Cancelar la captura vuelve al formulario sin error. Si se deniega el permiso o la cámara no está disponible, puede usar **Galería**; una denegación permanente ofrece **Abrir ajustes**. La galería usa el selector del sistema, sin pedir acceso amplio a fotos ni metadatos completos. Las fotos de cámara entran en la misma validación, copia local, outbox y sincronización que las seleccionadas.
+## Requisitos e instalación
 
-En el chat, pulse compartir ubicación, lea la explicación y confirme las coordenadas antes de enviarlas. Se solicita una posición con `LocationAccuracy.high` y se conserva el redondeo a tres decimales. No hay seguimiento en segundo plano. Si el permiso se deniega, escriba el punto de encuentro; si está bloqueado, use **Abrir ajustes**; si el servicio está apagado, use **Activar ubicación**. El chat sigue disponible ante fallos de ubicación.
+Flutter compatible con Dart `^3.13.0`, Android SDK, Java 17 y dispositivo/emulador. Para iOS se necesita macOS/Xcode; las pruebas de escritorio no verifican plugins ni diálogos nativos. Configure primero el backend siguiendo su README.
 
-La ubicación se guarda como mensaje mediante la API de chat existente y se recupera al reabrir la conversación con conexión. La tarjeta muestra **Ubicación** y abre un mapa externo. El prefijo interno `Ubicación aproximada:` se conserva para leer mensajes anteriores. El chat no tiene outbox ni soporte offline nuevo.
-
-Android declara cámara y ubicación aproximada/precisa, sin ubicación en segundo plano ni permisos amplios de almacenamiento. iOS incluye las explicaciones de cámara, ubicación al usar la app y selección de fotos; `requestFullMetadata: false` evita solicitar permiso amplio de fototeca. El proyecto iOS usa Swift Package Manager; `permission_handler` detecta los permisos desde `Info.plist` al compilar con Flutter. La compilación y los diálogos reales de iOS deben verificarse en un Mac/dispositivo iOS.
-
-Para la entrega en Android físico, use el comando USB de abajo y compruebe: captura y cancelación, denegación y bloqueo de permisos, galería como alternativa, ubicación apagada, envío y reapertura del chat, y apertura del mapa. Las pruebas automatizadas usan dobles de plugins y no sustituyen esta comprobación física.
-
-Instale las dependencias y verifique el proyecto:
+Desde este repositorio:
 
 ```powershell
 flutter pub get
-flutter analyze
-flutter test
-```
-
-### Configuración por ambiente
-
-`APP_ENV` y `API_BASE_URL` son constantes de compilación suministradas con `--dart-define`. Los únicos ambientes válidos son `dev`, `test` y `prod`. Si se omite `APP_ENV`, se utiliza `dev` para conservar compatibilidad con los comandos existentes y la tarea de VS Code. No hay URL predeterminada: `API_BASE_URL` es obligatoria al consumir la API, sin agregar `/api` al final.
-
-| Ambiente | Configuración | Uso |
-| --- | --- | --- |
-| `dev` | URL HTTP o HTTPS; la variante Android debug permite HTTP solo hacia localhost | Desarrollo local con backend propio |
-| `test` | URL ficticia e inyección de clientes simulados | Pruebas automatizadas sin backend real |
-| `prod` | URL HTTPS obligatoria | Ejecución o compilación para producción |
-
-Desarrollo explícito:
-
-```powershell
 flutter run --dart-define=APP_ENV=dev --dart-define=API_BASE_URL=http://localhost:3000
 ```
 
-El comando anterior de desarrollo también sigue siendo válido:
+`API_BASE_URL` es obligatoria al construir peticiones y no debe terminar en `/api`. `APP_ENV` admite `dev`, `test` y `prod`; por defecto es `dev`. Elegir `test` no simula HTTP: las pruebas deben inyectar dobles.
 
-```powershell
-flutter run --dart-define=API_BASE_URL=http://localhost:3000
-```
+### Android por USB
 
-Para usar un dispositivo Android físico conectado por USB con el backend local:
+Con depuración USB autorizada y backend en el puerto 3000:
 
 ```powershell
 & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" reverse tcp:3000 tcp:3000
 flutter run --dart-define=API_BASE_URL=http://localhost:3000
 ```
 
-Para comprobar una desconexión real, retire temporalmente el reverse con `adb reverse --remove tcp:3000`: el túnel USB puede mantener accesible el backend incluso con modo avión. Esta es una consideración exclusiva de desarrollo y depuración.
+Con varios dispositivos, seleccione uno con `adb -s <ID_DISPOSITIVO>` y `flutter run -d <ID_DISPOSITIVO>`. Para desconexión real retire el túnel con `adb reverse --remove tcp:3000`: modo avión puede dejar funcionando el acceso USB.
 
-Pruebas automatizadas:
+### Inicio conjunto desde VS Code
+
+La tarea está en `Proyecto/.vscode/tasks.json`, fuera de ambos repositorios. Si descarga solamente este repositorio desde GitHub, use comandos manuales o prepare esa estructura conjunta.
+
+1. Abra Docker Desktop y espere a Docker Engine.
+2. Tenga PostgreSQL disponible y el contenedor Redis existente `donapp-security-test-redis` preparado; la tarea no crea contenedores.
+3. Conecte/autorice Android; instale dependencias y configure ambos repositorios previamente.
+4. Abra la carpeta raíz **Proyecto** en VS Code.
+5. Ejecute **Terminal → Run Task... → DonApp: Iniciar entorno**.
+
+Coordina **Redis → ADB reverse → backend → Flutter**. Inicia Redis si está detenido, ejecuta `yarn.cmd dev` en `donapp` y espera `Ready in` antes de `flutter run` en `donapp-frontend`, con `API_BASE_URL=http://localhost:3000`. No inicia Docker Desktop/PostgreSQL, no aplica migraciones ni inicia el worker BullMQ.
+
+## Android, cámara y ubicación
+
+| Configuración actual | Valor/fuente |
+| --- | --- |
+| Nombre visible | DonApp, manifest principal |
+| Versión/build | `1.0.0+1`, pubspec; sobrescribibles al compilar |
+| namespace/applicationId | `com.example.donapp_mobile`, Gradle |
+| compileSdk | `flutter.compileSdkVersion`; SDK local: 36 |
+| targetSdk | 36, explícito en Gradle |
+| minSdk | `flutter.minSdkVersion`; SDK local: 24 |
+| Permisos principales | INTERNET, CAMERA, ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION |
+
+Valores heredados verificados en el SDK local `<FLUTTER_SDK>/packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt`; pueden cambiar con el SDK. No hay ubicación en segundo plano ni almacenamiento amplio en el manifest principal. Auto Backup está deshabilitado.
+
+La cámara se usa al publicar, con explicación/permiso; cancelar vuelve al formulario y la galería es alternativa. La galería usa el selector del sistema con `requestFullMetadata: false`. La ubicación se solicita en el chat con confirmación, precisión alta y redondeo a tres decimales, sin seguimiento continuo. Ante denegación puede escribirse el punto de encuentro; se ofrecen ajustes cuando corresponde. iOS declara explicaciones de cámara, selección de fotos y ubicación al usar la app en `Info.plist`.
+
+## Red, pruebas y compilación
+
+Plazos totales HTTP: API 15 s por intento, subida 120 s por imagen y descarga de caché 30 s por imagen. GET reintenta red, timeout y HTTP 500/502/503/504 hasta tres intentos con esperas de 500 ms y 1 s; 429 solo si Retry-After indica un entero entre 0 y 5 segundos, respetando la espera mayor. No reintenta mutaciones por esos fallos; la recuperación protegida ante 401 puede renovar y repetir una vez. `ReadCancellation` aborta lecturas donde está integrado y evita resultados después de abandonar pantallas; no se generaliza a todo el chat ni mutaciones.
+
+Mis donaciones y mensajes usan `ListView.builder`. `DonationCard` aplica `ResizeImage` solo al activar `limitContainedImageDecode` con `BoxFit.contain`, como en Mis donaciones; Explorar no usa `ListView.builder`. La caché remota de imágenes respalda Explorar. No se promete mejora global de rendimiento sin medición.
 
 ```powershell
+flutter analyze
+flutter test
 flutter test --dart-define=APP_ENV=test --dart-define=API_BASE_URL=https://donapp.test
-```
-
-`donapp.test` es una dirección ficticia. Las pruebas inyectan `MockClient`, servicios simulados o constructores de URL; no necesitan un servidor escuchando allí. Seleccionar `test` no simula por sí solo el transporte ni impide conexiones: el aislamiento lo proporcionan los dobles de prueba. `flutter test` sin defines también sigue permitido; las pruebas no requieren una URL real y verifican explícitamente la ausencia de configuración.
-
-Producción (reemplace el dominio de ejemplo por la dirección pública de su despliegue):
-
-```powershell
-flutter run --release --dart-define=APP_ENV=prod --dart-define=API_BASE_URL=https://api.example.com
 flutter build apk --release --dart-define=APP_ENV=prod --dart-define=API_BASE_URL=https://api.example.com
 ```
 
-El modo `--release` no selecciona el ambiente automáticamente: producción debe indicar `APP_ENV=prod`. `ApiConfig` valida al construir cada endpoint, antes de enviar la petición. Rechaza ambientes desconocidos o vacíos, URL ausente o inválida y cualquier URL base HTTP en `prod`, incluso localhost. Lanza `ApiConfigException` con el motivo; `ApiClient` conserva su traducción a error de configuración para la interfaz. No se agrega validación nueva al arranque sin peticiones.
+Los dominios son ejemplos; sustituya el de producción. Con dependencias resueltas puede agregar `--no-pub` a analyze/test. La [E2E de publicación](docs/prototipo_15_validacion_manual.md) requiere servicios reales y escribe una donación; no se ejecuta con la suite de escritorio.
 
-La configuración Android común (`android/app/src/main/res/xml/network_security_config.xml`) bloquea cleartext sin excepciones. El manifest principal declara también `usesCleartextTraffic=false`. Release y profile usan esa configuración. Solo debug sustituye el recurso desde `android/app/src/debug/res/xml/network_security_config.xml` para permitir HTTP hacia `localhost`, sin subdominios. Se mantiene `adb reverse tcp:3000 tcp:3000` con la URL `http://localhost:3000`; no se habilitan direcciones LAN ni dominios externos.
+En `prod`, Dart exige HTTPS para API/imágenes. `--release` no elige `APP_ENV`. Android release/profile bloquea cleartext; debug permite únicamente `localhost`. iOS no tiene excepciones ATS. Los `dart-define` quedan en el artefacto: no guarde secretos allí. El logger filtra metadatos y queda deshabilitado en release/test/prod.
 
-La variante Android y `APP_ENV` son configuraciones distintas: `APP_ENV=dev` no habilita la excepción nativa en release/profile, y debug con `APP_ENV=prod` sigue rechazando una URL base HTTP en Dart. Para medir en profile utilice un backend HTTPS. En producción use siempre ambos: `--release` y `--dart-define=APP_ENV=prod`.
+Release actualmente firma con claves debug y mantiene un applicationId de ejemplo: compilar APK no equivale a preparar distribución comercial. No suba `.env`, credenciales, keystores, tokens ni archivos locales E2E.
 
-La validación Dart de HTTPS se conserva porque la política nativa no protege por sí sola todos los sockets de Flutter. En `prod`, ApiConfig también rechaza referencias HTTP de imágenes antes de que los widgets o RemoteImageCache las soliciten. Cloudinary conserva su validación de firma HTTPS, host autorizado y respuesta `secure_url` HTTPS. iOS no tiene excepciones ATS para cargas inseguras. No se desactiva la validación de certificados.
+## Limitaciones y documentación
 
-HttpRequestLogger sigue sin emitir registros en `prod` ni `test`. En `dev` registra únicamente método, ruta filtrada, status y duración; no cabeceras, cuerpos, tokens ni firmas.
+Chat HTTP se recarga al abrir/refrescar/enviar; no usa WebSocket ni actualización automática en tiempo real. La UI carga hasta 100 mensajes recientes y no navega las páginas anteriores de la API. No hay push reales, mapa de donaciones ni búsqueda por distancia. Cambiar contraseña muestra «próximamente»; no hay recuperación de contraseña ni panel administrativo móvil. Entrega bilateral, calificaciones, exenciones y administración existen en backend, pero no son flujos Flutter terminados. No hay SDK de monitoreo remoto integrado.
 
-Los valores `dart-define` se incorporan al artefacto compilado y **no son secretos**. No deben contener contraseñas, tokens ni credenciales; la URL debe ser una dirección pública de configuración.
-
-## Inicio rápido desde VS Code
-
-1. Abra Docker Desktop.
-2. Confirme que PostgreSQL está disponible.
-3. Conecte y autorice el teléfono Android.
-4. Abra la carpeta `Proyecto` en VS Code.
-5. Vaya a `Terminal → Run Task...`.
-6. Ejecute `DonApp: Iniciar entorno`.
-
-VS Code comprobará e iniciará Redis cuando sea necesario, configurará ADB reverse, levantará el backend y, cuando este se encuentre listo, iniciará Flutter.
-
-## Estructura del frontend
-
-```text
-lib/
-├── config/       # Configuración y construcción de URL de la API
-├── models/       # Autenticación, perfil, donaciones y solicitudes
-├── navigation/   # Rutas públicas, privadas y redirecciones
-├── screens/      # Pantallas y flujos de usuario
-├── services/     # API, sesión, almacenamiento, imágenes y entidades
-├── widgets/      # Componentes presentacionales reutilizables
-└── main.dart     # Inicialización de estado de sesión y router
-
-docs/
-├── component_catalog.md
-├── functional_flow.md
-└── local_persistence.md
-```
-
-Consulte también el [catálogo de componentes](docs/component_catalog.md).
-DonApp utiliza almacenamiento local cifrado para soporte offline. Sus políticas
-de minimización, retención, sincronización y limpieza de sesión se documentan en
-la [política de persistencia local](docs/local_persistence.md).
-
-El soporte offline actual incluye la lectura local-first de Explore y la creación de donaciones desde una sesión autenticada. Explore conserva donaciones, categorías e imágenes remotas que ya alcanzaron a descargarse, e informa la última sincronización cuando los datos están desactualizados o falla el refresh. La pantalla de publicación guarda primero la donación, sus imágenes y una operación en la base local cifrada; `SyncCoordinator` sube las imágenes pendientes y crea la donación en el backend cuando puede, conservando reintentos e idempotencia mediante `clientId`. Si no hay categorías locales, el formulario necesita red para prepararse. Mis donaciones, detalle, solicitudes, edición y eliminación siguen dependiendo del backend y no tienen un flujo offline completo.
-
-## Uso de inteligencia artificial
-
-Durante el desarrollo del frontend se utilizó **Codex** como apoyo para revisar el código real, proponer alternativas, detectar riesgos, generar pruebas y documentar decisiones. Las propuestas no se aceptaron automáticamente.
-
-| Área | Uso de Codex | Resultado utilizado | Revisión y verificación |
-| --- | --- | --- | --- |
-| Persistencia local | Comparación de alternativas y revisión del esquema, cifrado, migraciones, minimización y TTL. | Drift sobre SQLite con SQLCipher, migraciones no destructivas, almacenamiento seguro separado y limpieza destructiva al cerrar sesión. | Pruebas de esquema, cifrado, migración, retención y logout. |
-| Lectura y recursos offline | Revisión del flujo local-first, estados de frescura y ciclo de vida de imágenes. | Explore conserva datos locales, distingue caché stale de refresh fallido y usa `cachedLocalPath` para imágenes remotas; las copias de subida usan `managedLocalPath`. | Pruebas de repositorio y widgets, accesibilidad y ejecución offline en dispositivo. |
-| Sincronización | Análisis de colas, reintentos, concurrencia, conflictos e identificadores estables. | `pending_operations`, `SyncCoordinator`, UUID para `clientId` y `operationId`, backoff, máximo de intentos, idempotencia y resolución SERVER-WINS/LWW con timestamps del servidor. | Pruebas de unicidad, reintentos, concurrencia, reconciliación y conflictos. |
-| Diagnóstico y calidad | Apoyo para aislar diferencias entre pruebas automatizadas y el entorno físico. | Se comprobó que `adb reverse` puede mantener accesible el backend por USB durante modo avión y debe retirarse temporalmente para una prueba offline real. | `flutter analyze`, suite automatizada, revisión de Git y verificación final en un celular. |
-
-Las decisiones finales y la aceptación de cambios correspondieron al equipo, con revisión del diff, análisis estático, pruebas automatizadas y comprobaciones reales de la aplicación.
-
-## Registro y Login
-
-El registro consume `POST /api/auth/register` y vuelve al Login con el correo prellenado. El Login consume `POST /api/auth/login`, guarda ambos tokens, consulta `GET /api/usuarios/perfil` y actualiza el estado global de autenticación. La contraseña nunca se almacena.
-
-## Configuración del backend
-
-El backend utiliza su propio entorno, PostgreSQL y configuración de servicios. Desde su repositorio independiente puede iniciarse con:
-
-```powershell
-yarn install
-yarn dev
-```
-
-El frontend no contiene configuración de base de datos.
+Consulte [Flujo funcional](docs/functional_flow.md), [Componentes](docs/component_catalog.md). Los informes `prototipo_15_*` son evidencia histórica; sus conteos/cobertura no certifican esta versión.

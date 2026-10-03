@@ -144,6 +144,7 @@ AppContentState(
 | `location` | `String` | Sí | — | Ubicación mostrada en los metadatos. |
 | `status` | `String` | Sí | — | Estado mostrado como etiqueta visual. |
 | `imageFit` | `BoxFit` | No | `BoxFit.cover` | Define cómo se ajusta la imagen dentro del espacio 16:9. |
+| `limitContainedImageDecode` | `bool` | No | `false` | Limita decodificación con ResizeImage únicamente si imageFit es BoxFit.contain; Mis donaciones lo activa. |
 | `onTap` | `VoidCallback?` | No | `null` | Callback ejecutado al pulsar la tarjeta; si es `null`, la tarjeta queda deshabilitada. |
 | `subtitle` | `String?` | No | `null` | Descripción secundaria opcional. |
 | `key` | `Key?` | No | `null` | Identidad del widget en el árbol. |
@@ -158,7 +159,7 @@ AppContentState(
 
 **Accesibilidad:** expone toda la tarjeta como botón con una etiqueta compuesta por título, categoría, ubicación y estado. Excluye la semántica interna y la imagen decorativa para evitar anuncios duplicados.
 
-**Restricciones:** no incluye el subtítulo en la etiqueta semántica, no interpreta ni valida el texto del estado y no realiza ninguna acción adicional a `onTap`.
+**Restricciones:** el límite de decodificación es opt-in y no modifica imágenes con BoxFit.cover; no incluye el subtítulo en la etiqueta semántica, no interpreta ni valida el texto del estado y no realiza ninguna acción adicional a `onTap`.
 
 ```dart
 DonationCard(

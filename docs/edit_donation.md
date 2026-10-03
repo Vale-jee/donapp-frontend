@@ -99,8 +99,7 @@ esperar a que termine la sincronización.
 7. Volver con Atrás a Mis donaciones. Verificar el título actualizado; abrir de
    nuevo la donación y comprobar descripción y categoría. Cerrar y abrir la app
    con conexión y comprobar que persisten.
-8. Abrir Editar con conexión, modificar el título y **después** activar modo
-   avión, apagando también Wi-Fi. Guardar y esperar el error/timeout: debe
+8. Abrir Editar con conexión, modificar el título y **después** cortar la conexión real. Si usa USB, retire primero `adb reverse --remove tcp:3000`: modo avión y Wi-Fi apagado no garantizan cortar el túnel. Guardar y esperar el error/timeout: debe
    conservar lo escrito, permitir reintentar y no afirmar que quedó en cola.
    Restaurar conexión y guardar. Comprobar nuevamente detalle y lista.
 9. Abrir una donación propia RESERVADA, ENTREGADA o RETIRADA disponible en la
